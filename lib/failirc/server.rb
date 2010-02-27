@@ -18,6 +18,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'socket'
+require 'openssl/ssl'
 require 'rexml/document'
 require 'failirc/server/client'
 
@@ -27,12 +28,55 @@ class Server
     def initialize (path)
         config = path
 
-        @clients = []
-        @servers = []
+        @clients   = []
+        @servers   = []
+        @listening = []
+
+        trap "INT" stop
     end
 
     def start
-        
+        include Socket::Constants
+
+        @listeningThread = Thread.new {
+            @config.each('config/server/listen') {|listen|
+                socket = Socket.new(AF_INET, SOCK_STREAM, 0)
+                socket.bind(Socket.sockaddr_in(listen.attributes['port'], listen.attributes['bind']))
+                socket.listen(listen.attributes['max'] || 23)
+
+                if listen.attributes['ssl'] == 'enable'
+                    socket = OpenSSL::SSL::SSLSocket.new(socket, OpenSSL::SSL::SSLContext.new)
+                end
+
+                @listening.push(socket)
+            }
+
+            begin
+                @listening.each {|socket|
+                    socket, = socket.accept_nonblock
+
+                    run(socket)
+                }
+            rescue Errno::EAGAIN, Errno::ECONNABORTED, Errno::EPROTO, Errno::EINTR
+                IO::select(@listening)
+            end
+        } @listeningThread.run
+    end
+
+    def stop
+        @listeningThread.stop
+
+        @listening.each {|socket|
+            socket.close
+        }
+
+        @clients.each {|socket|
+            socket.close
+        }
+
+        @servers.each {|socket|
+            socket.close
+        }
     end
 
     def rehash
