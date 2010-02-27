@@ -17,14 +17,49 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'webrick'
+require 'socket'
+require 'rexml/document'
 require 'failirc/server/client'
 
 module IRC
 
-class Server < WEBrick::GenericServer
+class Server
     def initialize (path)
+        config = path
 
+        @clients = []
+        @servers = []
+    end
+
+    def start
+        
+    end
+
+    def rehash
+        config = @config.path
+    end
+
+    def config= (path)
+        @config      = Document.new File.new(path)
+        @config.path = path
+
+        if !defined? @config.name
+            @config.name = "Fail IRC"
+        end
+
+        if !defined? @config.bind
+            @config.bind = "0.0.0.0"
+        end
+    end
+
+    # Executed with each incoming connection
+    def run (socket)
+        begin
+            @clients.push(IRC::Client.new(self, socket))
+        rescue
+            socket.puts $!
+            socket.close
+        end
     end
 end
 
