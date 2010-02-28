@@ -21,13 +21,13 @@ require 'failirc/server/user'
 
 module IRC
 
-class Users < Array
-    def push (channel)
-        if !channel.kind_of?(User)
+class Users < Hash
+    def []= (key, value)
+        if !value.is_a?(User)
             raise 'You can only push Channel'
         end
 
-        super.push(channel)
+        super[key] = value
     end
 
     def inspect

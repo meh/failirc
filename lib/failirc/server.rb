@@ -25,7 +25,7 @@ require 'rexml/document'
 include REXML
 
 require 'failirc'
-require 'failirc/server/client'
+require 'failirc/server/clients'
 require 'failirc/server/link'
 require 'failirc/utils'
 
@@ -46,8 +46,8 @@ class Server
 
         @events = { :default => [] }
 
-        @clients   = []
-        @servers   = []
+        @clients   = Clients.new
+        @links     = Links.new
         @listening = []
     end
 
@@ -115,18 +115,17 @@ class Server
 
     def loop
         while true
-            things = @clients.concat(@servers)
+            things = @clients.merge(@links)
             
             connections = things.map {|thing|
+                things[thing.socket] = thing
                 thing.socket
             }
 
             connections = IO::select(connections, connections)
 
             connections.each {|socket|
-                handle things.find {|item|
-                    item.socket == socket
-                }
+                handle things[socket]
             }
         end
     end
@@ -201,12 +200,12 @@ class Server
                 socket.close
             }
 
-            @clients.each {|socket|
-                socket.close
+            @clients.each {|client|
+                client.socket.close
             }
 
-            @servers.each {|socket|
-                socket.close
+            @links.each {|link|
+                link.socket.close
             }
         end
 
@@ -248,7 +247,7 @@ class Server
     # Executed with each incoming connection
     def run (socket, listen)
         begin
-            @clients.push(IRC::Client.new(self, socket, listen))
+            @clients[socket] = IRC::Client.new(self, socket, listen)
         rescue Exception => e
             socket.close
             self.debug(e)

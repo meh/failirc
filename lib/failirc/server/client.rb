@@ -42,20 +42,28 @@ class Client
         @registered
     end
 
-    def raw (text)
-        @socket.puts text
+    def mask
+        if !registered?
+            return ""
+        else
+            return "#{nick}!#{user}@#{host}"
+        end
     end
 
     def send (type, *args)
         callback = @@callbacks[type]
-        callback(args)
+        callback(*args)
     end
 
     @@callbacks = {
-        :numeric => lambda {|response, result, value|
+        :raw => lambda {|text|
+            @socket.puts text
+        },
+
+        :numeric => lambda {|response, result|
             server = @server
 
-            raw ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
+            send :raw ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
         }
     }
 end

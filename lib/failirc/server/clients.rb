@@ -17,28 +17,24 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server/channel'
+require 'failirc/server/client'
 
 module IRC
 
-class Channels < Hash
+class Clients < Hash
     def []= (key, value)
-        if !value.is_a?(Channel)
-            raise 'You can only set a Channel'
+        if !value.is_a?(Client)
+            raise 'You can only set a Client'
         end
 
         super[key] = value
     end
 
-    def inspect (user)
+    def inspect
         result = ""
 
-        self.each {|channel|
-            if user
-                result << " #{channel.users.select(user).levels.sort.first}##{channel.name}"
-            else 
-                result << " ##{channel.name}"
-            end
+        self.each {|client|
+            result << " #{client.inspect}"
         }
 
         return result[1, result.length]

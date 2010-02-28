@@ -119,31 +119,31 @@ ERR_NONICKNAMEGIVEN = {
 # Returned after receiving a NICK message which contains characters which do not fall in the defined set. See section x.x.x for details on valid nicknames.
 ERR_ERRONEUSNICKNAME = {
     :code => 432,
-    :text => '"#{user.nick} :Erroneus nickname"'
+    :text => '"#{result} :Erroneus nickname"'
 }
 
 # Returned when a NICK message is processed that results in an attempt to change to a currently existing nickname.
 ERR_NICKNAMEINUSE = {
     :code => 433,
-    :text => '"#{user.nick} :Nickname is already in use"'
+    :text => '"#{result} :Nickname is already in use"'
 }
 
 # Returned by a server to a client when it detects a nickname collision (registered of a NICK that already exists by another server).
 ERR_NICKCOLLISION = {
     :code => 436,
-    :text => '"#{user.nick} :Nickname collision KILL"'
+    :text => '"#{result} :Nickname collision KILL"'
 }
 
 # Returned by the server to indicate that the target user of the command is not on the given channel.
 ERR_USERNOTINCHANNEL = {
     :code => 441,
-    :text => '"#{user} #{channel.name} :They aren\'t on that channel"'
+    :text => '"#{result[:user].nick} #{result[:channel].name} :They aren\'t on that channel"'
 }
 
 # Returned by the server whenever a client tries to perform a channel effecting command for which the client isn't a member.
 ERR_NOTONCHANNEL = {
     :code => 442,
-    :text => '"#{channel.name} :You\'re not on that channel"'
+    :text => '"#{result.name} :You\'re not on that channel"'
 }
 
 # Returned when a client tries to invite a user to a channel they are already on.
@@ -179,7 +179,7 @@ ERR_NOTREGISTERED = {
 # Returned by the server by numerous commands to indicate to the client that it didn't supply enough parameters.
 ERR_NEEDMOREPARAMS = {
     :code => 461,
-    :text => '"#{command} :Not enough parameters"'
+    :text => '"#{result} :Not enough parameters"'
 }
 
 # Returned by the server to any link which tries to change part of the registered details (such as password or user details from second USER message).
@@ -218,7 +218,7 @@ ERR_CHANNELISFULL = {
 
 ERR_UNKNOWNMODE = {
     :code => 472,
-    :text => '"#{value} :is unknown mode char to me"'
+    :text => '"#{result} :is unknown mode char to me"'
 }
 
 ERR_INVITEONLYCHAN = {

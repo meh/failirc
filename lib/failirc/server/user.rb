@@ -27,6 +27,10 @@ class User
         @modes  = modes
     end
 
+    def mask
+        @client.mask
+    end
+
     def server
         @client.server
     end
@@ -48,7 +52,7 @@ class User
     end
 
     def send (type, *args)
-        @client.send(type, args)
+        @client.send(type, *args)
     end
 end
 
