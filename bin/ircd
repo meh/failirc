@@ -19,5 +19,18 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/server'
+require 'getopt/std'
 
-ircd = IRC::Server.new()
+options = Getopt::Std.getopts("f:Vv")
+
+if options['v']
+    puts "Fail IRC #{IRC::VERSION}"
+    exit 0
+end
+
+if !options['f']
+    options['f'] = '/etc/failirc.conf'
+end
+
+ircd = IRC::Server.new(File.new(options['f']), options['V'])
+ircd.start

@@ -135,7 +135,7 @@ RPL_NOTOPIC = {
 # When sending a TOPIC message to determine the channel topic, one of two replies is sent.
 # If the topic is set, RPL_TOPIC is sent back else RPL_NOTOPIC.
 RPL_TOPIC = {
-    :code = 332,
+    :code => 332,
     :text => '"#{result.name} :#{result.topic}"'
 }
 
@@ -173,7 +173,7 @@ RPL_ENDOFWHO = {
 }
 
 RPL_NAMREPLY = {
-    :code = 353,
+    :code => 353,
     :text => '" = #{channel.name} :#{channel.users.inspect}"'
 }
 

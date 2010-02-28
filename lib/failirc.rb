@@ -18,3 +18,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/server'
+
+module IRC
+    VERSION = '0.0.1'
+end

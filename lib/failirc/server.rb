@@ -22,21 +22,24 @@ require 'socket'
 require 'openssl/ssl'
 require 'rexml/document'
 
+require 'failirc'
 require 'failirc/server/client'
+require 'failirc/utils'
 
 module IRC
 
 require 'failirc/server/errors'
+require 'failirc/server/responses'
 
 class Server
-    def initialize (path)
-        config = path
+    def initialize (conf)
+        config = conf
 
         @clients   = []
         @servers   = []
         @listening = []
 
-        trap "INT" stop
+        trap "INT", stop
     end
 
     def start
@@ -64,19 +67,23 @@ class Server
             rescue Errno::EAGAIN, Errno::ECONNABORTED, Errno::EPROTO, Errno::EINTR
                 IO::select(@listening)
             end
-        } @listeningThread.run
+        }
 
         @pingThread = Thread.new {
             while true
                 sleep 60
 
-                ping
+                send :ping
             end
         }
+        
+        @listeningThread.run
+        @pingThread.run
     end
 
     def stop
         @listeningThread.stop
+        @pingThread.stop
 
         @listening.each {|socket|
             socket.close
@@ -92,20 +99,37 @@ class Server
     end
 
     def rehash
-        config = @config.path
+        config = @config.reference
     end
 
-    def config= (path)
-        @config      = Document.new File.new(path)
-        @config.path = path
+    def config= (conf)
+        include REXML
 
-        if !defined? @config.name
-            @config.name = "Fail IRC"
+        @config           = Document.new conf
+        @config.reference = reference
+
+        if !@config.elements['config'].elements['server'].elements['name']
+            @config.elements['config'].elements['server'].add(Element.new('name'))
+            @config.elements['config'].elements['server'].elements['name'].text = "Fail IRC"
         end
 
-        if !defined? @config.bind
-            @config.bind = "0.0.0.0"
+        if !@config.elements['config'].elements['server'].elements['listen']
+            @config.elements['config'].elements['server'].add(Element.new('listen'))
         end
+
+        @config.elements.each("config/server/listen") {|element|
+            if !element.attributes['port']
+                element.attributes['port'] = '6667'
+            end
+
+            if !element.attributes['bind']
+                element.attributes['bind'] = '0.0.0.0'
+            end
+
+            if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enable' && element.attributs['ssl'] != 'disable')
+                element.attributes['ssl'] = 'disable'
+            end
+        }
     end
 
     # Executed with each incoming connection
@@ -117,6 +141,17 @@ class Server
             socket.close
         end
     end
+
+    def send (type, *args)
+        callback = @@callbacks[type]
+        callback(args)
+    end
+
+    @@callbacks = {
+        :ping => lambda {
+            puts "lol"
+        }
+    }
 end
 
 end

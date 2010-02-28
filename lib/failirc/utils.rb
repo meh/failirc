@@ -17,27 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/utils'
-require 'failirc/server/channel'
-
 module IRC
 
-class Client
-    attr_reader :nick, :username, :hostname, :realname, :state, :channels
-
-    def initialize (server, socket)
-        @server = server
-        @socket = socket
-
-
-
-        @nick     = nick
-        @username = username
-        @hostname = hostname
-        @realname = realname
-
-        @channels = []
-        @state    = {}
+def debug (server, argument)
+    if server.verbose
+        if arg.kind_of?(Exception)
+            puts "#{self.class.to_s}: #{argument.message}" + arg.message 
+            puts argument.backtrace.collect {|stack|
+                "#{self.class.to_s.downcase}: #{stack}"
+            }.join("\n")
+        else
+            puts "#{self.class.to_s}: #{argument}"
+        end
     end
 end
 

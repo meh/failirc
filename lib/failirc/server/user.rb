@@ -41,18 +41,18 @@ class User
         @client.hostname
     end
 
-    def raw (arg)
-        @socket.puts
+    def raw (text)
+        @socket.puts text
     end
 
     def send (type, *args)
-        self.callbacks[type](args)
+        callback = @@callbacks[type]
+        callback(args)
     end
 
-    self.callbacks = {
-        :numeric => lambda {|args|
-            numeric, message, details = args
-            raw ":#{server} #{'%03d'%numeric} #{@nick} #{msg} :#{detail}"
+    @@callbacks = {
+        :numeric => lambda {|numeric, message, details|
+            raw ":#{server} #{'%03d' % numeric} #{@nick} #{message} :#{details}"
         }
     }
 end

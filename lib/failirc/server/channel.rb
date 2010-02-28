@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/utils'
 require 'failirc/server/user'
 
 module IRC
@@ -35,6 +36,8 @@ class Channel
     end
 
     def part (client)
+
+    end
 end
 
 end
