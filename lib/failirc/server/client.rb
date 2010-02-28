@@ -60,12 +60,16 @@ class Client
             @socket.puts text
         },
 
-        :numeric => lambda {|response, result|
+        :numeric => lambda {|response, value|
             server = @server
 
-            send :raw ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
+            send :raw, ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
         }
     }
+
+    def inspect
+        return "<Client: #{(mask.empty?) ? 'nil' : mask}>"
+    end
 end
 
 end

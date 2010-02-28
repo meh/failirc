@@ -22,12 +22,14 @@ require 'failirc/server/link'
 module IRC
 
 class Links < Hash
+    alias __set []=
+
     def []= (key, value)
         if !value.is_a?(Link)
             raise 'You can only set a Link'
         end
 
-        super[key] = value
+        __set(key, value)
     end
 
     def inspect

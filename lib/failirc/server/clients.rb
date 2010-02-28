@@ -22,12 +22,14 @@ require 'failirc/server/client'
 module IRC
 
 class Clients < Hash
+    alias __set []=
+
     def []= (key, value)
         if !value.is_a?(Client)
             raise 'You can only set a Client'
         end
 
-        super[key] = value
+        __set(key, value)
     end
 
     def inspect

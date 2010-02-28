@@ -26,7 +26,7 @@ include REXML
 
 require 'failirc'
 require 'failirc/server/clients'
-require 'failirc/server/link'
+require 'failirc/server/links'
 require 'failirc/utils'
 
 module IRC
@@ -42,13 +42,14 @@ class Server
     def initialize (conf, verbose)
         @verbose = verbose ? true : false
 
-        self.config = conf
-
-        @events = { :default => [] }
+        @events  = { :default => [] }
+        @modules = []
 
         @clients   = Clients.new
         @links     = Links.new
         @listening = []
+
+        self.config = conf
     end
 
     def start
@@ -76,7 +77,7 @@ class Server
                     @listening.push({ :socket => server, :listen => listen })
                 }
             rescue Exception => e
-                puts e.message
+                self.debug(e)
                 Thread.stop
             end
 
@@ -90,7 +91,7 @@ class Server
                         end
                     }
                 rescue Errno::EAGAIN, Errno::ECONNABORTED, Errno::EPROTO, Errno::EINTR
-                    IO::select(@listening)
+                    IO::select(@listening.map {|server| server[:socket]})
                 rescue Exception => e
                     self.debug(e)
                 end
@@ -130,10 +131,28 @@ class Server
         end
     end
 
+    def loadModule (name, path='failirc/modules')
+        mod = nil
+
+        $LOAD_PATH.each {|loadPath|
+            if File.exists?("#{loadPath}/#{path}/#{name}")
+                mod = eval(File.read("#{loadPath}/#{path}/#{name}"))
+                mod.name = name.capitalize
+                break
+            end
+        }
+
+        return mod ? true : false
+    end
+
     @defaultEvents = {}
 
     def register (type, callback)
         if callback.is_a?(Regexp)
+            if @defaultEvents[type]
+                raise 'You cannot redefine an already defined default event.'
+            end
+
             @defaultEvents[type] = callback
         elsif callback.is_a?(Array)
             callback.each {|callback|
@@ -144,11 +163,19 @@ class Server
                 type = @defaultEvents[type]
             end
 
-           if !@events[type]
+            if !@events[type]
                 @events[type] = []
             end
 
             @events[type].push(callback)
+        end
+    end
+
+    def unregister (type, default)
+        if default
+            @defaultEvents.delete(type)
+        else
+            @events.delete(type)
         end
     end
 
@@ -161,8 +188,12 @@ class Server
     end
 
     def event (type, thing, string)
+        if !event?(type, string)
+            return false
+        end
+
         @events[:default].each {|callback|
-            if callback(type, thing, string) === false
+            if callback(type, thing, string) == false
                 break
             end
         }
@@ -173,7 +204,7 @@ class Server
 
         if @events[type]
             @events[type].each {|callback|
-                if callback(thing, string) === false
+                if callback(thing, string) == false
                     break
                 end
             }
@@ -184,8 +215,7 @@ class Server
         string = thing.socket.gets
 
         @events.keys.each {|key|
-            if event?(key, string)
-                event(key, thing, string)
+            if event(key, thing, string) != false
                 break
             end
         }
@@ -193,18 +223,18 @@ class Server
 
     def stop
         if @started
-            Thread.kill(@listeningThread)
             Thread.kill(@pingThread)
+            Thread.kill(@listeningThread)
 
-            @listening.each {|socket|
-                socket.close
+            @listening.each {|server|
+                server[:socket].close
             }
 
-            @clients.each {|client|
+            @clients.each {|key, client|
                 client.socket.close
             }
 
-            @links.each {|link|
+            @links.each {|key, link|
                 link.socket.close
             }
         end
@@ -229,7 +259,7 @@ class Server
             @config.elements['config'].elements['server'].add(Element.new('listen'))
         end
 
-        @config.elements.each("config/server/listen") {|element|
+        @config.elements.each('config/server/listen') {|element|
             if !element.attributes['port']
                 element.attributes['port'] = '6667'
             end
@@ -241,6 +271,20 @@ class Server
             if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enable' && element.attributes['ssl'] != 'disable')
                 element.attributes['ssl'] = 'disable'
             end
+        }
+
+        @modules.each {|mod|
+            mod.finalize
+        }
+
+        @modules.clear
+
+        @config.elements.each('config/modules/module') {|element|
+            if !element.attributes['path']
+                element.attributes['path'] = 'failirc/modules'
+            end
+
+            self.loadModule(element.attributes['name'], element.attributes['path'])
         }
     end
 

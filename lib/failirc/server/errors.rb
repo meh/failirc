@@ -20,43 +20,43 @@
 # Used to indicate the nickname parameter supplied to a command is currently unused.
 ERR_NOSUCHNICK = {
     :code => 401,
-    :text => '"#{user.nick} :No such nick/channel"'
+    :text => '"#{value} :No such nick/channel"'
 }
 
 # Used to indicate the server name given currently doesn't exist.
 ERR_NOSUCHSERVER = {
     :code => 402,
-    :text => '"#{server.name} :No such server"'
+    :text => '"#{value} :No such server"'
 }
 
 # Used to indicate the given channel name is invalid.
 ERR_NOSUCHCHANNEL = {
     :code => 403,
-    :text => '"#{channel.name} :No such channel"'
+    :text => '"#{value} :No such channel"'
 }
 
 # Sent to a user who is either (a) not on a channel which is mode +n or (b) not a chanop (or mode +v) on a channel which has mode +m set and is trying to send a PRIVMSG message to that channel.
 ERR_CANNOTSENDTOCHAN = {
     :code => 404,
-    :text => '"#{channel.name} :Cannot send to channel"'
+    :text => '"#{value.name} :Cannot send to channel"'
 }
 
 # Sent to a user when they have joined the maximum number of allowed channels and they try to join another channel.
 ERR_TOOMANYCHANNELS = {
     :code => 405,
-    :text => '"#{channel.name} :You have joined too many channels"'
+    :text => '"#{value.name} :You have joined too many channels"'
 }
 
 # Sent to a user when they have joined the maximum number of allowed channels and they try to join another channel.
 ERR_WASNOSUCHNICK = {
     :code => 406,
-    :text => '"#{user.nick} :There was no such nickname"'
+    :text => '"#{value} :There was no such nickname"'
 }
 
 # Returned to a client which is attempting to send PRIVMSG/NOTICE using the user@host destination format and for a user@host which has several occurrences.
 ERR_TOOMANYTARGETS = {
     :code => 407,
-    :text => '"#{target} :Duplicate recipients. No message delivered"'
+    :text => '"#{value} :Duplicate recipients. No message delivered"'
 }
 
 # PING or PONG message missing the originator parameter which is required since these commands must work without valid prefixes.
@@ -67,7 +67,7 @@ ERR_NOORIGIN = {
 
 ERR_NORECIPIENT = {
     :code => 411,
-    :text => '":No recipient given (#{command})"'
+    :text => '":No recipient given (#{value})"'
 }
 
 ERR_NOTEXTTOSEND = {
@@ -119,31 +119,31 @@ ERR_NONICKNAMEGIVEN = {
 # Returned after receiving a NICK message which contains characters which do not fall in the defined set. See section x.x.x for details on valid nicknames.
 ERR_ERRONEUSNICKNAME = {
     :code => 432,
-    :text => '"#{result} :Erroneus nickname"'
+    :text => '"#{value} :Erroneus nickname"'
 }
 
 # Returned when a NICK message is processed that results in an attempt to change to a currently existing nickname.
 ERR_NICKNAMEINUSE = {
     :code => 433,
-    :text => '"#{result} :Nickname is already in use"'
+    :text => '"#{value} :Nickname is already in use"'
 }
 
 # Returned by a server to a client when it detects a nickname collision (registered of a NICK that already exists by another server).
 ERR_NICKCOLLISION = {
     :code => 436,
-    :text => '"#{result} :Nickname collision KILL"'
+    :text => '"#{value} :Nickname collision KILL"'
 }
 
 # Returned by the server to indicate that the target user of the command is not on the given channel.
 ERR_USERNOTINCHANNEL = {
     :code => 441,
-    :text => '"#{result[:user].nick} #{result[:channel].name} :They aren\'t on that channel"'
+    :text => '"#{value[:user].nick} #{value[:channel].name} :They aren\'t on that channel"'
 }
 
 # Returned by the server whenever a client tries to perform a channel effecting command for which the client isn't a member.
 ERR_NOTONCHANNEL = {
     :code => 442,
-    :text => '"#{result.name} :You\'re not on that channel"'
+    :text => '"#{value.name} :You\'re not on that channel"'
 }
 
 # Returned when a client tries to invite a user to a channel they are already on.
@@ -179,7 +179,7 @@ ERR_NOTREGISTERED = {
 # Returned by the server by numerous commands to indicate to the client that it didn't supply enough parameters.
 ERR_NEEDMOREPARAMS = {
     :code => 461,
-    :text => '"#{result} :Not enough parameters"'
+    :text => '"#{value} :Not enough parameters"'
 }
 
 # Returned by the server to any link which tries to change part of the registered details (such as password or user details from second USER message).
@@ -218,7 +218,7 @@ ERR_CHANNELISFULL = {
 
 ERR_UNKNOWNMODE = {
     :code => 472,
-    :text => '"#{result} :is unknown mode char to me"'
+    :text => '"#{value} :is unknown mode char to me"'
 }
 
 ERR_INVITEONLYCHAN = {

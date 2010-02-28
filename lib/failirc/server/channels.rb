@@ -22,15 +22,17 @@ require 'failirc/server/channel'
 module IRC
 
 class Channels < Hash
+    alias __set []=
+
     def []= (key, value)
         if !value.is_a?(Channel)
             raise 'You can only set a Channel'
         end
 
-        super[key] = value
+        __set(key, value)
     end
 
-    def inspect (user)
+    def inspect (user=nil)
         result = ""
 
         self.each {|channel|

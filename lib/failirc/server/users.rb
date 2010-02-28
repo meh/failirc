@@ -22,12 +22,14 @@ require 'failirc/server/user'
 module IRC
 
 class Users < Hash
+    alias __set []=
+
     def []= (key, value)
         if !value.is_a?(User)
             raise 'You can only push Channel'
         end
 
-        super[key] = value
+        __set(key, value)
     end
 
     def inspect

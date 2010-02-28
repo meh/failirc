@@ -27,15 +27,33 @@ class Module
 
         if @defaultEvents
             @defaultEvents.keys.each {|key|
-                server.register(key, @defaultEvents[key])
+                @server.register(key, @defaultEvents[key])
             }
         end
 
         if @events
             @events.keys.each {|key|
-                server.register(key, @events[key])
+                @server.register(key, @events[key])
             }
         end
+    end
+
+    def finalize
+        if @defaultEvents
+            @defaultEvents.keys.each {|key|
+                @server.unregister(key, true)
+            }
+        end
+
+        if @events
+            @events.keys.each {|key|
+                @server.unregister(key)
+            }
+        end
+    end
+
+    def self.name= (value)
+        @name = value
     end
 end
 

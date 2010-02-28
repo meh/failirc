@@ -22,7 +22,9 @@ require 'failirc/server/module'
 require 'failirc/server/client'
 
 Class.new(IRC::Server::Module) do
-    def checkRegistration (type, thing, string)
+    def check (type, thing, string)
+        puts string
+
         # if the client tries to do something without having registered, kill it with fire
         if type != :PASS && type != :NICK && type != :USER && !thing.registered?
             thing.send(:numeric, ERR_NOTREGISTERED)
@@ -122,7 +124,7 @@ Class.new(IRC::Server::Module) do
     }
 
     @events = {
-        :default => checkRegistration,
+        :default => check,
 
         :PASS => auth,
         :NICK => nick,
