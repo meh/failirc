@@ -18,26 +18,38 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/utils'
-require 'failirc/server/user'
+require 'failirc/server/responses'
+require 'failirc/server/users'
 
 module IRC
 
 class Channel
-    def initialize
-        @users = []
+    attr_reader :name
+
+    def initialize (name)
+        @name = name
+
+        @users = Users.new
     end
 
-    def join (client)
-        @users.each {|user|
-            user.send :numeric
+    def do (type, *args)
+        callback = @@callabacks[type]
+        callback(args)
+    end
+
+    @@callbacks = {
+        :join => lambda {|client|
+            @users.each {|user|
+                user.send :numeric RPL_JOIN
+            }
+
+            @users.push(User.new(client, defaultModes))
+        },
+
+        :part => lambda {|client|
+
         }
-
-        @users.push(User.new(client, defaultModes))
-    end
-
-    def part (client)
-
-    end
+    }
 end
 
 end

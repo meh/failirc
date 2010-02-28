@@ -47,8 +47,6 @@ class Server
     end
 
     def start
-        include Socket::Constants
-
         @listeningThread = Thread.new {
             @config.each('config/server/listen') {|listen|
                 server = TCPServer.new(listen.attributes['bind'], listen.attributes['port'])
@@ -58,7 +56,7 @@ class Server
                     context.set_params({
                         key => listen.attributes['sslKey'],
                         cert => listen.attributes['sslCert']
-                    }
+                    })
 
                     server = OpenSSL::SSL::SSLServer(server, context)
                 end
@@ -81,7 +79,7 @@ class Server
             while true
                 sleep 60
 
-                send :ping
+                self.do :ping
             end
         }
         
@@ -156,13 +154,17 @@ class Server
         end
     end
 
-    def send (type, *args)
+    def do (type, *args)
         callback = @@callbacks[type]
         callback(args)
     end
 
     @@callbacks = {
         :ping => lambda {
+            @clients.each {|client|
+
+            }
+
             puts "lol"
         }
     }

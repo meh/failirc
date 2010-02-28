@@ -90,7 +90,7 @@ RPL_ENDOFWHOIS = {
 # The RPL_ENDOFWHOIS reply is used to mark the end of processing a WHOIS message.
 RPL_WHOISCHANNELS = {
     :code => 319,
-    :text => '"#{result.nick} :#{result.channels.inspect}"'
+    :text => '"#{result.nick} :#{result.channels.inspect(result)}"'
 }
 
 RPL_WHOWASUSER = {

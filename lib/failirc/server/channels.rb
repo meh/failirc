@@ -17,38 +17,31 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/server/channel'
+
 module IRC
 
-class User
-    attr_reader :client, :modes
+class Channels < Array
+    def push (channel)
+        if !channel.kind_of?(Channel)
+            raise 'You can only push Channel'
+        end
 
-    def initialize (client, modes)
-        @client = client
-        @modes  = modes
+        super.push(channel)
     end
 
-    def server
-        @client.server
-    end
+    def inspect (user)
+        result = ""
 
-    def nick
-        @client.nick
-    end
+        self.each {|channel|
+            if user
+                result << " #{channel.users.select(user).levels.sort.first}##{channel.name}"
+            else 
+                result << " ##{channel.name}"
+            end
+        }
 
-    def user
-        @client.username
-    end
-
-    def host
-        @client.hostname
-    end
-
-    def realName
-        @client.realName
-    end
-
-    def send (type, *args)
-        @client.send(type, args)
+        return result[1, result.length]
     end
 end
 
