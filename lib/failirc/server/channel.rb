@@ -40,7 +40,7 @@ class Channel
     @@callbacks = {
         :join => lambda {|client|
             @users.each {|user|
-                user.send :numeric RPL_JOIN
+                user.send :numeric, RPL_JOIN
             }
 
             @users.push(User.new(client, defaultModes))

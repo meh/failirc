@@ -19,17 +19,22 @@
 
 module IRC
 
+module Utils
+
 def debug (argument)
     if self.verbose
-        if arg.kind_of?(Exception)
-            puts "#{self.class.to_s}: #{argument.message}" + arg.message 
+        if argument.kind_of?(Exception)
+            puts "#{self.class}: #{argument.class}: #{argument.message}"
             puts argument.backtrace.collect {|stack|
-                "#{self.class.to_s.downcase}: #{stack}"
+                "#{self.class}: #{stack}"
             }.join("\n")
+            puts "\n"
         else
-            puts "#{self.class.to_s}: #{argument}"
+            puts "#{self.class}: #{argument}\n\n"
         end
     end
+end
+
 end
 
 end

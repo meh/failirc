@@ -20,7 +20,9 @@
 require 'thread'
 require 'socket'
 require 'openssl'
+
 require 'rexml/document'
+include REXML
 
 require 'failirc'
 require 'failirc/server/client'
@@ -32,46 +34,63 @@ require 'failirc/server/errors'
 require 'failirc/server/responses'
 
 class Server
+    include Utils
+
     attr_reader :verbose
 
     def initialize (conf, verbose)
         @verbose = verbose ? true : false
 
-        config = conf
+        self.config = conf
 
         @clients   = []
         @servers   = []
         @listening = []
-
-        trap "INT", stop
     end
 
     def start
+        if @started
+            return
+        end
+
+        if !@config
+            raise '@config is missing.'
+        end
+
         @listeningThread = Thread.new {
-            @config.each('config/server/listen') {|listen|
-                server = TCPServer.new(listen.attributes['bind'], listen.attributes['port'])
-
-                if listen.attributes['ssl'] == 'enable'
-                    context = OpenSSL::SSL::SSLContext.new
-                    context.set_params({
-                        key => listen.attributes['sslKey'],
-                        cert => listen.attributes['sslCert']
-                    })
-
-                    server = OpenSSL::SSL::SSLServer(server, context)
-                end
-
-                @listening.push(socket)
-            }
-
             begin
-                @listening.each {|socket|
-                    socket, = socket.accept_nonblock
+                @config.elements.each('config/server/listen') {|listen|
+                    server = TCPServer.new(listen.attributes['bind'], listen.attributes['port'])
 
-                    run(socket)
+                    if listen.attributes['ssl'] == 'enable'
+                        context = OpenSSL::SSL::SSLContext.new
+                        context.key = File.read(listen.attributes['sslKey'])
+                        context.cert = File.read(listen.attributes['sslCert'])
+
+                        server = OpenSSL::SSL::SSLServer(server, context)
+                    end
+
+                    @listening.push(server)
                 }
-            rescue Errno::EAGAIN, Errno::ECONNABORTED, Errno::EPROTO, Errno::EINTR
-                IO::select(@listening)
+            rescue Exception => e
+                puts e.message
+                Thread.stop
+            end
+
+            while true
+                begin
+                    @listening.each {|server|
+                        socket, = server.accept_nonblock
+
+                        if socket
+                            run(socket)
+                        end
+                    }
+                rescue Errno::EAGAIN, Errno::ECONNABORTED, Errno::EPROTO, Errno::EINTR
+                    IO::select(@listening)
+                rescue Exception => e
+                    self.debug(e)
+                end
             end
         }
 
@@ -82,43 +101,54 @@ class Server
                 self.do :ping
             end
         }
-        
+
         @listeningThread.run
         @pingThread.run
+
+        @started = true
 
         self.loop()
     end
 
     def loop
-        
+        while true
+            connections = @clients.concat(@servers)
+            connections = IO::select(connections, connections)
+
+            connections.each {|socket|
+                handle socket
+            }
+        end
     end
 
     def stop
-        @listeningThread.stop
-        @pingThread.stop
+        if @started
+            Thread.kill(@listeningThread)
+            Thread.kill(@pingThread)
 
-        @listening.each {|socket|
-            socket.close
-        }
+            @listening.each {|socket|
+                socket.close
+            }
 
-        @clients.each {|socket|
-            socket.close
-        }
+            @clients.each {|socket|
+                socket.close
+            }
 
-        @servers.each {|socket|
-            socket.close
-        }
+            @servers.each {|socket|
+                socket.close
+            }
+        end
+
+        exit 0
     end
 
     def rehash
-        config = @config.reference
+        self.config = @configReference
     end
 
-    def config= (conf)
-        include REXML
-
-        @config           = Document.new conf
-        @config.reference = reference
+    def config= (reference)
+        @config          = Document.new reference
+        @configReference = reference
 
         if !@config.elements['config'].elements['server'].elements['name']
             @config.elements['config'].elements['server'].add(Element.new('name'))
@@ -138,7 +168,7 @@ class Server
                 element.attributes['bind'] = '0.0.0.0'
             end
 
-            if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enable' && element.attributs['ssl'] != 'disable')
+            if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enable' && element.attributes['ssl'] != 'disable')
                 element.attributes['ssl'] = 'disable'
             end
         }
@@ -148,9 +178,9 @@ class Server
     def run (socket)
         begin
             @clients.push(IRC::Client.new(self, socket))
-        rescue
-            socket.puts $!
+        rescue Exception => e
             socket.close
+            self.debug(e)
         end
     end
 
@@ -164,8 +194,6 @@ class Server
             @clients.each {|client|
 
             }
-
-            puts "lol"
         }
     }
 end
