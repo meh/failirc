@@ -17,30 +17,44 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'netutils'
-require 'failirc/server/channel'
-
 module IRC
 
-class Client
-    include NetUtils
-
-    attr_reader :nick, :username, :hostname, :realname, :state, :channels
-
-    def initialize (server, socket)
-        @server = server
-        @socket = socket
-
-
-
-        @nick     = nick
-        @username = username
-        @hostname = hostname
-        @realname = realname
-
-        @channels = []
-        @state    = {}
+class User
+    def initialize (client, modes)
+        @client = client
+        @modes  = modes
     end
+
+    def send (type, *args)
+        @client.server.send(type, client, args)
+    end
+
+    def nick
+        @client.nick
+    end
+
+    def username
+        @client.username
+    end
+
+    def hostname
+        @client.hostname
+    end
+
+    def raw (arg)
+        @socket.puts
+    end
+
+    def send (type, *args)
+        self.callbacks[type](args)
+    end
+
+    self.callbacks = {
+        :numeric => lambda {|args|
+            numeric, message, details = args
+            raw ":#{server} #{'%03d'%numeric} #{@nick} #{msg} :#{detail}"
+        }
+    }
 end
 
 end

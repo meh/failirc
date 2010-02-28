@@ -17,12 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'thread'
 require 'socket'
 require 'openssl/ssl'
 require 'rexml/document'
+
 require 'failirc/server/client'
 
 module IRC
+
+require 'failirc/server/errors'
 
 class Server
     def initialize (path)
@@ -61,6 +65,14 @@ class Server
                 IO::select(@listening)
             end
         } @listeningThread.run
+
+        @pingThread = Thread.new {
+            while true
+                sleep 60
+
+                ping
+            end
+        }
     end
 
     def stop
