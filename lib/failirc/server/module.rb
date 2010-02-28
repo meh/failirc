@@ -17,47 +17,26 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/utils'
-require 'failirc/server/channels'
-
 module IRC
 
-class Client
-    attr_reader   :server, :socket, :listen, :registered, :nick, :user, :host, :realName, :state, :channels
-    attr_writer   :registered
-    attr_accessor :password
+class Module
+    attr_reader :server
 
-    def initialize (server, socket, listen)
+    def initialize (server)
         @server = server
-        @socket = socket
-        @listen = listen
 
-        @registered = false
+        if @defaultEvents
+            @defaultEvents.keys.each {|key|
+                server.register(key, @defaultEvents[key])
+            }
+        end
 
-        @channels = Channels.new
-        @state    = {}
+        if @events
+            @events.keys.each {|key|
+                server.register(key, @events[key])
+            }
+        end
     end
-
-    def registered?
-        @registered
-    end
-
-    def raw (text)
-        @socket.puts text
-    end
-
-    def send (type, *args)
-        callback = @@callbacks[type]
-        callback(args)
-    end
-
-    @@callbacks = {
-        :numeric => lambda {|response, result, value|
-            server = @server
-
-            raw ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
-        }
-    }
 end
 
 end

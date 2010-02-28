@@ -18,28 +18,16 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/utils'
-require 'failirc/server/channels'
 
 module IRC
 
-class Client
-    attr_reader   :server, :socket, :listen, :registered, :nick, :user, :host, :realName, :state, :channels
-    attr_writer   :registered
-    attr_accessor :password
+class Link
+    attr_reader :server, :socket, :listen
 
     def initialize (server, socket, listen)
         @server = server
         @socket = socket
         @listen = listen
-
-        @registered = false
-
-        @channels = Channels.new
-        @state    = {}
-    end
-
-    def registered?
-        @registered
     end
 
     def raw (text)
@@ -52,11 +40,6 @@ class Client
     end
 
     @@callbacks = {
-        :numeric => lambda {|response, result, value|
-            server = @server
-
-            raw ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
-        }
     }
 end
 

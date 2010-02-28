@@ -26,6 +26,7 @@ include REXML
 
 require 'failirc'
 require 'failirc/server/client'
+require 'failirc/server/link'
 require 'failirc/utils'
 
 module IRC
@@ -42,6 +43,8 @@ class Server
         @verbose = verbose ? true : false
 
         self.config = conf
+
+        @events = { :default => [] }
 
         @clients   = []
         @servers   = []
@@ -70,7 +73,7 @@ class Server
                         server = OpenSSL::SSL::SSLServer(server, context)
                     end
 
-                    @listening.push(server)
+                    @listening.push({ :socket => server, :listen => listen })
                 }
             rescue Exception => e
                 puts e.message
@@ -80,10 +83,10 @@ class Server
             while true
                 begin
                     @listening.each {|server|
-                        socket, = server.accept_nonblock
+                        socket, = server[:socket].accept_nonblock
 
                         if socket
-                            run(socket)
+                            run(socket, server[:listen])
                         end
                     }
                 rescue Errno::EAGAIN, Errno::ECONNABORTED, Errno::EPROTO, Errno::EINTR
@@ -112,13 +115,81 @@ class Server
 
     def loop
         while true
-            connections = @clients.concat(@servers)
+            things = @clients.concat(@servers)
+            
+            connections = things.map {|thing|
+                thing.socket
+            }
+
             connections = IO::select(connections, connections)
 
             connections.each {|socket|
-                handle socket
+                handle things.find {|item|
+                    item.socket == socket
+                }
             }
         end
+    end
+
+    @defaultEvents = {}
+
+    def register (type, callback)
+        if callback.is_a?(Regexp)
+            @defaultEvents[type] = callback
+        elsif callback.is_a?(Array)
+            callback.each {|callback|
+                register(type, callback)
+            }
+        else
+            if @defaultEvents[type]
+                type = @defaultEvents[type]
+            end
+
+           if !@events[type]
+                @events[type] = []
+            end
+
+            @events[type].push(callback)
+        end
+    end
+
+    def event? (type, string)
+        if @defaultEvents[type]
+            type = @defaultEvents[type]
+        end       
+
+        return @events[type].match(string)
+    end
+
+    def event (type, thing, string)
+        @events[:default].each {|callback|
+            if callback(type, thing, string) === false
+                break
+            end
+        }
+
+        if @defaultEvents[type]
+            type = @defaultEvents[type]
+        end
+
+        if @events[type]
+            @events[type].each {|callback|
+                if callback(thing, string) === false
+                    break
+                end
+            }
+        end
+    end
+
+    def handle (thing)
+        string = thing.socket.gets
+
+        @events.keys.each {|key|
+            if event?(key, string)
+                event(key, thing, string)
+                break
+            end
+        }
     end
 
     def stop
@@ -175,9 +246,9 @@ class Server
     end
 
     # Executed with each incoming connection
-    def run (socket)
+    def run (socket, listen)
         begin
-            @clients.push(IRC::Client.new(self, socket))
+            @clients.push(IRC::Client.new(self, socket, listen))
         rescue Exception => e
             socket.close
             self.debug(e)
@@ -186,7 +257,7 @@ class Server
 
     def do (type, *args)
         callback = @@callbacks[type]
-        callback(args)
+        callback(*args)
     end
 
     @@callbacks = {
