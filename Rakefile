@@ -18,6 +18,8 @@ specification = Gem::Specification.new do |specification|
     specification.test_files       = []
     specification.has_rdoc         = true
     specification.extra_rdoc_files = ["README"]
+
+    specification.add_dependency('getopt')
 end
 
 task :default => [:repackage]

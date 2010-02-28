@@ -19,7 +19,7 @@
 
 require 'thread'
 require 'socket'
-require 'openssl/ssl'
+require 'openssl'
 require 'rexml/document'
 
 require 'failirc'
@@ -32,7 +32,11 @@ require 'failirc/server/errors'
 require 'failirc/server/responses'
 
 class Server
-    def initialize (conf)
+    attr_reader :verbose
+
+    def initialize (conf, verbose)
+        @verbose = verbose ? true : false
+
         config = conf
 
         @clients   = []
@@ -47,12 +51,16 @@ class Server
 
         @listeningThread = Thread.new {
             @config.each('config/server/listen') {|listen|
-                socket = Socket.new(AF_INET, SOCK_STREAM, 0)
-                socket.bind(Socket.sockaddr_in(listen.attributes['port'], listen.attributes['bind']))
-                socket.listen(listen.attributes['max'] || 23)
+                server = TCPServer.new(listen.attributes['bind'], listen.attributes['port'])
 
                 if listen.attributes['ssl'] == 'enable'
-                    socket = OpenSSL::SSL::SSLSocket.new(socket, OpenSSL::SSL::SSLContext.new)
+                    context = OpenSSL::SSL::SSLContext.new
+                    context.set_params({
+                        key => listen.attributes['sslKey'],
+                        cert => listen.attributes['sslCert']
+                    }
+
+                    server = OpenSSL::SSL::SSLServer(server, context)
                 end
 
                 @listening.push(socket)
@@ -79,6 +87,12 @@ class Server
         
         @listeningThread.run
         @pingThread.run
+
+        self.loop()
+    end
+
+    def loop
+        
     end
 
     def stop

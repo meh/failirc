@@ -19,8 +19,8 @@
 
 module IRC
 
-def debug (server, argument)
-    if server.verbose
+def debug (argument)
+    if self.verbose
         if arg.kind_of?(Exception)
             puts "#{self.class.to_s}: #{argument.message}" + arg.message 
             puts argument.backtrace.collect {|stack|
