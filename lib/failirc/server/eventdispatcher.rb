@@ -68,7 +68,7 @@ class EventDispatcher
     def alias (symbol, regex)
         if !regex
             @aliases.delete(symbol)
-        elsif !regex.is_a(Regexp)
+        elsif !regex.class == Regexp
             raise 'You have to alias to a Regexp.'
         else
             @aliases[symbol] = regex

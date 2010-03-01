@@ -45,16 +45,13 @@ class Event
         type = nil
 
         dispatcher.events.each_key {|key|
-            if key.match(string)
+            if key.class == Regexp && key.match(string)
                 type = key
                 break
             end
         }
 
         return type
-    end
-
-
     end
 end
 
