@@ -167,13 +167,15 @@ class Server
                 thing.socket
             }
 
-            connections, = IO::select(connections)
+            connections, = IO::select connections, nil, nil, 2
 
-            connections.each {|socket|
-                string = socket.gets.chomp
-
-                Thread.new { @dispatcher.do things[socket], string }
-            }
+            if connections
+                connections.each {|socket|    
+                    Thread.new {
+                        @dispatcher.do things[socket], socket.gets.chomp
+                    }
+                }
+            end
         end
     end
 

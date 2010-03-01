@@ -181,6 +181,8 @@ class Standard < Module
                 thing.send :numeric, RPL_WELCOME, thing
             end
         end
+
+        self.debug thing.inspect
     end
 
     def error (thing, message)

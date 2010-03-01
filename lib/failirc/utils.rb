@@ -29,8 +29,10 @@ def debug (argument)
                 "#{self.class}: #{stack}"
             }.join("\n")
             puts "\n"
-        else
+        elsif argument.is_a?(String)
             puts "#{self.class}: #{argument}\n\n"
+        else
+            puts "#{self.class}: #{argument.inspect}"
         end
     end
 end
