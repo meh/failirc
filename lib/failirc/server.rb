@@ -70,6 +70,10 @@ class Server
         end
     end
 
+    def host
+        @config.elements['config'].elements['server'].elements['host'].text
+    end
+
     def start
         if @started
             return
@@ -180,6 +184,11 @@ class Server
         if !@config.elements['config'].elements['server'].elements['name']
             @config.elements['config'].elements['server'].add(Element.new('name'))
             @config.elements['config'].elements['server'].elements['name'].text = "Fail IRC"
+        end
+
+        if !@config.elements['config'].elements['server'].elements['host']
+            @config.elements['config'].elements['server'].add(Element.new('host'))
+            @config.elements['config'].elements['server'].elements['host'].text = Socket.gethostname.split(/\./).shift
         end
 
         if !@config.elements['config'].elements['server'].elements['listen']

@@ -23,6 +23,8 @@ require 'failirc/server/channels'
 module IRC
 
 class Client
+    include Utils
+
     attr_reader   :server, :socket, :listen, :registered, :nick, :user, :host, :realName, :state, :channels
     attr_writer   :registered
     attr_accessor :password
@@ -50,9 +52,13 @@ class Client
         end
     end
 
-    def send (type, *args)
-        if self.method(type)
-            return self.method(type).call(*args)
+    def send (symbol, *args)
+        if self.method(symbol)
+            begin
+                self.method(symbol).call(*args)
+            rescue Exception => e
+                self.debug(e)
+            end
         end
     end
 
@@ -60,14 +66,12 @@ class Client
         @socket.puts text
     end
 
-    def numeric (reponse, value)
-        puts response.inspect
-        server = @server
-        send :raw, ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
+    def numeric (response, value=nil)
+        raw ":#{server.host} #{'%03d' % response[:code]} #{nick || 'faggot'} #{eval(response[:text])}"
     end
 
     def inspect
-        return "<Client: #{(mask.empty?) ? 'nil' : mask}>"
+        return "#<Client: #{(mask.empty?) ? 'nil' : mask}>"
     end
 end
 

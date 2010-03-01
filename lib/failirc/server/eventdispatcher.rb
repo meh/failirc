@@ -35,7 +35,7 @@ class EventDispatcher
         event = Event.new(self, thing, string)
 
         @events[:default].each {|method|
-            result = method.call(event.type, event.thing, event.string)
+            result = method.call(event.alias || event.type, event.thing, event.string)
 
             if result == false
                 stopped = true

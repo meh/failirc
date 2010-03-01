@@ -27,6 +27,8 @@ module IRC
 module Modules
 
 class Standard < Module
+    include Utils
+
     def initialize (server)
         @pingThread = Thread.new {
             while true
@@ -58,18 +60,13 @@ class Standard < Module
     end
 
     def check (type, thing, string)
-        puts string.inspect
         # if the client tries to do something without having registered, kill it with fire
         if type != :PASS && type != :NICK && type != :USER && !thing.registered?
-            puts '1'
-            thing.send(:numeric, ERR_NOTREGISTERED)
-            puts '1b'
+            thing.send :numeric, ERR_NOTREGISTERED
         # if the client tries to reregister, kill it with fire
-        elsif type == :PASS || type == :NICK || type == :USER && thing.registered?
-            puts '2'
-            thing.send(:numeric, ERR_ALREADYREGISTRED)
+        elsif (type == :PASS || type == :NICK || type == :USER) && thing.registered?
+            thing.send :numeric, ERR_ALREADYREGISTRED
         else
-            puts '3'
             return true
         end
 

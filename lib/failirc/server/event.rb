@@ -20,13 +20,14 @@
 module IRC
 
 class Event
-    attr_reader :type, :dispatcher, :thing, :string
+    attr_reader :type, :alias, :dispatcher, :thing, :string
 
     def initialize (dispatcher, thing, string)
         @dispatcher = dispatcher
         @thing      = thing
         @string     = string
         @type       = Event.type(dispatcher, string)
+        @alias      = Event.alias(dispatcher, type)
     end
 
     def callbacks
@@ -52,6 +53,19 @@ class Event
         }
 
         return type
+    end
+
+    def self.alias (dispatcher, type)
+        result = nil
+
+        dispatcher.aliases.each {|key, value|
+            if type == value
+                result = key
+                break
+            end
+        }
+
+        return result
     end
 end
 

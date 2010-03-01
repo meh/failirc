@@ -22,8 +22,8 @@ module IRC
 module Utils
 
 def debug (argument)
-    if self.verbose
-        if argument.kind_of?(Exception)
+    if @verbose || @server.verbose
+        if argument.is_a?(Exception)
             puts "#{self.class}: #{argument.class}: #{argument.message}"
             puts argument.backtrace.collect {|stack|
                 "#{self.class}: #{stack}"
