@@ -27,6 +27,7 @@ include REXML
 require 'failirc'
 require 'failirc/server/clients'
 require 'failirc/server/links'
+require 'failirc/server/channels'
 require 'failirc/utils'
 require 'failirc/server/errors'
 require 'failirc/server/responses'
@@ -46,6 +47,7 @@ class Server
 
         @modules = []
 
+        @channels  = Channels.new
         @clients   = Clients.new
         @links     = Links.new
         @listening = []
@@ -166,11 +168,29 @@ class Server
             connections, = IO::select(connections)
 
             connections.each {|socket|
-                string = socket.gets
+                string = socket.gets.chomp
 
                 Thread.new { @dispatcher.do things[socket], string }
             }
         end
+    end
+
+    def kill (thing)
+        if thing.is_a?(Client)
+            if thing.registered?
+                @clients.delete(thing.nick)
+
+                @channels.each_value {|channel|
+                    channel.users.delete(thing.nick)
+                }
+            else
+                @clients.delete(thing.socket)
+            end
+        elsif thing.is_a?(Link)
+            @links.delete(thing.socket)
+        end
+
+        thing.socket.close
     end
 
     def rehash

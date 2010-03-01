@@ -32,6 +32,14 @@ class Users < Hash
         __set(key, value)
     end
 
+    alias __delete delete (key)
+        user = self[key]
+
+        user.server.dispatcher.execute(:user_delete, user)
+
+        __delete(key)
+    end
+
     def inspect
         result = ""
 

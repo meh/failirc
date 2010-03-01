@@ -25,9 +25,9 @@ module IRC
 class Client
     include Utils
 
-    attr_reader   :server, :socket, :listen, :registered, :nick, :user, :host, :realName, :state, :channels
+    attr_reader   :server, :socket, :listen, :registered, :state, :channels
     attr_writer   :registered
-    attr_accessor :password
+    attr_accessor :password, :nick, :user, :host, :realName
 
     def initialize (server, socket, listen)
         @server = server

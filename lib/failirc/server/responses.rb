@@ -316,4 +316,10 @@ RPL_TRACESERVER = {
     :text => '"Serv #{result.class} <int>S <int>C <server> <nick!user|*!*>@<host|server>"'
 }
 
+# custom responses
+RPL_WELCOME = {
+    :code => 1,
+    :text => '":Welcome to the #{server.config.elements[\'config\'].elements[\'server\'].elements[\'name\'].text} #{value.mask}"'
+}
+
 end

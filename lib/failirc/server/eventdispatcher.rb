@@ -30,27 +30,35 @@ class EventDispatcher
     end
 
     def do (thing, string)
-        stopped = false
+        stop = false
 
         event = Event.new(self, thing, string)
 
-        @events[:default].each {|method|
-            result = method.call(event.alias || event.type, event.thing, event.string)
+        @events[:default].each {|callback|
+            begin
+                result = callback.call(event.alias || event.type, event.thing, event.string)
+            rescue Exception => e
+                self.debug e
+            end
 
             if result == false
-                stopped = true
+                stop = true
                 break
             elsif result.is_a?(String)
                 string = result
             end
         }
 
-        if stopped
+        if stop
             return
         end
 
-        event.callbacks {|callback|
-            result = method.call(thing, string)
+        event.callbacks.each {|callback|
+            begin
+                result = callback.call(thing, string)
+            rescue Exception => e
+                self.debug e
+            end
 
             if result == false
                 break
@@ -63,6 +71,18 @@ class EventDispatcher
                 end
             end
         }
+    end
+
+    def execute (event, *args)
+        if @events[event]
+            @events[event].each {|callback|
+                begin
+                    callback.call(*args)
+                rescue Exception => e
+                    self.debug(e)
+                end
+            }
+        end
     end
 
     def alias (symbol, regex)
