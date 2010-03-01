@@ -38,10 +38,10 @@ class Standard < Module
             sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
             while true
-                server.users.each {|key, user|
+                server.users.each_value {|user|
                     @pingedOut.push(user)
 
-                    if key.is_a?(String)
+                    if user.registered?
                         user.send :raw, "PING :#{server.host}"
                     end
                 }
