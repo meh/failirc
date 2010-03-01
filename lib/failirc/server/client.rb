@@ -51,20 +51,20 @@ class Client
     end
 
     def send (type, *args)
-        @@callbacks[type].call(*args)
+        if self.method(type)
+            return self.method(type).call(*args)
+        end
     end
 
-    @@callbacks = {
-        :raw => lambda {|text|
-            @socket.puts text
-        },
+    def raw (text)
+        @socket.puts text
+    end
 
-        :numeric => lambda {|response, value|
-            server = @server
-
-            send :raw, ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
-        }
-    }
+    def numeric (reponse, value)
+        puts response.inspect
+        server = @server
+        send :raw, ":#{server.host} #{'%03d' % response.code} #{nick} #{eval(response.text)}"
+    end
 
     def inspect
         return "<Client: #{(mask.empty?) ? 'nil' : mask}>"

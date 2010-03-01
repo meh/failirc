@@ -19,37 +19,42 @@
 
 module IRC
 
-class Module
-    attr_reader :server
+class Event
+    attr_reader :type, :dispatcher, :thing, :string
 
-    def initialize (server)
-        @server = server
+    def initialize (dispatcher, thing, string)
+        @dispatcher = dispatcher
+        @thing      = thing
+        @string     = string
+        @type       = Event.type(dispatcher, string)
+    end
 
-        if @aliases
-            @aliases.each_key {|key|
-                @server.dispatcher.alias(key, @aliases[key])
-            }
-        end
-
-        if @events
-            @events.each_key {|key|
-                @server.dispatcher.register(key, @events[key])
-            }
+    def callbacks
+        if @dispatcher.events[@type]
+            return @dispatcher.events[@type]
+        else
+            return []
         end
     end
 
-    def finalize
-        if @aliases
-            @aliases.each_key {|key|
-                @server.dispatcher.alias(key, nil)
-            }
-        end
+    def same? (string)
+        return (@type.match(string)) ? true : false
+    end
 
-        if @events
-            @events.each_key {|key|
-                @server.dispatcher.register(key, nil)
-            }
-        end
+    def self.type (dispatcher, string)
+        type = nil
+
+        dispatcher.events.each_key {|key|
+            if key.match(string)
+                type = key
+                break
+            end
+        }
+
+        return type
+    end
+
+
     end
 end
 

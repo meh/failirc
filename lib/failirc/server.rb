@@ -30,19 +30,19 @@ require 'failirc/server/links'
 require 'failirc/utils'
 require 'failirc/server/errors'
 require 'failirc/server/responses'
+require 'failirc/server/eventdispatcher'
 
 module IRC
 
 class Server
     include Utils
 
-    attr_reader :verbose
+    attr_reader :verbose, :dispatcher, :modules, :clients, :links, :listening, :config
 
     def initialize (conf, verbose)
         @verbose = verbose ? true : false
 
-        @defaultEvents = {}
-        @events        = { :default => [] }
+        @dispatcher = EventDispatcher.new
 
         @modules = []
 
@@ -116,14 +116,6 @@ class Server
             end
         }
 
-        @pingThread = Thread.new {
-            while true
-                sleep 60
-
-                self.do :ping
-            end
-        }
-
         @started = true
 
         self.loop()
@@ -131,7 +123,10 @@ class Server
 
     def stop
         if @started
-            Thread.kill(@pingThread)
+            @modules.each {|mod|
+                mod.finalize
+            }
+
             Thread.kill(@listeningThread)
 
             @listening.each {|server|
@@ -169,87 +164,7 @@ class Server
             connections.each {|socket|
                 string = socket.gets
 
-                Thread.new { handle things[socket], string }
-            }
-        end
-    end
-
-    def handle (thing, string)
-        @events.keys.each {|key|
-            if event(key, thing, string) != false
-                break
-            end
-        }
-    end
-
-    def register (type, callback)
-        if callback.is_a?(Regexp)
-            if @defaultEvents[type]
-                raise 'You cannot redefine an already defined default event.'
-            end
-
-            @defaultEvents[type] = callback
-        elsif callback.is_a?(Array)
-            callback.each {|callback|
-                register(type, callback)
-            }
-        else
-            if @defaultEvents[type]
-                type = @defaultEvents[type]
-            end
-
-            if !@events[type]
-                @events[type] = []
-            end
-
-            @events[type].push(callback)
-        end
-    end
-
-    def unregister (type, default)
-        if default
-            @defaultEvents.delete(type)
-        else
-            @events.delete(type)
-        end
-    end
-
-    def event? (type, string)
-        if @defaultEvents[type]
-            type = @defaultEvents[type]
-        end       
-
-        return @events[type].match(string)
-    end
-
-    def event (type, thing, string)
-        @events[:default].each {|method|
-            result = method.call(type, thing, string)
-
-            if result == false
-                break
-            elsif result.is_a?(String)
-                string = result
-            end
-        }
-
-        if !event?(type, string)
-            return false
-        end
-
-        if @defaultEvents[type]
-            type = @defaultEvents[type]
-        end
-
-        if @events[type]
-            @events[type].each {|method|
-                result = method.call(thing, string)
-
-                if result == false
-                    break
-                elsif result.is_a?(String)
-                    string = result
-                end
+                Thread.new { @dispatcher.do things[socket], string }
             }
         end
     end
@@ -309,18 +224,6 @@ class Server
             self.debug(e)
         end
     end
-
-    def do (type, *args)
-        @@callbacks[type].call(*args)
-    end
-
-    @@callbacks = {
-        :ping => lambda {
-            @clients.each {|client|
-
-            }
-        }
-    }
 end
 
 end

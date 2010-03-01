@@ -28,7 +28,15 @@ module Modules
 
 class Standard < Module
     def initialize (server)
-        @defaultEvents = {
+        @pingThread = Thread.new {
+            while true
+                sleep 60
+
+                ping
+            end
+        }
+
+        @aliases = {
             :PASS => /^PASS( |$)/,
             :NICK => /^(:[^ ] )?NICK( |$)/,
             :USER => /^(:[^ ] )?USER( |$)/,
@@ -45,14 +53,23 @@ class Standard < Module
         super(server)
     end
 
+    def finalize
+        Thread.kill(@pingThread)
+    end
+
     def check (type, thing, string)
+        puts string.inspect
         # if the client tries to do something without having registered, kill it with fire
         if type != :PASS && type != :NICK && type != :USER && !thing.registered?
+            puts '1'
             thing.send(:numeric, ERR_NOTREGISTERED)
+            puts '1b'
         # if the client tries to reregister, kill it with fire
         elsif type == :PASS || type == :NICK || type == :USER && thing.registered?
+            puts '2'
             thing.send(:numeric, ERR_ALREADYREGISTRED)
         else
+            puts '3'
             return true
         end
 
