@@ -132,18 +132,8 @@ class Standard < Module
                 mask       = thing.mask
                 thing.nick = match[1]
 
-                # create an empty hash to put single users to notice the nick change
-                users = {}
-
-                # notice all the channel where the user is in that he changed nick
-                thing.channels.each {|channel|
-                    channel.users.each {|user|
-                        users[user.nick] = user
-                    }
-                }
-
-                users.each {|user|
-                    user.send :raw, "#{mask} NICK :#{thing.nick}"
+                thing.channels.users.each_key {|user|
+                    user.send :raw, "#{mask} NICK :#{user}"
                 }
             end
         end
@@ -171,11 +161,15 @@ class Standard < Module
     end
 
     def registration (thing)
-        self.debug thing.inspect
-
         if !thing.registered?
             # if the client isn't registered but has all the needed attributes, register it
-            if thing.user && thing.nick && (thing.listen.attributes['password'] && thing.listen.attributes['password'] == thing.password)
+            if thing.user && thing.nick
+                if thing.listen.attributes['password']
+                    if thing.listen.attributes['password'] != thing.password
+                        return false
+                    end
+                end
+
                 thing.registered = true
 
                 # clean the temporary hash value and use the nick as key
@@ -193,9 +187,9 @@ class Standard < Module
         thing.send :raw, "ERROR :#{message}"
     end
 
-    def send_quit (user)
-        user.channels.each {|channel|
-            
+    def send_quit (user, message)
+        user.channels.users.each {|nick, user|
+            user.send :raw, ":#{user.mask} QUIT :#{message}"
         }
     end
 end

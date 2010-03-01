@@ -32,10 +32,12 @@ class Users < Hash
         __set(key, value)
     end
 
-    alias __delete delete (key)
+    alias __delete delete
+    
+    def delete (key, message=nil)
         user = self[key]
 
-        user.server.dispatcher.execute(:user_delete, user)
+        user.server.dispatcher.execute(:user_delete, user, message)
 
         __delete(key)
     end

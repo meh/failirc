@@ -32,6 +32,20 @@ class Channels < Hash
         __set(key, value)
     end
 
+    def users
+        # create an empty hash to put single users to notice the nick change
+        result = {}
+
+        # notice all the channel where the user is in that he changed nick
+        thing.channels.each {|channel|
+            channel.users.each {|user|
+                result[user.nick] = user
+            }
+        }
+
+        return result
+    end
+
     def inspect (user=nil)
         result = ""
 

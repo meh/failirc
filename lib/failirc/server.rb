@@ -40,6 +40,8 @@ class Server
 
     attr_reader :verbose, :dispatcher, :modules, :clients, :links, :listening, :config
 
+    alias users clients
+
     def initialize (conf, verbose)
         @verbose = verbose ? true : false
 
@@ -237,7 +239,7 @@ class Server
 
         @config.elements.each('config/modules/module') {|element|
             if !element.attributes['path']
-                element.attributes['path'] = 'failirc/modules'
+                element.attributes['path'] = 'failirc/server/modules'
             end
 
             self.loadModule(element.attributes['name'], element.attributes['path'])

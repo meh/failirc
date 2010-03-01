@@ -45,11 +45,7 @@ class Client
     end
 
     def mask
-        if !registered?
-            return ""
-        else
-            return "#{nick}!#{user}@#{host}"
-        end
+        return "#{nick || '*'}!#{user || '*'}@#{host || '*'}"
     end
 
     def send (symbol, *args)
@@ -71,7 +67,7 @@ class Client
     end
 
     def inspect
-        return "#<Client: #{(mask.empty?) ? 'nil' : mask}>"
+        return "#<Client: #{(mask.empty?) ? 'nil' : mask}#{(registered?) ? ' registered' : ''}>"
     end
 end
 
