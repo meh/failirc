@@ -45,8 +45,8 @@ class Users < Hash
     def inspect
         result = ""
 
-        self.each {|user|
-            result << " #{user.levels.sort.first}#{user.nick}"
+        self.each {|nick, user|
+            result << " #{user.client.inspect}"
         }
 
         return result[1, result.length]

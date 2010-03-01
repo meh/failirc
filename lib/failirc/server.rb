@@ -45,7 +45,7 @@ class Server
     def initialize (conf, verbose)
         @verbose = verbose ? true : false
 
-        @dispatcher = EventDispatcher.new
+        @dispatcher = EventDispatcher.new(self)
 
         @modules = []
 
@@ -75,7 +75,7 @@ class Server
     end
 
     def host
-        @config.elements['config'].elements['server'].elements['host'].text
+        @config.elements['config/server/host'].text
     end
 
     def start
@@ -167,31 +167,36 @@ class Server
                 thing.socket
             }
 
-            connections, = IO::select connections, nil, nil, 2
+            begin
+                connections, = IO::select connections, nil, nil, 2
 
-            if connections
-                connections.each {|socket|    
-                    Thread.new {
-                        @dispatcher.do things[socket], socket.gets.chomp
+                if connections
+                    connections.each {|socket|    
+                        Thread.new {
+                            @dispatcher.do things[socket], socket.gets.chomp
+                        }
                     }
-                }
+                end
+            rescue IOError
+            rescue Exception => e
+                self.debug e
             end
         end
     end
 
-    def kill (thing)
+    def kill (thing, message=nil)
         if thing.is_a?(Client)
             if thing.registered?
                 @clients.delete(thing.nick)
 
                 @channels.each_value {|channel|
-                    channel.users.delete(thing.nick)
+                    channel.users.delete(thing.nick, message)
                 }
             else
                 @clients.delete(thing.socket)
             end
         elsif thing.is_a?(Link)
-            @links.delete(thing.socket)
+            @links.delete(thing.host)
         end
 
         thing.socket.close
@@ -205,18 +210,23 @@ class Server
         @config          = Document.new reference
         @configReference = reference
 
-        if !@config.elements['config'].elements['server'].elements['name']
-            @config.elements['config'].elements['server'].add(Element.new('name'))
-            @config.elements['config'].elements['server'].elements['name'].text = "Fail IRC"
+        if !@config.elements['config/server/name']
+            @config.elements['config/server'].add(Element.new('name'))
+            @config.elements['config/server/name'].text = "Fail IRC"
         end
 
-        if !@config.elements['config'].elements['server'].elements['host']
-            @config.elements['config'].elements['server'].add(Element.new('host'))
-            @config.elements['config'].elements['server'].elements['host'].text = Socket.gethostname.split(/\./).shift
+        if !@config.elements['config/server/host']
+            @config.elements['config/server'].add(Element.new('host'))
+            @config.elements['config/server/host'].text = Socket.gethostname.split(/\./).shift
         end
 
-        if !@config.elements['config'].elements['server'].elements['listen']
-            @config.elements['config'].elements['server'].add(Element.new('listen'))
+        if !@config.elements['config/server/pingTimeout']
+            @config.elements['config/server'].add(Element.new('pingTimeout'))
+            @config.elements['config/server/pingTimeout'].text = '60'
+        end
+
+        if !@config.elements['config/server/listen']
+            @config.elements['config/server'].add(Element.new('listen'))
         end
 
         @config.elements.each('config/server/listen') {|element|

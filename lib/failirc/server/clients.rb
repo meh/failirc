@@ -35,7 +35,7 @@ class Clients < Hash
     def inspect
         result = ""
 
-        self.each {|client|
+        each_value {|client|
             result << " #{client.inspect}"
         }
 

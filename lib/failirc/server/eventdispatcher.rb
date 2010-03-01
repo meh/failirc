@@ -17,14 +17,19 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/utils'
 require 'failirc/server/event'
 
 module IRC
 
 class EventDispatcher
-    attr_reader :aliases, :events
+    include Utils
 
-    def initialize
+    attr_reader :server, :aliases, :events
+
+    def initialize (server)
+        @server = server
+
         @aliases = {}
         @events  = { :default => [] }
     end

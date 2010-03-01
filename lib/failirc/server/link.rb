@@ -22,7 +22,7 @@ require 'failirc/utils'
 module IRC
 
 class Link
-    attr_reader :server, :socket, :listen
+    attr_reader :server, :socket, :listen, :host
 
     def initialize (server, socket, listen)
         @server = server

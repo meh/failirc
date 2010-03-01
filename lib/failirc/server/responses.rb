@@ -319,7 +319,7 @@ RPL_TRACESERVER = {
 # custom responses
 RPL_WELCOME = {
     :code => 1,
-    :text => '":Welcome to the #{server.config.elements[\'config\'].elements[\'server\'].elements[\'name\'].text} #{value.mask}"'
+    :text => '":Welcome to the #{server.config.elements[\'config/server/name\'].text} #{value.mask}"'
 }
 
 end

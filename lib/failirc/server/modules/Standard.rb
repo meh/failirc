@@ -32,15 +32,32 @@ class Standard < Module
     include Utils
 
     def initialize (server)
-        @pingThread = Thread.new {
-            while true
-                sleep 60
+        @pingedOut = []
 
-                ping
+        @pingThread = Thread.new {
+            sleep server.config.elements['config/server/pingTimeout'].text.to_i
+
+            while true
+                server.users.each_value {|user|
+                    @pingedOut.push(user)
+                    user.send :raw, "PING :#{server.host}"
+                }
+
+                sleep server.config.elements['config/server/pingTimeout'].text.to_i
+
+                @pingedOut.each {|user|
+                    error(user, 'Ping timeout', :close)
+                    server.kill(user, 'Ping timeout')
+                }
+
+                @pingedOut.clear
             end
         }
 
         @aliases = {
+            :PING => /^PING( |$)/i,
+            :PONG => /^PONG( |$)/i,
+
             :PASS => /^PASS( |$)/i,
             :NICK => /^(:[^ ] )?NICK( |$)/i,
             :USER => /^(:[^ ] )?USER( |$)/i,
@@ -49,6 +66,8 @@ class Standard < Module
         @events = {
             :default     => self.method(:check),
             :user_delete => self.method(:send_quit),
+
+            :PONG => self.method(:pong),
 
             :PASS => self.method(:auth),
             :NICK => self.method(:nick),
@@ -115,7 +134,7 @@ class Standard < Module
             # kill it with fire.
             if thing.server.users[match[1]]
                 thing.send :numeric, ERR_NICKCOLLISION, match[1]
-                error(thing, "Closing Link: [#{thing.socket.addr.pop}] (Nick collision)")
+                error(thing, 'Nick collision', :close)
                 thing.server.kill(thing)
             else
                 thing.nick = match[1]
@@ -185,14 +204,29 @@ class Standard < Module
         self.debug thing.inspect
     end
 
-    def error (thing, message)
-        thing.send :raw, "ERROR :#{message}"
+    def error (thing, message, type=nil)
+        case type
+            when :close
+                error(thing, "Closing Link: #{thing.nick}[#{thing.socket.addr.pop}] (#{message})")
+            else
+                thing.send :raw, "ERROR :#{message}"
+        end
     end
 
     def send_quit (user, message)
         user.channels.users.each {|nick, user|
             user.send :raw, ":#{user.mask} QUIT :#{message}"
         }
+    end
+
+    def pong (thing, string)
+        match = string.match(/PONG\s+(.*)$/)
+
+        if match && match[1] == server.host
+            @pingedOut.reject! {|user|
+                user != thing
+            }
+        end
     end
 end
 
