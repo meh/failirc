@@ -38,9 +38,12 @@ class Standard < Module
             sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
             while true
-                server.users.each_value {|user|
+                server.users.each {|key, user|
                     @pingedOut.push(user)
-                    user.send :raw, "PING :#{server.host}"
+
+                    if key.is_a?(String)
+                        user.send :raw, "PING :#{server.host}"
+                    end
                 }
 
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
