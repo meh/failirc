@@ -51,10 +51,6 @@ class Module
             }
         end
     end
-
-    def self.name= (value)
-        @name = value
-    end
 end
 
 end

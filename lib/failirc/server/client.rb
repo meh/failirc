@@ -51,8 +51,7 @@ class Client
     end
 
     def send (type, *args)
-        callback = @@callbacks[type]
-        callback(*args)
+        @@callbacks[type].call(*args)
     end
 
     @@callbacks = {

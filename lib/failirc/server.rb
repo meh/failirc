@@ -28,11 +28,10 @@ require 'failirc'
 require 'failirc/server/clients'
 require 'failirc/server/links'
 require 'failirc/utils'
-
-module IRC
-
 require 'failirc/server/errors'
 require 'failirc/server/responses'
+
+module IRC
 
 class Server
     include Utils
@@ -42,7 +41,9 @@ class Server
     def initialize (conf, verbose)
         @verbose = verbose ? true : false
 
-        @events  = { :default => [] }
+        @defaultEvents = {}
+        @events        = { :default => [] }
+
         @modules = []
 
         @clients   = Clients.new
@@ -50,6 +51,23 @@ class Server
         @listening = []
 
         self.config = conf
+    end
+
+    def loadModule (name, path=nil)
+        begin 
+            if path[0] == '/'
+                $LOAD_PATH.push path
+                require name
+                $LOAD_PATH.pop
+            else
+                require "#{path}/#{name}"
+            end
+
+            klass = eval("Modules::#{name}")
+            @modules.push(klass.new(self))
+        rescue Exception => e
+            self.debug(e)
+        end
     end
 
     def start
@@ -106,46 +124,63 @@ class Server
             end
         }
 
-        @listeningThread.run
-        @pingThread.run
-
         @started = true
 
         self.loop()
     end
 
+    def stop
+        if @started
+            Thread.kill(@pingThread)
+            Thread.kill(@listeningThread)
+
+            @listening.each {|server|
+                server[:socket].close
+            }
+
+            @clients.each {|key, client|
+                client.socket.close
+            }
+
+            @links.each {|key, link|
+                link.socket.close
+            }
+        end
+
+        exit 0
+    end
+
     def loop
         while true
             things = @clients.merge(@links)
-            
-            connections = things.map {|thing|
+
+            if things.empty?
+                sleep 1
+                next
+            end
+
+            connections = things.map {|key, thing|
                 things[thing.socket] = thing
                 thing.socket
             }
 
-            connections = IO::select(connections, connections)
+            connections, = IO::select(connections)
 
             connections.each {|socket|
-                handle things[socket]
+                string = socket.gets
+
+                Thread.new { handle things[socket], string }
             }
         end
     end
 
-    def loadModule (name, path='failirc/modules')
-        mod = nil
-
-        $LOAD_PATH.each {|loadPath|
-            if File.exists?("#{loadPath}/#{path}/#{name}")
-                mod = eval(File.read("#{loadPath}/#{path}/#{name}"))
-                mod.name = name.capitalize
+    def handle (thing, string)
+        @events.keys.each {|key|
+            if event(key, thing, string) != false
                 break
             end
         }
-
-        return mod ? true : false
     end
-
-    @defaultEvents = {}
 
     def register (type, callback)
         if callback.is_a?(Regexp)
@@ -188,58 +223,35 @@ class Server
     end
 
     def event (type, thing, string)
+        @events[:default].each {|method|
+            result = method.call(type, thing, string)
+
+            if result == false
+                break
+            elsif result.is_a?(String)
+                string = result
+            end
+        }
+
         if !event?(type, string)
             return false
         end
-
-        @events[:default].each {|callback|
-            if callback(type, thing, string) == false
-                break
-            end
-        }
 
         if @defaultEvents[type]
             type = @defaultEvents[type]
         end
 
         if @events[type]
-            @events[type].each {|callback|
-                if callback(thing, string) == false
+            @events[type].each {|method|
+                result = method.call(thing, string)
+
+                if result == false
                     break
+                elsif result.is_a?(String)
+                    string = result
                 end
             }
         end
-    end
-
-    def handle (thing)
-        string = thing.socket.gets
-
-        @events.keys.each {|key|
-            if event(key, thing, string) != false
-                break
-            end
-        }
-    end
-
-    def stop
-        if @started
-            Thread.kill(@pingThread)
-            Thread.kill(@listeningThread)
-
-            @listening.each {|server|
-                server[:socket].close
-            }
-
-            @clients.each {|key, client|
-                client.socket.close
-            }
-
-            @links.each {|key, link|
-                link.socket.close
-            }
-        end
-
-        exit 0
     end
 
     def rehash
@@ -299,8 +311,7 @@ class Server
     end
 
     def do (type, *args)
-        callback = @@callbacks[type]
-        callback(*args)
+        @@callbacks[type].call(*args)
     end
 
     @@callbacks = {

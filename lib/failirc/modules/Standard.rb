@@ -17,14 +17,35 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server/errors'
 require 'failirc/server/module'
-require 'failirc/server/client'
+require 'failirc/utils'
+require 'failirc/server/errors'
+require 'failirc/server/responses'
 
-Class.new(IRC::Server::Module) do
+module IRC
+
+module Modules
+
+class Standard < Module
+    def initialize (server)
+        @defaultEvents = {
+            :PASS => /^PASS( |$)/,
+            :NICK => /^(:[^ ] )?NICK( |$)/,
+            :USER => /^(:[^ ] )?USER( |$)/,
+        }
+
+        @events = {
+            :default => self.method(:check),
+
+            :PASS => self.method(:auth),
+            :NICK => self.method(:nick),
+            :USER => self.method(:user),
+        }
+
+        super(server)
+    end
+
     def check (type, thing, string)
-        puts string
-
         # if the client tries to do something without having registered, kill it with fire
         if type != :PASS && type != :NICK && type != :USER && !thing.registered?
             thing.send(:numeric, ERR_NOTREGISTERED)
@@ -62,7 +83,7 @@ Class.new(IRC::Server::Module) do
         end
         
         # check if the nickname is valid
-        if !match[1].match(/[\w\-^\/]{1,23}/
+        if !match[1].match(/[\w\-^\/]{1,23}/)
             thing.send(:numeric, ERR_ERRONEUSNICKNAME, match[1])
             return
         end
@@ -96,7 +117,7 @@ Class.new(IRC::Server::Module) do
                 }
 
                 users.each {|user|
-                    user.send :raw "#{mask} NICK :#{thing.nick}"
+                    user.send :raw, "#{mask} NICK :#{thing.nick}"
                 }
             end
         end
@@ -116,18 +137,8 @@ Class.new(IRC::Server::Module) do
     def user (thing, string)
         
     end
+end
 
-    @defaultEvents = {
-        :PASS => /^PASS( |$)/,
-        :NICK => /^(:[^ ] )?NICK( |$)/,
-        :USER => /^(:[^ ] )?USER( |$)/,
-    }
+end
 
-    @events = {
-        :default => check,
-
-        :PASS => auth,
-        :NICK => nick,
-        :USER => user,
-    }
 end

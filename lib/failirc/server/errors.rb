@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+module IRC
+
 # Used to indicate the nickname parameter supplied to a command is currently unused.
 ERR_NOSUCHNICK = {
     :code => 401,
@@ -271,3 +273,5 @@ ERR_USERSDONTMATCH = {
     :code => 502,
     :text => '":Cant change mode for other users"'
 }
+
+end

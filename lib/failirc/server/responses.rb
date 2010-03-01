@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+module IRC
+
 # Dummy reply number. Not used.
 RPL_NONE = {
     :code => 300,
@@ -313,3 +315,5 @@ RPL_TRACESERVER = {
     :code => 206,
     :text => '"Serv #{result.class} <int>S <int>C <server> <nick!user|*!*>@<host|server>"'
 }
+
+end
