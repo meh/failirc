@@ -24,32 +24,25 @@ require 'failirc/server/users'
 module IRC
 
 class Channel
-    attr_reader :name
+    attr_reader :name, :createdOn, :users, :modes
 
     def initialize (name)
         @name = name
 
+        if !@name.match(/^[#&\$]/)
+            @name = "##{@name}"
+        end
+
+        @createdOn = Time.now
+
         @users = Users.new
+
+        @modes = {}
     end
 
-    def do (type, *args)
-        callback = @@callabacks[type]
-        callback(args)
+    def empty?
+        return @users.empty?
     end
-
-    @@callbacks = {
-        :join => lambda {|client|
-            @users.each {|user|
-                user.send :numeric, RPL_JOIN
-            }
-
-            @users.push(User.new(client, defaultModes))
-        },
-
-        :part => lambda {|client|
-
-        }
-    }
 end
 
 end

@@ -130,27 +130,31 @@ class Server
     end
 
     def stop
-        if @started
-            @modules.each {|mod|
-                mod.finalize
-            }
+        begin
+            if @started
+                @modules.each {|mod|
+                    mod.finalize
+                }
 
-            Thread.kill(@listeningThread)
+                Thread.kill(@listeningThread)
 
-            @listening.each {|server|
-                server[:socket].close
-            }
+                @listening.each {|server|
+                    server[:socket].close
+                }
 
-            @clients.each {|key, client|
-                client.socket.close
-            }
+                @clients.each {|key, client|
+                    client.socket.close
+                }
 
-            @links.each {|key, link|
-                link.socket.close
-            }
+                @links.each {|key, link|
+                    link.socket.close
+                }
+            end
+
+            exit 0
+        rescue
+            exit 0
         end
-
-        exit 0
     end
 
     def loop
@@ -210,6 +214,10 @@ class Server
         @config          = Document.new reference
         @configReference = reference
 
+        if !@config.elements['config/server']
+            @config.element['config'].add(Element.new('server'))
+        end
+
         if !@config.elements['config/server/name']
             @config.elements['config/server'].add(Element.new('name'))
             @config.elements['config/server/name'].text = "Fail IRC"
@@ -243,11 +251,24 @@ class Server
             end
         }
 
+        if !@config.elements['config/messages']
+            @config.elements['config'].add(Element.new('messages'))
+        end
+
+        if !@config.elements['config/messages/quit']
+            @config.elements['config/messages'].add(Element.new('quit'))
+            @config.elements['config/messages/quit'].text = 'Quit: '
+        end
+
         @modules.each {|mod|
             mod.finalize
         }
 
         @modules.clear
+
+        if !@config.elements['config/modules']
+            @config.elements['config'].add(Element.new('modules'))
+        end
 
         @config.elements.each('config/modules/module') {|element|
             if !element.attributes['path']

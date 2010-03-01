@@ -24,6 +24,9 @@ require 'failirc/utils'
 require 'failirc/server/errors'
 require 'failirc/server/responses'
 
+require 'failirc/server/channel'
+require 'failirc/server/user'
+
 module IRC
 
 module Modules
@@ -64,6 +67,8 @@ class Standard < Module
             :PASS => /^PASS( |$)/i,
             :NICK => /^(:[^ ] )?NICK( |$)/i,
             :USER => /^(:[^ ] )?USER( |$)/i,
+
+            :QUIT => /^QUIT( |$)/i,
         }
 
         @events = {
@@ -75,6 +80,8 @@ class Standard < Module
             :PASS => self.method(:auth),
             :NICK => self.method(:nick),
             :USER => self.method(:user),
+
+            :QUIT => self.method(:quit),
         }
 
         super(server)
@@ -101,7 +108,7 @@ class Standard < Module
     end
 
     def auth (thing, string)
-        match = string.match(/PASS\s+(.+)$/)
+        match = string.match(/PASS\s+(.+)$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'PASS'
@@ -118,7 +125,7 @@ class Standard < Module
             return
         end
 
-        match = string.match(/NICK\s+(.+)$/)
+        match = string.match(/NICK\s+(.+)$/i)
 
         # no nickname was passed, so tell the user is a faggot
         if !match
@@ -164,7 +171,7 @@ class Standard < Module
 
     def user (thing, string)
         if thing.is_a?(Client)
-            match = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.+)$/)
+            match = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.+)$/i)
 
             if !match
                 thing.send :numeric, ERR_NEEDMOREPARAMS, 'USER'
@@ -203,8 +210,6 @@ class Standard < Module
                 thing.send :numeric, RPL_WELCOME, thing
             end
         end
-
-        self.debug thing.inspect
     end
 
     def error (thing, message, type=nil)
@@ -217,19 +222,47 @@ class Standard < Module
     end
 
     def send_quit (user, message)
-        user.channels.users.each {|nick, user|
+        user.channels.users.each_value {|user|
             user.send :raw, ":#{user.mask} QUIT :#{message}"
         }
     end
 
     def pong (thing, string)
-        match = string.match(/PONG\s+(.*)$/)
+        match = string.match(/PONG\s+(.*)$/i)
 
         if match && match[1] == server.host
             @pingedOut.reject! {|user|
                 user != thing
             }
         end
+    end
+
+    def join (thing, string)
+        match = /JOIN\s+(.+)(\s+(.+))?$/i.match(string)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'JOIN'
+        else
+            channel  = match[1]
+            password = match[3]
+
+            if !thing.server.channels[channel]
+                thing.server.channels[channel] = Channel.new(channel)
+            end
+
+            user = User.new(thing)
+            thing.server.channels[channel].users.add(thing)
+
+            if thing.server.channels[channel].empty?
+                user.modes[:o] = true
+            end
+        end
+    end
+
+    def quit (thing, string)
+        match = /QUIT(\s+:(.*))?$/i.match(string)
+
+        thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[2] || thing.nick}")
     end
 end
 

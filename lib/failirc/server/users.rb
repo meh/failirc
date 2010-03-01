@@ -26,7 +26,7 @@ class Users < Hash
 
     def []= (key, value)
         if !value.is_a?(User)
-            raise 'You can only push Channel'
+            raise 'You can only set User.'
         end
 
         __set(key, value)
@@ -42,11 +42,23 @@ class Users < Hash
         __delete(key)
     end
 
-    def inspect
+    def add (user)
+        if !user.is_a?(User)
+            raise 'You can only add User.'
+        end
+
+        self[user.nick] = user
+    end
+
+    def inspect (channel=false)
         result = ""
 
-        self.each {|nick, user|
-            result << " #{user.client.inspect}"
+        each_value {|user|
+            if channel
+                result << " #{user.inspect}"
+            else
+                result << " #{user.client.inspect}"
+            end
         }
 
         return result[1, result.length]

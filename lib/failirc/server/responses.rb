@@ -158,12 +158,12 @@ RPL_SUMMONING = {
 # The "comments" field may contain any comments about the version or further version details.
 RPL_VERSION = {
     :code => 351,
-    :text => '"#{result.version}.#{result.debugLevel} #{server.host} :#{server.comments}"'
+    :text => '"#{server.version}.#{server.debugLevel} #{server.host} :#{server.comments}"'
 }
 
 RPL_WHOREPLY = {
     :code => 352,
-    :text => '"#{channel.name} #{result.user} #{result.host} #{result.server.name} #{result.nick} #{#<H|G>[*][@|+]} :#{message.hops} #{result.realName}"'
+    :text => '"#{result[:channel].name} #{result[:user].user} #{result[:user].host} #{result[:user].server.name} #{result[:user].nick} #{#<H|G>[*][@|+]} :#{result[:message].hops} #{result[:user].realName}"'
 }
 
 # The RPL_WHOREPLY and RPL_ENDOFWHO pair are used to answer a WHO message.
@@ -176,7 +176,7 @@ RPL_ENDOFWHO = {
 
 RPL_NAMREPLY = {
     :code => 353,
-    :text => '" = #{channel.name} :#{channel.users.inspect}"'
+    :text => '" = #{channel.name} :#{channel.users.inspect(true)}"'
 }
 
 # To reply to a NAMES message, a reply pair consisting of RPL_NAMREPLY and RPL_ENDOFNAMES is sent by the server back to the client.

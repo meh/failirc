@@ -20,9 +20,31 @@
 module IRC
 
 class User
+    class Modes < Hash
+        def initialize (string=nil)
+            @modes = {}
+
+            if string
+                string.each_char {|char|
+                    @modes[char.to_sym] = true
+                }
+            end
+        end
+
+        def inspect
+            result = '+'
+
+            each_key {|mode|
+                result << mode.to_s
+            }
+
+            return result
+        end
+    end
+
     attr_reader :client, :modes
 
-    def initialize (client, modes)
+    def initialize (client, modes=Modes.new)
         @client = client
         @modes  = modes
     end
@@ -53,6 +75,26 @@ class User
 
     def send (type, *args)
         @client.send(type, *args)
+    end
+
+    def level
+        if modes[:q]
+            return '~'
+        elsif modes[:a]
+            return '&'
+        elsif modes[:o]
+            return '@'
+        elsif modes[:h]
+            return '%'
+        elsif modes[:v]
+            return '+'
+        else
+            return ''
+        end
+    end
+
+    def inspect
+        return "#{level}#{nick}"
     end
 end
 
