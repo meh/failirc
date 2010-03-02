@@ -20,28 +20,6 @@
 module IRC
 
 class User
-    class Modes < Hash
-        def initialize (string=nil)
-            @modes = {}
-
-            if string
-                string.each_char {|char|
-                    @modes[char.to_sym] = true
-                }
-            end
-        end
-
-        def inspect
-            result = '+'
-
-            each_key {|mode|
-                result << mode.to_s
-            }
-
-            return result
-        end
-    end
-
     attr_reader :client, :modes
 
     def initialize (client, modes=Modes.new)

@@ -93,8 +93,6 @@ class Standard < Module
     end
 
     def check (type, thing, string)
-        puts string.inspect
-
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire
