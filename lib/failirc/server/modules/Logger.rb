@@ -37,7 +37,9 @@ class Logger < Module
     end
 
     def log (event, thing, string)
-        puts "[#{Time.now}] #{thing.mask} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
+        if (event.chain == :input && event.special == :pre) || (event.chain == :output && event.special == :post)
+            puts "[#{Time.now}] #{thing.mask} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
+        end
     end
 end
 

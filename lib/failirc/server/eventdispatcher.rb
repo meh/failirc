@@ -51,21 +51,22 @@ class EventDispatcher
 
         result = string
 
-        if chain == :input
-            @events[:pre].each {|callback|
-                tmp = callback.call(event, thing, string)
+        @events[:pre].each {|callback|
+            cloned         = event.clone
+            cloned.special = :pre
 
-                if tmp == false
-                    return false
-                elsif tmp.is_a?(String)
-                    string = result = tmp
-                end
+            tmp = callback.call(cloned, thing, string)
 
-                if event.type && !event.same?(string)
-                    return dispatch(chain, thing, string)
-                end
-            }
-        end
+            if tmp == false
+                return false
+            elsif tmp.is_a?(String)
+                string = result = tmp
+            end
+
+            if cloned.type && !cloned.same?(string)
+                return dispatch(chain, thing, string)
+            end
+        }
 
         event.callbacks.each {|callback|
             begin
@@ -85,21 +86,22 @@ class EventDispatcher
             end
         }
 
-        if chain == :output
-            @events[:post].each {|callback|
-                tmp = callback.call(event, thing, string)
+        @events[:post].each {|callback|
+            cloned         = event.clone
+            cloned.special = :post
 
-                if tmp == false
-                    return false
-                elsif tmp.is_a?(String)
-                    string = result = tmp
-                end
+            tmp = callback.call(cloned, thing, string)
 
-                if event.type && !event.same?(string)
-                    return dispatch(chain, thing, string)
-                end
-            }
-        end
+            if tmp == false
+                return false
+            elsif tmp.is_a?(String)
+                string = result = tmp
+            end
+
+            if cloned.type && !cloned.same?(string)
+                return dispatch(chain, thing, string)
+            end
+        }
 
         return result
     end

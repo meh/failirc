@@ -35,6 +35,7 @@ class Event
     end
 
     attr_reader :type, :chain, :alias, :dispatcher, :thing, :string
+    attr_accessor :special
 
     def initialize (dispatcher, chain, thing, string)
         @dispatcher = dispatcher
