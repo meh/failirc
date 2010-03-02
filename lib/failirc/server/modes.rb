@@ -17,31 +17,27 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/utils'
-require 'failirc/server/responses'
-require 'failirc/server/users'
-
 module IRC
 
-class Channel
-    attr_reader :name, :createdOn, :users, :modes
-
-    def initialize (name)
-        @name = name
-
-        if !@name.match(/^[#&\$]/)
-            @name = "##{@name}"
-        end
-
-        @createdOn = Time.now
-
-        @users = Users.new(self)
-
+class Modes < Hash
+    def initialize (string=nil)
         @modes = {}
+
+        if string
+            string.each_char {|char|
+                @modes[char.to_sym] = true
+            }
+        end
     end
 
-    def empty?
-        return @users.empty?
+    def inspect
+        result = '+'
+
+        each_key {|mode|
+            result << mode.to_s
+        }
+
+        return result
     end
 end
 

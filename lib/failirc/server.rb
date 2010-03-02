@@ -38,12 +38,14 @@ module IRC
 class Server
     include Utils
 
-    attr_reader :verbose, :dispatcher, :modules, :clients, :links, :listening, :config
+    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :clients, :links, :listening, :config
 
     alias users clients
 
     def initialize (conf, verbose)
-        @verbose = verbose ? true : false
+        @version   = IRC::VERSION
+        @createdOn = Time.now
+        @verbose   = verbose ? true : false
 
         @dispatcher = EventDispatcher.new(self)
 
@@ -76,6 +78,10 @@ class Server
 
     def host
         @config.elements['config/server/host'].text
+    end
+
+    def ip
+        Resolv.getaddress(@config.elements['config/server/host'].text)
     end
 
     def start
@@ -150,10 +156,8 @@ class Server
                     link.socket.close
                 }
             end
-
-            exit 0
-        rescue
-            exit 0
+        ensure
+            Process.exit!(0)
         end
     end
 
@@ -189,12 +193,14 @@ class Server
     end
 
     def kill (thing, message=nil)
+        @dispatcher.execute(:kill, thing, message)
+
         if thing.is_a?(Client)
             if thing.registered?
                 @clients.delete(thing.nick)
 
                 @channels.each_value {|channel|
-                    channel.users.delete(thing.nick, message)
+                    channel.users.delete(thing.nick)
                 }
             else
                 @clients.delete(thing.socket)

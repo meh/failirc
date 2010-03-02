@@ -22,6 +22,12 @@ require 'failirc/server/user'
 module IRC
 
 class Users < Hash
+    attr_reader :channel
+
+    def initialize (channel)
+        @channel = channel
+    end
+
     alias __set []=
 
     def []= (key, value)

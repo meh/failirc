@@ -31,7 +31,7 @@ RPL_NONE = {
 # The '-' or '+' characters represent whether the client has set an AWAY message or not respectively.
 RPL_USERHOST = {
     :code => 302,
-    :text => '":#{(result) ? \\"#{result.nick}=#{(result.oper?) ? \'*\' : \'\'} = #{(!result.away?) ? \'+\' : \'-\'}#{result.username}@#{result.hostname}\\" : \'\'"'
+    :text => '":#{(result) ? \\"#{value.nick}=#{(result.oper?) ? \'*\' : \'\'} = #{(!result.away?) ? \'+\' : \'-\'}#{value.username}@#{value.hostname}\\" : \'\'"'
 }
 
 # Reply format used by ISON to list replies to the query list.
@@ -42,7 +42,7 @@ RPL_ISON = {
 
 RPL_AWWAY = {
     :code => 301,
-    :text => '"#{result.nick} :#{result.away}"'
+    :text => '"#{value.nick} :#{value.away}"'
 }
 
 RPL_UNAWAY = {
@@ -61,27 +61,27 @@ RPL_NOWAWAY = {
 
 RPL_WHOISUSER = {
     :code => 311,
-    :text => '"#{result.nick} #{result.user} #{result.host} * :#{result.realName}"'
+    :text => '"#{value.nick} #{value.user} #{value.host} * :#{value.realName}"'
 }
 
 RPL_WHOISSERVER = {
     :code => 312,
-    :text => '"#{result.nick} #{result.server.host} :#{result.server.info}"'
+    :text => '"#{value.nick} #{value.server.host} :#{value.server.info}"'
 }
 
 RPL_WHOISOPERATOR = {
     :code => 313,
-    :text => '"#{result.nick} :is an IRC operator"'
+    :text => '"#{value.nick} :is an IRC operator"'
 }
 
 RPL_WHOISIDLE = {
     :code => 317,
-    :text => '"#{result.nick} #{result.idle} :seconds idle"'
+    :text => '"#{value.nick} #{value.idle} :seconds idle"'
 }
 
 RPL_ENDOFWHOIS = {
     :code => 318,
-    :text => '"#{result.nick} :End of /WHOIS list"'
+    :text => '"#{value.nick} :End of /WHOIS list"'
 }
 
 # Replies 311 - 313, 317 - 319 are all replies generated in response to a WHOIS message.
@@ -92,19 +92,19 @@ RPL_ENDOFWHOIS = {
 # The RPL_ENDOFWHOIS reply is used to mark the end of processing a WHOIS message.
 RPL_WHOISCHANNELS = {
     :code => 319,
-    :text => '"#{result.nick} :#{result.channels.inspect(result)}"'
+    :text => '"#{value.nick} :#{value.channels.inspect(result)}"'
 }
 
 RPL_WHOWASUSER = {
     :code => 314,
-    :text => '"#{result.nick} #{result.user} #{result.host} * :#{result.realName}"'
+    :text => '"#{value.nick} #{value.user} #{value.host} * :#{value.realName}"'
 }
 
 # When replying to a WHOWAS message, a server must use the replies RPL_WHOWASUSER, RPL_WHOISSERVER or ERR_WASNOSUCHNICK for each nickname in the presented list.
 # At the end of all reply batches, there must be RPL_ENDOFWHOWAS (even if there was only one reply and it was an error).
 RPL_ENDOFWHOWAS = {
     :code => 369,
-    :text => '"#{result.nick} :End of WHOWAS"'
+    :text => '"#{value.nick} :End of WHOWAS"'
 }
 
 RPL_LISTSTART = {
@@ -114,7 +114,7 @@ RPL_LISTSTART = {
 
 RPL_LIST = {
     :code => 322,
-    :text => '"#{result.name} #{result.users.length} :#{result.topic}"'
+    :text => '"#{value.name} #{value.users.length} :#{value.topic}"'
 }
 
 # Replies RPL_LISTSTART, RPL_LIST, RPL_LISTEND mark the start, actual replies with data and end of the server's response to a LIST command.
@@ -126,19 +126,19 @@ RPL_LISTEND = {
 
 RPL_CHANNELMODEIS = {
     :code => 324,
-    :text => '"#{result.name} #{value.name} #{value.parameters}"'
+    :text => '"#{value.name} #{value.name} #{value.parameters}"'
 }
 
 RPL_NOTOPIC = {
     :code => 331,
-    :text => '"#{result.name} :No topic is set"'
+    :text => '"#{value.name} :No topic is set"'
 }
 
 # When sending a TOPIC message to determine the channel topic, one of two replies is sent.
 # If the topic is set, RPL_TOPIC is sent back else RPL_NOTOPIC.
 RPL_TOPIC = {
     :code => 332,
-    :text => '"#{result.name} :#{result.topic}"'
+    :text => '"#{value.name} :#{value.topic}"'
 }
 
 # Returned by the server to indicate that the attempted INVITE message was successful and is being passed onto the end client.
@@ -150,7 +150,7 @@ RPL_INVITING = {
 # Returned by a server answering a SUMMON message to indicate that it is summoning that user.
 RPL_SUMMONING = {
     :code => 342,
-    :text => '"#{result.user} :Summoning user to IRC"'
+    :text => '"#{value.user} :Summoning user to IRC"'
 }
 
 # Reply by the server showing its version details.
@@ -163,7 +163,7 @@ RPL_VERSION = {
 
 RPL_WHOREPLY = {
     :code => 352,
-    :text => '"#{result[:channel].name} #{result[:user].user} #{result[:user].host} #{result[:user].server.name} #{result[:user].nick} #{#<H|G>[*][@|+]} :#{result[:message].hops} #{result[:user].realName}"'
+    :text => '"#{value[:channel].name} #{value[:user].user} #{value[:user].host} #{value[:user].server.name} #{value[:user].nick} #{#<H|G>[*][@|+]} :#{value[:message].hops} #{value[:user].realName}"'
 }
 
 # The RPL_WHOREPLY and RPL_ENDOFWHO pair are used to answer a WHO message.
@@ -171,7 +171,7 @@ RPL_WHOREPLY = {
 # If there is a list of parameters supplied with a WHO message, a RPL_ENDOFWHO must be sent after processing each list item with <name> being the item.
 RPL_ENDOFWHO = {
     :code => 315,
-    :text => '"#{result.name} :End of /WHO list"'
+    :text => '"#{value.name} :End of /WHO list"'
 }
 
 RPL_NAMREPLY = {
@@ -189,30 +189,30 @@ RPL_ENDOFNAMES = {
 
 RPL_LINKS = {
     :code => 364,
-    :text => '"#{result.mask} #{result.host} :#{message.hopcount} #{result.informations}"'
+    :text => '"#{value.mask} #{value.host} :#{message.hopcount} #{value.informations}"'
 }
 
 # In replying to the LINKS message, a server must send replies back using the RPL_LINKS numeric and mark the end of the list using an RPL_ENDOFLINKS reply.v 
 RPL_ENDOFLINKS = {
     :code => 365,
-    :text => '"#{result.mask} :End of /LINKS list"'
+    :text => '"#{value.mask} :End of /LINKS list"'
 }
 
 RPL_BANLIST = {
     :code => 367,
-    :text => '"#{result.channel.name} #{result.id}"'
+    :text => '"#{value.channel.name} #{value.id}"'
 }
 
 # When listing the active 'bans' for a given channel, a server is required to send the list back using the RPL_BANLIST and RPL_ENDOFBANLIST messages.
 # A separate RPL_BANLIST is sent for each active banid. After the banids have been listed (or if none present) a RPL_ENDOFBANLIST must be sent.
 RPL_ENDOFBANLIST = {
     :code => 368,
-    :text => '"#{result.name} :End of channel ban list"'
+    :text => '"#{value.name} :End of channel ban list"'
 }
 
 RPL_INFO = {
     :code => 371,
-    :text => '":#{result}"'
+    :text => '":#{value}"'
 }
 
 # A server responding to an INFO message is required to send all its 'info' in a series of RPL_INFO messages with a RPL_ENDOFINFO reply to indicate the end of the replies.
@@ -228,7 +228,7 @@ RPL_MOTDSTART = {
 
 RPL_MOTD = {
     :code => 372,
-    :text => '":- #{result}"'
+    :text => '":- #{value}"'
 }
 
 # When responding to the MOTD message and the MOTD file is found, the file is displayed line by line, with each line no longer than 80 characters, using RPL_MOTD format replies.
@@ -247,7 +247,7 @@ RPL_YOUREOPER = {
 # If the REHASH option is used and an operator sends a REHASH message, an RPL_REHASHING is sent back to the operator.
 RPL_REHASHING = {
     :code => 382,
-    :text => '"#{result.path} :Rehashing"'
+    :text => '"#{value.path} :Rehashing"'
 }
 
 # When replying to the TIME message, a server must send the reply using the RPL_TIME format above.
@@ -255,7 +255,7 @@ RPL_REHASHING = {
 # There is no further requirement for the time string.
 RPL_TIME = {
     :code => 391,
-    :text => '"#{result.host} :#{result.time}"'
+    :text => '"#{value.host} :#{value.time}"'
 }
 
 RPL_USERSSTART = {
@@ -283,43 +283,53 @@ RPL_NOUSERS = {
 
 RPL_TRACELINK = {
     :code => 200,
-    :text => '"Link #{result.version} #{result.debugLevel} #{result.destination} #{result.next.host}"'
+    :text => '"Link #{value.version} #{value.debugLevel} #{value.destination} #{value.next.host}"'
 }
 
 RPL_TRACECONNECTING = {
     :code => 201,
-    :text => '"Try. #{result.class} #{result.host}"'
+    :text => '"Try. #{value.class} #{value.host}"'
 }
 
 RPL_TRACEHANDSHAKE = {
     :code => 202,
-    :text => '"H.S. #{result.class} #{result.host}"'
+    :text => '"H.S. #{value.class} #{value.host}"'
 }
 
 RPL_TRACEUNKNOWN = {
     :code => 203,
-    :text => '"???? #{result.class} #{result.ip}"'
+    :text => '"???? #{value.class} #{value.ip}"'
 }
 
 RPL_TRACEOPERATOR = {
     :code => 204,
-    :text => '"Oper #{result.class} #{result.nick}"'
+    :text => '"Oper #{value.class} #{value.nick}"'
 }
 
 RPL_TRACEUSER = {
     :code => 205,
-    :text => '"User #{result.class} #{result.nick}"'
+    :text => '"User #{value.class} #{value.nick}"'
 }
 
 RPL_TRACESERVER = {
     :code => 206,
-    :text => '"Serv #{result.class} <int>S <int>C <server> <nick!user|*!*>@<host|server>"'
+    :text => '"Serv #{value.class} <int>S <int>C <server> <nick!user|*!*>@<host|server>"'
 }
 
-# custom responses
+# custom
 RPL_WELCOME = {
     :code => 1,
     :text => '":Welcome to the #{server.config.elements[\'config/server/name\'].text} #{value.mask}"'
+}
+
+RPL_HOSTEDBY = {
+    :code => 2,
+    :text => '":Your host is #{server.host}[#{server.ip}/#{value.listen.attributes[\'port\']}], running version failirc-#{server.version}"'
+}
+
+RPL_SERVCREATEDON = {
+    :code => 3,
+    :text => '":This server was created #{server.createdOn}"'
 }
 
 end

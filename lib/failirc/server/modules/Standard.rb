@@ -72,9 +72,10 @@ class Standard < Module
         }
 
         @events = {
-            :default     => self.method(:check),
-            :user_delete => self.method(:send_quit),
+            :default => self.method(:check),
+            :kill    => self.method(:send_quit),
 
+            :PING => self.method(:ping),
             :PONG => self.method(:pong),
 
             :PASS => self.method(:auth),
@@ -92,6 +93,8 @@ class Standard < Module
     end
 
     def check (type, thing, string)
+        puts string.inspect
+
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire
@@ -208,6 +211,10 @@ class Standard < Module
                 thing.server.dispatcher.execute(:registration, thing)
 
                 thing.send :numeric, RPL_WELCOME, thing
+                thing.send :numeric, RPL_HOSTEDBY, thing
+                thing.send :numeric, RPL_SERVCREATEDON
+
+                send_motd(thing)
             end
         end
     end
@@ -221,24 +228,58 @@ class Standard < Module
         end
     end
 
+    def send_motd (user)
+        user.send :numeric, RPL_MOTDSTART
+
+        offset = 0
+        motd   = user.server.config.elements['config/server/motd'].text.strip
+
+        while line = motd[offset, 80]
+            user.send :numeric, RPL_MOTD, line
+            offset += 80
+        end
+
+        user.send :numeric, RPL_ENDOFMOTD
+    end
+
     def send_quit (user, message)
         user.channels.users.each_value {|user|
             user.send :raw, ":#{user.mask} QUIT :#{message}"
         }
     end
 
-    def pong (thing, string)
-        match = string.match(/PONG\s+(.*)$/i)
+    def ping (thing, string)
+        match = string.match(/PING\s+(.*)$/i)
 
-        if match && match[1] == server.host
-            @pingedOut.reject! {|user|
-                user != thing
-            }
+        if !match
+            thing.send :numeric, ERR_NOORIGIN
+        else
+            if match[1] == thing.server.host
+                thing.send :raw, ":#{thing.server.host} PONG #{thing.server.host} :#{thing.server.host}"
+            else
+                thing.send :numeric, ERR_NOSUCHSERVER, match[1]
+            end
+        end
+    end
+
+    def pong (thing, string)
+        match = string.match(/PONG\s+(:)?(.*)$/i)
+
+        if !match
+            thing.send :numeric, ERR_NOORIGIN
+        else
+            if match[2] == thing.server.host
+                @pingedOut.reject! {|user|
+                    user == thing
+                }
+            else
+                thing.send :numeric, ERR_NOSUCHSERVER, match[2]
+            end
         end
     end
 
     def join (thing, string)
-        match = /JOIN\s+(.+)(\s+(.+))?$/i.match(string)
+        match = string.match(/JOIN\s+(.+)(\s+(.+))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'JOIN'

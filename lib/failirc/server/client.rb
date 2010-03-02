@@ -18,6 +18,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/utils'
+require 'failirc/server/modes'
 require 'failirc/server/channels'
 
 module IRC
@@ -25,7 +26,7 @@ module IRC
 class Client
     include Utils
 
-    attr_reader   :server, :socket, :listen, :registered, :state, :channels
+    attr_reader   :server, :socket, :listen, :registered, :channels, :modes
     attr_writer   :registered
     attr_accessor :password, :nick, :user, :host, :realName
 
@@ -37,7 +38,7 @@ class Client
         @registered = false
 
         @channels = Channels.new
-        @state    = {}
+        @modes    = Modes.new
     end
 
     def registered?
