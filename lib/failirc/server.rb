@@ -182,7 +182,12 @@ class Server
                     connections.each {|socket|    
                         Thread.new {
                             begin
-                                @dispatcher.dispatch :input, things[socket], socket.gets.chomp
+                                string = socket.gets
+
+                                if string
+                                    @dispatcher.dispatch :input, things[socket], string.chomp
+                                end
+                            rescue IOError, Errno::EBADF
                             rescue Exception => e
                                 debug e
                             end

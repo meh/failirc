@@ -30,7 +30,7 @@ class Channel
     def initialize (name)
         @name = name
 
-        if !@name.match(/^[#&\$]/)
+        if !Channel.check(name)
             @name = "##{@name}"
         end
 
@@ -41,8 +41,16 @@ class Channel
         @modes = {}
     end
 
+    def user (client)
+        return self[client.nick]
+    end
+
     def empty?
         return @users.empty?
+    end
+
+    def self.check (text)
+        return text.match(/^[#\$&]/) ? true : false
     end
 end
 

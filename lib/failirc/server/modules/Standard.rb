@@ -24,6 +24,7 @@ require 'failirc/utils'
 require 'failirc/server/errors'
 require 'failirc/server/responses'
 
+require 'failirc/server/client'
 require 'failirc/server/channel'
 require 'failirc/server/user'
 
@@ -75,6 +76,8 @@ class Standard < Module
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
                 :NAMES => /^NAMES( |$)/,
 
+                :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
+
                 :QUIT => /^QUIT( |$)/i,
             },
         }
@@ -87,6 +90,8 @@ class Standard < Module
 
                 :user_add    => self.method(:send_join),
                 :user_delete => self.method(:send_part),
+
+                :message => self.method(:send_message),
             },
 
             :input => {
@@ -102,6 +107,8 @@ class Standard < Module
 
                 :TOPIC => self.method(:topic),
                 :NAMES => self.method(:names),
+
+                :PRIVMSG => self.method(:privmsg),
 
                 :QUIT => self.method(:quit),
             },
@@ -227,6 +234,10 @@ class Standard < Module
                 # clean the temporary hash value and use the nick as key
                 thing.server.users.delete(thing.socket)
                 thing.server.users[thing.nick] = thing
+
+                @pingedOut.reject! {|user|
+                    user == thing
+                }
 
                 thing.server.dispatcher.execute(:registration, thing)
 
@@ -373,7 +384,7 @@ class Standard < Module
     end
 
     def send_part (thing, message)
-        if thing.modes[:quitting]
+        if thing.client.modes[:quitting]
             return
         end
 
@@ -393,6 +404,59 @@ class Standard < Module
             user.send :raw, ":#{thing.mask} QUIT :#{message}"
         }
     end 
+
+    def privmsg (thing, string)
+        match = string.match(/PRIVMSG\s+(.*?)(\s+:(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NORECIPIENT, 'PRIVMSG'
+        else
+            if !match[3]
+                thing.send :numeric, ERR_NOTEXTTOSEND
+            else
+                receiver = match[1]
+                text     = match[3]
+
+                if Channel.check(receiver)
+                    if thing.channels[receiver]
+                        if thing.channels[receiver].modes[:m] && !thing.channels[receiver].user(thing).modes[:can_talk]
+                            thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
+                        else
+                            thing.server.dispatcher.execute(:message, thing, thing.channels[receiver], text)
+                        end
+                    else
+                        if !thing.server.channels[receiver]
+                            thing.send :numeric, ERR_NOSUCHNICK, receiver
+                        else
+                            if thing.server.channels[receiver].modes[:n]
+                                thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
+                            else
+                                thing.server.dispatcher.execute(:message, thing, thing.server.channels[receiver], text)
+                            end
+                        end
+                    end
+                else
+                    if !thing.server.users[receiver]
+                        thing.send :numeric, ERR_NOSUCHNICK, receiver
+                    else
+                        thing.server.dispatcher.execute(:message, thing, thing.server.users[receiver], text)
+                    end
+                end
+            end
+        end
+    end
+
+    def send_message (from, to, text)
+        if to.is_a?(Channel)
+            to.users.each_value {|user|
+                if user.mask != from.mask
+                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :#{text}"
+                end
+            }
+        elsif to.is_a?(Client) || to.is_a?(User)
+            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :#{text}"
+        end
+    end
 end
 
 end
