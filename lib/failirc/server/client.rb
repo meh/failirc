@@ -27,7 +27,7 @@ class Client
     include Utils
 
     attr_reader   :server, :socket, :listen, :registered, :channels, :modes
-    attr_writer   :registered
+    attr_writer   :registered, :quitting
     attr_accessor :password, :nick, :user, :host, :realName
 
     def initialize (server, socket, listen)
@@ -43,6 +43,10 @@ class Client
 
     def registered?
         @registered
+    end
+
+    def quitting?
+        @quitting
     end
 
     def mask

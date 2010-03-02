@@ -25,6 +25,7 @@ module IRC
 
 class Channel
     attr_reader :name, :createdOn, :users, :modes
+    attr_accessor :topic
 
     def initialize (name)
         @name = name

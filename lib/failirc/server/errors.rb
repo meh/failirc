@@ -247,7 +247,7 @@ ERR_NOPRIVILEGES = {
 # Any command requiring 'chanop' privileges (such as MODE messages) must return this error if the client making the attempt is not a chanop on the specified channel.
 ERR_CHANOPRIVSNEEDED = {
     :code => 482,
-    :text => '"#{channel.name} :You\'re not channel operator"'
+    :text => '"#{value.name} :You\'re not channel operator"'
 }
 
 # Any attempts to use the KILL command on a server are to be refused and this error returned directly to the client.

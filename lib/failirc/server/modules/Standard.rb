@@ -68,6 +68,12 @@ class Standard < Module
             :NICK => /^(:[^ ] )?NICK( |$)/i,
             :USER => /^(:[^ ] )?USER( |$)/i,
 
+            :JOIN  => /^(:[^ ] )?JOIN( |$)/i,
+            :PART  => /^(:[^ ] )?PART( |$)/i,
+
+            :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
+            :NAMES => /^NAMES( |$)/,
+
             :QUIT => /^QUIT( |$)/i,
         }
 
@@ -75,12 +81,21 @@ class Standard < Module
             :default => self.method(:check),
             :kill    => self.method(:send_quit),
 
+            :user_add    => self.method(:send_join),
+            :user_delete => self.method(:send_part),
+
             :PING => self.method(:ping),
             :PONG => self.method(:pong),
 
             :PASS => self.method(:auth),
             :NICK => self.method(:nick),
             :USER => self.method(:user),
+
+            :JOIN  => self.method(:join),
+            :PART  => self.method(:part),
+
+            :TOPIC => self.method(:topic),
+            :NAMES => self.method(:names),
 
             :QUIT => self.method(:quit),
         }
@@ -240,12 +255,6 @@ class Standard < Module
         user.send :numeric, RPL_ENDOFMOTD
     end
 
-    def send_quit (user, message)
-        user.channels.users.each_value {|user|
-            user.send :raw, ":#{user.mask} QUIT :#{message}"
-        }
-    end
-
     def ping (thing, string)
         match = string.match(/PING\s+(.*)$/i)
 
@@ -289,13 +298,77 @@ class Standard < Module
                 thing.server.channels[channel] = Channel.new(channel)
             end
 
-            user = User.new(thing)
-            thing.server.channels[channel].users.add(thing)
+            user = thing.server.channels[channel].users.add(thing)
 
             if thing.server.channels[channel].empty?
                 user.modes[:o] = true
             end
+
+            thing.channels.add(thing.server.channels[channel])
+
+            if !thing.channels[channel].topic.nil?
+                thing.server.dispatcher.execute(@aliases[:TOPIC], thing, "TOPIC #{channel}")
+            end
         end
+    end
+
+    def send_join (thing)
+        thing.channel.users.each_value {|user|
+            user.send :raw, ":#{thing.mask} JOIN :#{thing.channel.name}"
+        }
+    end
+
+    def topic (thing, string)
+        match = string.match(/TOPIC\s+(.*)(\s+:(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'TOPIC'
+        else
+            if !thing.channels[match[1]]
+                thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[match[1]]
+            else
+                if match[2]
+                    if thing.channels[match[1]].modes[:t]
+                        thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[match[1]]
+                    else
+                        thing.channels[match[1]].topic = match[2].to_s
+                    end
+                else
+                    if thing.channels[match[1]].topic.nil?
+                        thing.send :numeric, RPL_NOTOPIC, thing.server.channels[match[1]]
+                    else
+                        thing.send :numeric, RPL_TOPIC, thing.server.channels[match[1]]
+                    end
+                end
+            end
+        end
+    end
+
+    def part (thing, string)
+        match = string.match(/PART\s+(.+)(\s+:(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'PART'
+        else
+            if !thing.server.channels[match[1]]
+                thing.send :numeric, ERR_NOSUCHCHANNEL, match[1]
+            elsif !thing.channels[match[1]]
+                thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[match[1]]
+            else
+                thing.server.channels[match[1]].users.delete(thing, match[2])
+                thing.channels.delete(match[1])
+            end
+        end
+    end
+
+    def send_part (thing, message)
+        if thing.quitting?
+            return
+        end
+
+        thing.channel.users.each_value {|user|
+            user.send :raw, ":#{thing.mask} PART #{thing.channel.name} :#{message}"
+        }
     end
 
     def quit (thing, string)
@@ -303,6 +376,12 @@ class Standard < Module
 
         thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[2] || thing.nick}")
     end
+
+    def send_quit (thing, message)
+        thing.channels.users.each_value {|user|
+            user.send :raw, ":#{thing.mask} QUIT :#{message}"
+        }
+    end 
 end
 
 end

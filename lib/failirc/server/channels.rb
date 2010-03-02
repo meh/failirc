@@ -45,6 +45,10 @@ class Channels < Hash
         return result
     end
 
+    def add (channel)
+        self[channel.name] = channel
+    end
+
     def inspect (user=nil)
         result = ""
 

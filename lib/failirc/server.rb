@@ -38,7 +38,7 @@ module IRC
 class Server
     include Utils
 
-    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :clients, :links, :listening, :config
+    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :clients, :links, :listening, :config
 
     alias users clients
 
@@ -193,6 +193,7 @@ class Server
     end
 
     def kill (thing, message=nil)
+        thing.quitting = true
         @dispatcher.execute(:kill, thing, message)
 
         if thing.is_a?(Client)

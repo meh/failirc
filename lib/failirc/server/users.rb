@@ -41,6 +41,14 @@ class Users < Hash
     alias __delete delete
     
     def delete (key, message=nil)
+        if key.is_a?(User) || key.is_a?(Client)
+            key = key.nick
+        end
+
+        if message.nil?
+            message = key
+        end
+
         user = self[key]
 
         user.server.dispatcher.execute(:user_delete, user, message)
@@ -49,11 +57,13 @@ class Users < Hash
     end
 
     def add (user)
-        if !user.is_a?(User)
-            raise 'You can only add User.'
+        if !user.is_a?(Client)
+            raise 'You can only add Client.'
         end
 
-        self[user.nick] = user
+        self[user.nick] = User.new(user, @channel)
+
+        user.server.dispatcher.execute(:user_add, self[user.nick])
     end
 
     def inspect (channel=false)

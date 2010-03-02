@@ -20,11 +20,16 @@
 module IRC
 
 class User
-    attr_reader :client, :modes
+    attr_reader :client, :channel, :modes
 
-    def initialize (client, modes=Modes.new)
-        @client = client
-        @modes  = modes
+    def initialize (client, channel, modes=Modes.new)
+        @client  = client
+        @channel = channel
+        @modes   = modes
+    end
+
+    def quitting?
+        @client.quitting?
     end
 
     def mask
