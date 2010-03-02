@@ -91,7 +91,7 @@ ERR_WILDTOPLEVEL = {
 # Returned to a registered client to indicate that the command sent is unknown by the server.
 ERR_UNKNOWNCOMMAND = {
     :code => 421,
-    :text => '"#{command} :Unknown command"'
+    :text => '"#{value} :Unknown command"'
 }
 
 # Server's MOTD file could not be opened by the server.

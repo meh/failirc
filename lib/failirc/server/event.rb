@@ -62,7 +62,7 @@ class Event
     end
 
     def same? (string)
-        if !@type
+        if @type.class != Regexp
             raise '@type is not a Regexp.'
         end
 
@@ -76,7 +76,7 @@ class Event
             end
         }
 
-        return /./
+        return nil
     end
 
     def self.alias (dispatcher, chain, type)
@@ -85,10 +85,12 @@ class Event
                 return key
             end
         }
+
+        return nil
     end
 
     def self.callbacks (dispatcher, chain, type)
-        if chain == :pre || chain == :post
+        if chain == :pre || chain == :post || chain == :default
             return dispatcher.events[chain]
         else
             return dispatcher.events[chain][type]

@@ -138,7 +138,7 @@ RPL_NOTOPIC = {
 # If the topic is set, RPL_TOPIC is sent back else RPL_NOTOPIC.
 RPL_TOPIC = {
     :code => 332,
-    :text => '"#{value.name} :#{value.topic}"'
+    :text => '"#{value.channel.name} :#{value}"'
 }
 
 # Returned by the server to indicate that the attempted INVITE message was successful and is being passed onto the end client.
@@ -176,7 +176,7 @@ RPL_ENDOFWHO = {
 
 RPL_NAMREPLY = {
     :code => 353,
-    :text => '" = #{channel.name} :#{channel.users.inspect(true)}"'
+    :text => '"= #{channel.name} :#{channel.users.inspect(true)}"'
 }
 
 # To reply to a NAMES message, a reply pair consisting of RPL_NAMREPLY and RPL_ENDOFNAMES is sent by the server back to the client.
@@ -184,7 +184,7 @@ RPL_NAMREPLY = {
 # The exception to this is when a NAMES message is sent with no parameters and all visible channels and contents are sent back in a series of RPL_NAMEREPLY messages with a RPL_ENDOFNAMES to mark the end.
 RPL_ENDOFNAMES = {
     :code => 366,
-    :text => '"#{channel.name} :End of /NAMES list"'
+    :text => '"#{value} :End of /NAMES list"'
 }
 
 RPL_LINKS = {
@@ -330,6 +330,11 @@ RPL_HOSTEDBY = {
 RPL_SERVCREATEDON = {
     :code => 3,
     :text => '":This server was created #{server.createdOn}"'
+}
+
+RPL_TOPICSETON = {
+    :code => 333,
+    :text => '"#{value.channel.name} #{value.setBy.client} #{value.setOn.tv_sec}"'
 }
 
 end

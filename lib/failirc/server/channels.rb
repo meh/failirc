@@ -22,6 +22,14 @@ require 'failirc/server/channel'
 module IRC
 
 class Channels < Hash
+    attr_reader :server
+
+    def initialize (server)
+        @server = server
+
+        super()
+    end
+
     alias __set []=
 
     def []= (key, value)
@@ -47,6 +55,16 @@ class Channels < Hash
 
     def add (channel)
         self[channel.name] = channel
+    end
+
+    def clean
+        each {|name, channel|
+            puts channel.empty?.inspect
+
+            if channel.empty?
+                delete(name)
+            end
+        }
     end
 
     def inspect (user=nil)

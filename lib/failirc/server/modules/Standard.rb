@@ -45,7 +45,7 @@ class Standard < Module
                 server.users.each_value {|user|
                     @pingedOut.push(user)
 
-                    if user.registered?
+                    if user.modes[:registered]
                         user.send :raw, "PING :#{server.host}"
                     end
                 }
@@ -65,6 +65,8 @@ class Standard < Module
             :input => {
                 :PING => /^PING( |$)/i,
                 :PONG => /^PONG( |$)/i,
+
+                :MODE => /^MODE( |$)/i,
 
                 :PASS => /^PASS( |$)/i,
                 :NICK => /^(:[^ ] )?NICK( |$)/i,
@@ -92,11 +94,17 @@ class Standard < Module
                 :user_delete => self.method(:send_part),
 
                 :message => self.method(:send_message),
+
+                :topic_change => self.method(:send_topic),
             },
+
+            :default => self.method(:unknown_command),
 
             :input => {
                 :PING => self.method(:ping),
                 :PONG => self.method(:pong),
+
+                :MODE => self.method(:mode),
 
                 :PASS => self.method(:auth),
                 :NICK => self.method(:nick),
@@ -125,16 +133,24 @@ class Standard < Module
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire
-        if event.alias != :PASS && event.alias != :NICK && event.alias != :USER && !thing.registered?
+        if event.alias != :PASS && event.alias != :NICK && event.alias != :USER && !thing.modes[:registered]
             thing.send :numeric, ERR_NOTREGISTERED
             stop = true
         # if the client tries to reregister, kill it with fire
-        elsif (event.alias == :PASS || event.alias == :NICK || event.alias == :USER) && thing.registered?
+        elsif (event.alias == :PASS || event.alias == :NICK || event.alias == :USER) && thing.modes[:registered]
             thing.send :numeric, ERR_ALREADYREGISTRED
             stop = true
         end
 
         return !stop
+    end
+
+    def unknown_command (event, thing, string)
+        match = string.match(/^([^ ]+)/)
+
+        if match && thing.modes[:registered]
+            thing.send :numeric, ERR_UNKNOWNCOMMAND, match[1]
+        end
     end
 
     def auth (thing, string)
@@ -169,7 +185,7 @@ class Standard < Module
             return
         end
 
-        if !thing.registered?
+        if !thing.modes[:registered]
             # if the user hasn't registered yet and the choosen nick is already used,
             # kill it with fire.
             if thing.server.users[match[1]]
@@ -220,7 +236,7 @@ class Standard < Module
     end
 
     def registration (thing)
-        if !thing.registered?
+        if !thing.modes[:registered]
             # if the client isn't registered but has all the needed attributes, register it
             if thing.user && thing.nick
                 if thing.listen.attributes['password']
@@ -229,7 +245,7 @@ class Standard < Module
                     end
                 end
 
-                thing.registered = true
+                thing.modes[:registered] = true
 
                 # clean the temporary hash value and use the nick as key
                 thing.server.users.delete(thing.socket)
@@ -303,6 +319,10 @@ class Standard < Module
         end
     end
 
+    def mode (thing, string)
+
+    end
+
     def join (thing, string)
         match = string.match(/JOIN\s+(.+)(\s+(.+))?$/i)
 
@@ -313,7 +333,7 @@ class Standard < Module
             password = match[3]
 
             if !thing.server.channels[channel]
-                thing.server.channels[channel] = Channel.new(channel)
+                thing.server.channels[channel] = Channel.new(server, channel)
             end
 
             user = thing.server.channels[channel].users.add(thing)
@@ -325,8 +345,10 @@ class Standard < Module
             thing.channels.add(thing.server.channels[channel])
 
             if !thing.channels[channel].topic.nil?
-                thing.server.dispatcher.execute(@aliases[:TOPIC], thing, "TOPIC #{channel}")
+                thing.server.dispatcher.dispatch :input, thing, "TOPIC #{channel}"
             end
+
+            thing.server.dispatcher.dispatch :input, thing, "NAMES #{channel}"
         end
     end
 
@@ -337,33 +359,53 @@ class Standard < Module
     end
 
     def topic (thing, string)
-        match = string.match(/TOPIC\s+(.*)(\s+:(.*))?$/i)
+        match = string.match(/TOPIC\s+(.*?)(\s+:(.*))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'TOPIC'
         else
-            if !thing.channels[match[1]]
-                thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[match[1]]
+            channel = match[1]
+
+            if !thing.channels[channel]
+                thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[channel]
             else
                 if match[2]
-                    if thing.channels[match[1]].modes[:t]
-                        thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[match[1]]
+                    topic = match[3].to_s
+
+                    if thing.channels[channel].modes[:t] && !thing.channels[channel].user(thing).modes[:can_set_topic]
+                        thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[channel]
                     else
-                        thing.channels[match[1]].topic = match[2].to_s
+                        thing.channels[channel].topic = [thing, topic]
                     end
                 else
-                    if thing.channels[match[1]].topic.nil?
-                        thing.send :numeric, RPL_NOTOPIC, thing.server.channels[match[1]]
+                    if thing.channels[channel].topic.nil?
+                        thing.send :numeric, RPL_NOTOPIC, thing.server.channels[channel]
                     else
-                        thing.send :numeric, RPL_TOPIC, thing.server.channels[match[1]]
+                        thing.send :numeric, RPL_TOPIC, thing.server.channels[channel].topic
+                        thing.send :numeric, RPL_TOPICSETON, thing.channels[channel].topic
                     end
                 end
             end
         end
     end
 
-    def names (thing, string)
+    def send_topic (channel)
+        channel.users.each_value {|user|
+            user.send :raw, ":#{channel.topic.setBy.mask} TOPIC #{channel.name} :#{channel.topic}"
+        }
+    end
 
+    def names (thing, string)
+        match = string.match(/NAMES\s+(.*)$/i)
+
+        if !match
+
+            thing.send :numeric, RPL_ENDOFNAMES, thing.nick
+        else
+            channel = match[1]
+
+            thing.send :numeric, RPL_ENDOFNAMES, channel
+        end
     end
 
     def part (thing, string)

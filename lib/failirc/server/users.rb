@@ -54,6 +54,10 @@ class Users < Hash
         user.server.dispatcher.execute(:user_delete, user, message)
 
         __delete(key)
+
+        if channel.empty?
+            channel.server.channels.delete(channel.name)
+        end
     end
 
     def add (user)

@@ -51,9 +51,9 @@ class Server
 
         @modules = []
 
-        @channels  = Channels.new
-        @clients   = Clients.new
-        @links     = Links.new
+        @channels  = Channels.new(self)
+        @clients   = Clients.new(self)
+        @links     = Links.new(self)
         @listening = []
 
         self.config = conf
@@ -194,7 +194,7 @@ class Server
                         }
                     }
                 end
-            rescue IOError
+            rescue IOError, Errno::EBADF
             rescue Exception => e
                 self.debug e
             end
@@ -206,7 +206,7 @@ class Server
         @dispatcher.execute(:kill, thing, message)
 
         if thing.is_a?(Client)
-            if thing.registered?
+            if thing.modes[:registered]
                 @clients.delete(thing.nick)
 
                 @channels.each_value {|channel|

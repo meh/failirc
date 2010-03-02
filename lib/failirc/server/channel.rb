@@ -24,11 +24,36 @@ require 'failirc/server/users'
 module IRC
 
 class Channel
-    attr_reader :name, :createdOn, :users, :modes
-    attr_accessor :topic
+    class Topic
+        attr_reader :server, :channel, :text
+        attr_accessor :setBy, :setOn
 
-    def initialize (name)
-        @name = name
+        def initialize (channel)
+            @server  = channel.server
+            @channel = channel
+        end
+
+        def text= (value)
+            @text  = value
+            @setOn = Time.now
+
+            @server.dispatcher.execute(:topic_change, @channel)
+        end
+
+        def to_s
+            text
+        end
+
+        def nil?
+            text.nil?
+        end
+    end
+
+    attr_reader :server, :name, :createdOn, :users, :modes, :topic
+
+    def initialize (server, name)
+        @server = server
+        @name   = name
 
         if !Channel.check(name)
             @name = "##{@name}"
@@ -39,10 +64,21 @@ class Channel
         @users = Users.new(self)
 
         @modes = {}
+
+        @topic = Topic.new(self)
+    end
+
+    def topic= (data)
+        if data.is_a?(Topic)
+            @topic = data
+        elsif data.is_a?(Array)
+            @topic.setBy = user(data[0])
+            @topic.text  = data[1]
+        end
     end
 
     def user (client)
-        return self[client.nick]
+        return @users[client.nick]
     end
 
     def empty?

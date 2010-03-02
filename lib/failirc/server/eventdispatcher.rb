@@ -36,8 +36,9 @@ class EventDispatcher
         }
 
         @events = {
-            :pre  => [],
-            :post => [],
+            :pre     => [],
+            :post    => [],
+            :default => [],
 
             :custom => {},
 
@@ -68,23 +69,42 @@ class EventDispatcher
             end
         }
 
-        event.callbacks.each {|callback|
-            begin
-                tmp = callback.call(thing, string)
-            rescue Exception => e
-                self.debug e
-            end
-
-            if tmp == false
-                return false
-            elsif tmp.is_a?(String)
-                string = result = tmp
-
-                if !event.same?(string)
+        if event.type
+            event.callbacks.each {|callback|
+                begin
+                    tmp = callback.call(thing, string)
+                rescue Exception => e
+                    self.debug e
+                end
+    
+                if tmp == false
+                    return false
+                elsif tmp.is_a?(String)
+                    string = result = tmp
+    
+                    if !event.same?(string)
+                        return dispatch(chain, thing, string)
+                    end
+                end
+            }
+        elsif chain == :input
+            @events[:default].each {|callback|
+                cloned         = event.clone
+                cloned.special = :default
+    
+                tmp = callback.call(cloned, thing, string)
+    
+                if tmp == false
+                    return false
+                elsif tmp.is_a?(String)
+                    string = result = tmp
+                end
+    
+                if cloned.type && !cloned.same?(string)
                     return dispatch(chain, thing, string)
                 end
-            end
-        }
+            }
+        end
 
         @events[:post].each {|callback|
             cloned         = event.clone

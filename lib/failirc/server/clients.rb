@@ -22,6 +22,14 @@ require 'failirc/server/client'
 module IRC
 
 class Clients < Hash
+    attr_reader :server
+
+    def initialize (server)
+        @server = server
+
+        super()
+    end
+
     alias __set []=
 
     def []= (key, value)

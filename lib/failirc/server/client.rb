@@ -26,8 +26,8 @@ module IRC
 class Client
     include Utils
 
-    attr_reader   :server, :socket, :listen, :registered, :channels, :modes
-    attr_writer   :registered, :quitting
+    attr_reader   :server, :socket, :listen, :channels, :modes
+    attr_writer   :quitting
     attr_accessor :password, :nick, :user, :host, :realName
 
     def initialize (server, socket, listen)
@@ -39,16 +39,8 @@ class Client
 
         @registered = false
 
-        @channels = Channels.new
+        @channels = Channels.new(@server)
         @modes    = Modes.new
-    end
-
-    def registered?
-        @registered
-    end
-
-    def quitting?
-        @quitting
     end
 
     def mask
@@ -75,8 +67,10 @@ class Client
         raw ":#{server.host} #{'%03d' % response[:code]} #{nick || 'faggot'} #{eval(response[:text])}"
     end
 
+    alias to_s mask
+
     def inspect
-        return "#<Client: #{(mask.empty?) ? 'nil' : mask}#{(registered?) ? ' registered' : ''}>"
+        return "#<Client: #{mask} #{modes}#{(modes[:registered]) ? ' registered' : ''}>"
     end
 end
 

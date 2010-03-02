@@ -49,6 +49,10 @@ class Module
             if @events[:post]
                 @server.dispatcher.register(:post, nil, @events[:post])
             end
+
+            if @events[:default]
+                @server.dispatcher.register(:default, nil, @events[:default])
+            end
             
             if @events[:custom]
                 @events[:custom].each {|key, value|
