@@ -35,6 +35,8 @@ class Client
         @socket = socket
         @listen = listen
 
+        @host = socket.addr.pop
+
         @registered = false
 
         @channels = Channels.new
@@ -64,6 +66,8 @@ class Client
     end
 
     def raw (text)
+        text = @server.dispatcher.dispatch :output, self, text
+
         @socket.puts text
     end
 

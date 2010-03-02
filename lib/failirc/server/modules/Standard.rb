@@ -61,43 +61,50 @@ class Standard < Module
         }
 
         @aliases = {
-            :PING => /^PING( |$)/i,
-            :PONG => /^PONG( |$)/i,
+            :input => {
+                :PING => /^PING( |$)/i,
+                :PONG => /^PONG( |$)/i,
 
-            :PASS => /^PASS( |$)/i,
-            :NICK => /^(:[^ ] )?NICK( |$)/i,
-            :USER => /^(:[^ ] )?USER( |$)/i,
+                :PASS => /^PASS( |$)/i,
+                :NICK => /^(:[^ ] )?NICK( |$)/i,
+                :USER => /^(:[^ ] )?USER( |$)/i,
 
-            :JOIN  => /^(:[^ ] )?JOIN( |$)/i,
-            :PART  => /^(:[^ ] )?PART( |$)/i,
+                :JOIN  => /^(:[^ ] )?JOIN( |$)/i,
+                :PART  => /^(:[^ ] )?PART( |$)/i,
 
-            :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
-            :NAMES => /^NAMES( |$)/,
+                :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
+                :NAMES => /^NAMES( |$)/,
 
-            :QUIT => /^QUIT( |$)/i,
+                :QUIT => /^QUIT( |$)/i,
+            },
         }
 
         @events = {
-            :default => self.method(:check),
-            :kill    => self.method(:send_quit),
+            :pre => self.method(:check),
 
-            :user_add    => self.method(:send_join),
-            :user_delete => self.method(:send_part),
+            :custom => {
+                :kill => self.method(:send_quit),
 
-            :PING => self.method(:ping),
-            :PONG => self.method(:pong),
+                :user_add    => self.method(:send_join),
+                :user_delete => self.method(:send_part),
+            },
 
-            :PASS => self.method(:auth),
-            :NICK => self.method(:nick),
-            :USER => self.method(:user),
+            :input => {
+                :PING => self.method(:ping),
+                :PONG => self.method(:pong),
 
-            :JOIN  => self.method(:join),
-            :PART  => self.method(:part),
+                :PASS => self.method(:auth),
+                :NICK => self.method(:nick),
+                :USER => self.method(:user),
 
-            :TOPIC => self.method(:topic),
-            :NAMES => self.method(:names),
+                :JOIN  => self.method(:join),
+                :PART  => self.method(:part),
 
-            :QUIT => self.method(:quit),
+                :TOPIC => self.method(:topic),
+                :NAMES => self.method(:names),
+
+                :QUIT => self.method(:quit),
+            },
         }
 
         super(server)
@@ -107,15 +114,15 @@ class Standard < Module
         Thread.kill(@pingThread)
     end
 
-    def check (type, thing, string)
+    def check (event, thing, string)
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire
-        if type != :PASS && type != :NICK && type != :USER && !thing.registered?
+        if event.alias != :PASS && event.alias != :NICK && event.alias != :USER && !thing.registered?
             thing.send :numeric, ERR_NOTREGISTERED
             stop = true
         # if the client tries to reregister, kill it with fire
-        elsif (type == :PASS || type == :NICK || type == :USER) && thing.registered?
+        elsif (event.alias == :PASS || event.alias == :NICK || event.alias == :USER) && thing.registered?
             thing.send :numeric, ERR_ALREADYREGISTRED
             stop = true
         end
@@ -344,6 +351,10 @@ class Standard < Module
         end
     end
 
+    def names (thing, string)
+
+    end
+
     def part (thing, string)
         match = string.match(/PART\s+(.+)(\s+:(.*))?$/i)
 
@@ -362,7 +373,7 @@ class Standard < Module
     end
 
     def send_part (thing, message)
-        if thing.quitting?
+        if thing.modes[:quitting]
             return
         end
 

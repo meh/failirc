@@ -34,7 +34,11 @@ class Modes < Hash
         result = '+'
 
         each_key {|mode|
-            result << mode.to_s
+            mode = mode.to_s
+
+            if mode.length == 1
+                result << mode
+            end
         }
 
         return result

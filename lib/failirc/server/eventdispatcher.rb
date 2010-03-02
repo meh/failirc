@@ -30,59 +30,85 @@ class EventDispatcher
     def initialize (server)
         @server = server
 
-        @aliases = {}
-        @events  = { :default => [] }
-    end
-
-    def do (thing, string)
-        stop = false
-
-        event = Event.new(self, thing, string)
-
-        @events[:default].each {|callback|
-            begin
-                result = callback.call(event.alias || event.type, event.thing, event.string)
-            rescue Exception => e
-                self.debug e
-            end
-
-            if result == false
-                stop = true
-                break
-            elsif result.is_a?(String)
-                string = result
-            end
+        @aliases = {
+            :input  => {},
+            :output => {},
         }
 
-        if stop
-            return
+        @events = {
+            :pre  => [],
+            :post => [],
+
+            :custom => {},
+
+            :input  => {},
+            :output => {},
+        }
+    end
+
+    def dispatch (chain, thing, string)
+        event = Event.new(self, chain, thing, string)
+
+        result = string
+
+        if chain == :input
+            @events[:pre].each {|callback|
+                tmp = callback.call(event, thing, string)
+
+                if tmp == false
+                    return false
+                elsif tmp.is_a?(String)
+                    string = result = tmp
+                end
+
+                if event.type && !event.same?(string)
+                    return dispatch(chain, thing, string)
+                end
+            }
         end
 
         event.callbacks.each {|callback|
             begin
-                result = callback.call(thing, string)
+                tmp = callback.call(thing, string)
             rescue Exception => e
                 self.debug e
             end
 
-            if result == false
-                break
-            elsif result.is_a?(String)
-                string = result
+            if tmp == false
+                return false
+            elsif tmp.is_a?(String)
+                string = result = tmp
 
-                if event.same?(string)
-                    dispatch(thing, string)
-                    break
+                if !event.same?(string)
+                    return dispatch(chain, thing, string)
                 end
             end
         }
+
+        if chain == :output
+            @events[:post].each {|callback|
+                tmp = callback.call(event, thing, string)
+
+                if tmp == false
+                    return false
+                elsif tmp.is_a?(String)
+                    string = result = tmp
+                end
+
+                if event.type && !event.same?(string)
+                    return dispatch(chain, thing, string)
+                end
+            }
+        end
+
+        return result
     end
 
     def execute (event, *args)
-        if @events[event]
-            @events[event].each {|callback|
+        if @events[:custom][event]
+            @events[:custom][event].each {|callback|
                 begin
-                    callback.call(*args)
+                    callback.method.call(*args)
                 rescue Exception => e
                     self.debug(e)
                 end
@@ -90,34 +116,58 @@ class EventDispatcher
         end
     end
 
-    def alias (symbol, regex)
+    def alias (chain, symbol, regex)
         if !regex
-            @aliases.delete(symbol)
+            @aliases[chain].delete(symbol)
         elsif !regex.class == Regexp
             raise 'You have to alias to a Regexp.'
         else
-            @aliases[symbol] = regex
+            @aliases[chain][symbol] = regex
         end
     end
 
-    def register (type, callback)
-        if @aliases[type]
-            type = @aliases[type]
+    def register (chain, type, callback, priority=0)
+        if !type
+            events = @events[chain]
+
+            if !events
+                events = @events[chain] = []
+            end
+        else
+            if @aliases[chain]
+                if @aliases[chain][type]
+                    type = @aliases[chain][type]
+                end
+            end
+
+            if !@events[chain]
+                @events[chain] = {}
+            end
+
+            events = @events[chain][type]
+
+            if !events
+                events = @events[chain][type] = []
+            end
         end
 
         if !callback
-            @events[type].clear
+            events.clear
         elsif callback.is_a?(Array)
             callback.each {|callback|
-                register(type, callback)
+                register(chain, type, callback)
             }
         else
-            if !@events[type]
-                @events[type] = []
+            if callback.is_a?(Event::Callback)
+                events.push(callback)
+            else
+                events.push(Event::Callback.new(callback, priority))
             end
-
-            @events[type].push(callback)
         end
+
+        events.sort! {|a, b|
+            a.priority <=> b.priority
+        }
     end
 end
 

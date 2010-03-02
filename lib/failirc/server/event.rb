@@ -20,52 +20,78 @@
 module IRC
 
 class Event
-    attr_reader :type, :alias, :dispatcher, :thing, :string
+    class Callback
+        attr_reader :method
+        attr_accessor :priority
 
-    def initialize (dispatcher, thing, string)
+        def initialize (method, priority=0)
+            @method   = method
+            @priority = priority
+        end
+
+        def call (*args)
+            return @method.call(*args)
+        end
+    end
+
+    attr_reader :type, :chain, :alias, :dispatcher, :thing, :string
+
+    def initialize (dispatcher, chain, thing, string)
         @dispatcher = dispatcher
+        @chain      = chain
         @thing      = thing
         @string     = string
-        @type       = Event.type(dispatcher, string)
-        @alias      = Event.alias(dispatcher, type)
+        @type       = Event.type(dispatcher, chain, string)
+        @alias      = Event.alias(dispatcher, chain, type)
+        @callbacks  = Event.callbacks(dispatcher, chain, type)
     end
 
     def callbacks
-        if @dispatcher.events[@type]
-            return @dispatcher.events[@type]
+        if @callbacks
+            return @callbacks
         else
-            return []
+            tmp = Event.callbacks(@dispatcher, @chain, @type)
+
+            if tmp
+                return @callbacks = tmp
+            else
+                return []
+            end
         end
     end
 
     def same? (string)
+        if !@type
+            raise '@type is not a Regexp.'
+        end
+
         return (@type.match(string)) ? true : false
     end
 
-    def self.type (dispatcher, string)
-        type = nil
-
-        dispatcher.events.each_key {|key|
+    def self.type (dispatcher, chain, string)
+        dispatcher.events[chain].each_key {|key|
             if key.class == Regexp && key.match(string)
-                type = key
-                break
+                return key
             end
         }
 
-        return type
+        return /./
     end
 
-    def self.alias (dispatcher, type)
-        result = nil
-
-        dispatcher.aliases.each {|key, value|
+    def self.alias (dispatcher, chain, type)
+        dispatcher.aliases[chain].each {|key, value|
             if type == value
-                result = key
-                break
+                return key
             end
         }
+    end
 
-        return result
+    def self.callbacks (dispatcher, chain, type)
+        if chain == :pre || chain == :post
+            return dispatcher.events[chain]
+        else
+            return dispatcher.events[chain][type]
+        end
     end
 end
 

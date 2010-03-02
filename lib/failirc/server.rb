@@ -181,7 +181,11 @@ class Server
                 if connections
                     connections.each {|socket|    
                         Thread.new {
-                            @dispatcher.do things[socket], socket.gets.chomp
+                            begin
+                                @dispatcher.dispatch :input, things[socket], socket.gets.chomp
+                            rescue Exception => e
+                                debug e
+                            end
                         }
                     }
                 end
@@ -193,7 +197,7 @@ class Server
     end
 
     def kill (thing, message=nil)
-        thing.quitting = true
+        thing.modes[:quitting] = true
         @dispatcher.execute(:kill, thing, message)
 
         if thing.is_a?(Client)
@@ -283,6 +287,8 @@ class Server
             end
 
             self.loadModule(element.attributes['name'], element.attributes['path'])
+
+            self.debug "Loaded #{element.attributes['name']}"
         }
     end
 

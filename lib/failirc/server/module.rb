@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/server/event'
+
 module IRC
 
 class Module
@@ -26,15 +28,45 @@ class Module
         @server = server
 
         if @aliases
-            @aliases.each_key {|key|
-                @server.dispatcher.alias(key, @aliases[key])
-            }
+            if @aliases[:input]
+                @aliases[:input].each {|key, value|
+                    @server.dispatcher.alias(:input, key, value)
+                }
+            end
+
+            if @aliases[:output]
+                @aliases[:output].each {|key, value|
+                    @server.dispatcher.alias(:output, key, value)
+                }
+            end
         end
 
         if @events
-            @events.each_key {|key|
-                @server.dispatcher.register(key, @events[key])
-            }
+            if @events[:pre]
+                @server.dispatcher.register(:pre, nil, @events[:pre])
+            end
+
+            if @events[:post]
+                @server.dispatcher.register(:post, nil, @events[:post])
+            end
+            
+            if @events[:custom]
+                @events[:custom].each {|key, value|
+                    @server.dispatcher.register(:custom, key, value)
+                }
+            end
+
+            if @events[:input]
+                @events[:input].each {|key, value|
+                    @server.dispatcher.register(:input, key, value)
+                }
+            end
+
+            if @events[:output]
+                @events[:output].each {|key, value|
+                    @server.dispatcher.register(:output, key, value)
+                }
+            end
         end
     end
 

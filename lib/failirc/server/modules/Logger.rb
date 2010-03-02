@@ -29,14 +29,15 @@ class Logger < Module
 
     def initialize (server)
         @events = {
-            :default => self.method(:log),
+            :pre  => Event::Callback.new(self.method(:log), -9001),
+            :post => Event::Callback.new(self.method(:log), -9001),
         }
 
         super(server)
     end
 
-    def log (type, thing, string)
-        puts "#{thing.inspect} => #{string.inspect}"
+    def log (event, thing, string)
+        puts "[#{Time.now}] #{thing.mask} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
     end
 end
 
