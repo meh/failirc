@@ -34,11 +34,26 @@ class Logger < Module
         }
 
         super(server)
+
+        file = @server.config.elements['config/modules/module[@name="TinyURL"]/file']
+
+        if file
+            @log = File.open(file.text)
+        else
+            @log = $stdout
+        end
+    end
+
+    def finalize
+        if @log != $stdout
+            @log.close
+        end
     end
 
     def log (event, thing, string)
         if (event.chain == :input && event.special == :pre) || (event.chain == :output && event.special == :post)
-            puts "[#{Time.now}] #{thing.mask} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
+            @log.puts "[#{Time.now}] #{thing.mask} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
+            @log.flush
         end
     end
 end

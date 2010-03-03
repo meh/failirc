@@ -42,12 +42,22 @@ class TinyURL < Module
     def tinyurl (thing, string)
         match = string.match(/:(.*)$/)
 
+        length = @server.config.elements['config/modules/module[@name="TinyURL"]/length']
+
+        if length
+            length = length.text.to_i
+        else
+            length = 30
+        end
+
         if match
             URI.extract(match[1]).each {|uri|
-                tiny = tinyurlify(uri)
+                if uri.length > length
+                    tiny = tinyurlify(uri)
 
-                if tiny
-                    string.gsub!(/#{URI.escape(uri)}/, tiny)
+                    if tiny
+                        string.gsub!(/#{URI.escape(URI.unescape(uri))}/, tiny)
+                    end
                 end
             }
         end
