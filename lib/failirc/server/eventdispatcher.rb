@@ -48,15 +48,13 @@ class EventDispatcher
     end
 
     def dispatch (chain, thing, string)
-        event = Event.new(self, chain, thing, string)
-
+        event  = Event.new(self, chain, thing, string)
         result = string
 
         @events[:pre].each {|callback|
-            cloned         = event.clone
-            cloned.special = :pre
+            event.special = :pre
 
-            tmp = callback.call(cloned, thing, string)
+            tmp = callback.call(event, thing, string)
 
             if tmp == false
                 return false
@@ -64,12 +62,14 @@ class EventDispatcher
                 string = result = tmp
             end
 
-            if cloned.type && !cloned.same?(string)
+            if event.type && !event.same?(string)
                 return dispatch(chain, thing, string)
             end
         }
 
         if event.type
+            event.special = nil
+
             event.callbacks.each {|callback|
                 begin
                     tmp = callback.call(thing, string)
@@ -89,10 +89,9 @@ class EventDispatcher
             }
         elsif chain == :input
             @events[:default].each {|callback|
-                cloned         = event.clone
-                cloned.special = :default
+                event.special = :default
     
-                tmp = callback.call(cloned, thing, string)
+                tmp = callback.call(event, thing, string)
     
                 if tmp == false
                     return false
@@ -100,17 +99,16 @@ class EventDispatcher
                     string = result = tmp
                 end
     
-                if cloned.type && !cloned.same?(string)
+                if event.type && !event.same?(string)
                     return dispatch(chain, thing, string)
                 end
             }
         end
 
         @events[:post].each {|callback|
-            cloned         = event.clone
-            cloned.special = :post
+            event.special = :post
 
-            tmp = callback.call(cloned, thing, string)
+            tmp = callback.call(event, thing, string)
 
             if tmp == false
                 return false
@@ -118,7 +116,7 @@ class EventDispatcher
                 string = result = tmp
             end
 
-            if cloned.type && !cloned.same?(string)
+            if event.type && !event.same?(string)
                 return dispatch(chain, thing, string)
             end
         }
