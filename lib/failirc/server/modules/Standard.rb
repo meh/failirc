@@ -34,28 +34,30 @@ class Standard < Module
     include Utils
 
     def initialize (server)
-        @pingedOut = []
+        @pingedOut = {}
+        @toPing    = Hash[server.users.values.collect {|client| [client.socket, client]}]
 
         @pingThread = Thread.new {
             sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
             while true
-                server.users.each_value {|user|
-                    @pingedOut.push(user)
+                @toPing.each_value {|client|
+                    @pingedOut[client.socket] = client
 
-                    if user.modes[:registered]
-                        user.send :raw, "PING :#{server.host}"
+                    if client.modes[:registered]
+                        client.send :raw, "PING :#{server.host}"
                     end
                 }
 
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
-                @pingedOut.each {|user|
-                    error(user, 'Ping timeout', :close)
-                    server.kill(user, 'Ping timeout')
+                @pingedOut.each_value {|client|
+                    error(client, 'Ping timeout', :close)
+                    server.kill(client, 'Ping timeout')
                 }
 
                 @pingedOut.clear
+                @toPing = Hash[server.users.values.collect {|client| [client.socket, client]}]
             end
         }
 
@@ -74,7 +76,7 @@ class Standard < Module
                 :PART  => /^(:[^ ] )?PART( |$)/i,
 
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
-                :NAMES => /^NAMES( |$)/,
+                :NAMES => /^NAMES( |$)/i,
 
                 :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
 
@@ -131,6 +133,9 @@ class Standard < Module
         if event.chain != :input
             return
         end
+
+        @toPing.delete(thing.socket)
+        @pingedOut.delete(thing.socket)
 
         stop = false
 
@@ -254,10 +259,6 @@ class Standard < Module
                 thing.server.users.delete(thing.socket)
                 thing.server.users[thing.nick] = thing
 
-                @pingedOut.reject! {|user|
-                    user == thing
-                }
-
                 thing.server.dispatcher.execute(:registration, thing)
 
                 thing.send :numeric, RPL_WELCOME, thing
@@ -298,11 +299,10 @@ class Standard < Module
         if !match
             thing.send :numeric, ERR_NOORIGIN
         else
-            if match[1] == thing.server.host
-                thing.send :raw, ":#{thing.server.host} PONG #{thing.server.host} :#{thing.server.host}"
-            else
-                thing.send :numeric, ERR_NOSUCHSERVER, match[1]
-            end
+            thing.send :raw, ":#{thing.server.host} PONG #{thing.server.host} :#{match[1]}"
+
+            # RFC isn't that clear about when this error should be shoot
+            # thing.send :numeric, ERR_NOSUCHSERVER, match[1]
         end
     end
 
@@ -313,9 +313,7 @@ class Standard < Module
             thing.send :numeric, ERR_NOORIGIN
         else
             if match[2] == thing.server.host
-                @pingedOut.reject! {|user|
-                    user == thing
-                }
+                @pingedOut.delete(thing.socket)
             else
                 thing.send :numeric, ERR_NOSUCHSERVER, match[2]
             end
@@ -330,7 +328,6 @@ class Standard < Module
         match = mode.match(/^([+\-])(.*)$/)
 
         if match[1] == '+'
-            puts match[2]
             if match[2].match(/o/)
                 user.modes[:o]             = true
                 user.modes[:can_set_topic] = true
