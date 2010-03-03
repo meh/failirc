@@ -77,7 +77,7 @@ class Server
 
             if klass
                 @modules[name] = klass.new(self)
-                self.debug "Loaded `#{name}`", ''
+                self.debug "Loaded `#{name}`", nil
             else
                 self.debug "Failed to load `#{name}`", ''
             end
@@ -312,6 +312,8 @@ class Server
                 self.loadModule(element.attributes['name'], element.attributes['path'])
             end
         }
+
+        self.debug 'Finished loading modules.'
     end
 
     # Executed with each incoming connection

@@ -156,7 +156,7 @@ class Standard < Module
     end
 
     def check (event, thing, string)
-        if event.chain != :input
+        if event.chain != :input && !thing && !string
             return
         end
 
@@ -374,7 +374,24 @@ class Standard < Module
 
     def mode (thing, string)
         # MODE user/channel = +option,-option
-        match = string.match(/MODE\s+(.*?)/i)
+        match = string.match(/MODE\s+([^ ]+)/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'MODE'
+        else
+            name = match[1]
+
+            if Utils::Channel::isValid(name) && thing.server.channels[name]
+                thing.send :numeric, RPL_CHANNELMODEIS, {
+                    :channel => thing.server.channels[name],
+                    :user    => thing,
+                }
+
+                thing.send :numeric, RPL_CHANCREATEDON, thing.server.channels[name]
+            else
+
+            end
+        end
     end
 
     def set_mode (thing, mode)
@@ -519,7 +536,29 @@ class Standard < Module
     end
 
     def who (thing, string)
+        match = string.match(/WHO\s+(.*?)(\s+o)?$/i)
 
+        name = match[1] || '*'
+
+        if !match
+
+        else
+            op = match[2]
+
+            if Utils::Channel::isValid(name) && thing.server.channels[name]
+                thing.server.channels[name].users.each_value {|user|
+                    user.send :numeric, RPL_WHOREPLY, {
+                        :channel => thing.server.channels[name],
+                        :user    => user,
+                        :hops    => 0,
+                    }
+                }
+            else
+
+            end
+        end
+
+        thing.send :numeric, RPL_ENDOFWHO, name
     end
 
     def part (thing, string)
@@ -550,7 +589,7 @@ class Standard < Module
     end
 
     def quit (thing, string)
-        match = /^QUIT\s+(:)?(.*)?$/i.match(string)
+        match = /^QUIT((\s+)(:)?(.*)?)?$/i.match(string)
 
         thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[2] || thing.nick}")
     end

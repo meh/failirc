@@ -21,6 +21,7 @@ require 'thread'
 require 'failirc/utils'
 require 'failirc/server/responses'
 require 'failirc/server/users'
+require 'failirc/server/modes'
 
 module IRC
 
@@ -64,7 +65,7 @@ class Channel
 
         @users = Users.new(self)
 
-        @modes = {}
+        @modes = Modes.new
 
         @topic = Topic.new(self)
 

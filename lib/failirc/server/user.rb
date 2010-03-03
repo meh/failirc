@@ -28,10 +28,6 @@ class User
         @modes   = modes
     end
 
-    def quitting?
-        @client.quitting?
-    end
-
     def mask
         @client.mask
     end
@@ -45,11 +41,11 @@ class User
     end
 
     def user
-        @client.username
+        @client.user
     end
 
     def host
-        @client.hostname
+        @client.host
     end
 
     def realName

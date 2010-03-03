@@ -30,7 +30,7 @@ class Modes < Hash
         end
     end
 
-    def inspect
+    def to_s
         result = '+'
 
         each_key {|mode|

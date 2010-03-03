@@ -34,7 +34,9 @@ def debug (argument, separator="\n")
             puts "#{self.class}: #{argument.inspect}"
         end
 
-        puts separator
+        if separator
+            puts separator
+        end
     end
 end
 

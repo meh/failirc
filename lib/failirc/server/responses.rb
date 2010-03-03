@@ -31,7 +31,7 @@ RPL_NONE = {
 # The '-' or '+' characters represent whether the client has set an AWAY message or not respectively.
 RPL_USERHOST = {
     :code => 302,
-    :text => '":#{(result) ? \\"#{value.nick}=#{(result.oper?) ? \'*\' : \'\'} = #{(!result.away?) ? \'+\' : \'-\'}#{value.username}@#{value.hostname}\\" : \'\'"'
+    :text => '":#{(result) ? \\"#{value.nick}=#{(result.modes[:oper]) ? \'*\' : \'\'} = #{(!result.modes[:away]) ? \'+\' : \'-\'}#{value.user}@#{value.host}\\" : \'\'"'
 }
 
 # Reply format used by ISON to list replies to the query list.
@@ -126,7 +126,7 @@ RPL_LISTEND = {
 
 RPL_CHANNELMODEIS = {
     :code => 324,
-    :text => '"#{value.name} #{value.name} #{value.parameters}"'
+    :text => '"#{value[:user].nick} #{value[:channel].name} #{value[:channel].modes}"'
 }
 
 RPL_NOTOPIC = {
@@ -163,7 +163,7 @@ RPL_VERSION = {
 
 RPL_WHOREPLY = {
     :code => 352,
-    :text => '"#{value[:channel].name} #{value[:user].user} #{value[:user].host} #{value[:user].server.name} #{value[:user].nick} #{#<H|G>[*][@|+]} :#{value[:message].hops} #{value[:user].realName}"'
+    :text => '"#{value[:channel].name} #{value[:user].user} #{value[:user].host} #{value[:user].server.host} #{value[:user].nick} #{\'H\' || \'G\'}#{value[:user].modes[:level]} :#{value[:hops]} #{value[:user].realName}"'
 }
 
 # The RPL_WHOREPLY and RPL_ENDOFWHO pair are used to answer a WHO message.
@@ -171,7 +171,7 @@ RPL_WHOREPLY = {
 # If there is a list of parameters supplied with a WHO message, a RPL_ENDOFWHO must be sent after processing each list item with <name> being the item.
 RPL_ENDOFWHO = {
     :code => 315,
-    :text => '"#{value.name} :End of /WHO list"'
+    :text => '"#{value} :End of /WHO list"'
 }
 
 RPL_NAMREPLY = {
@@ -330,6 +330,11 @@ RPL_HOSTEDBY = {
 RPL_SERVCREATEDON = {
     :code => 3,
     :text => '":This server was created #{server.createdOn}"'
+}
+
+RPL_CHANCREATEDON = {
+    :code => 329,
+    :text => '"#{value.name} #{value.createdOn.tv_sec}"'
 }
 
 RPL_TOPICSETON = {

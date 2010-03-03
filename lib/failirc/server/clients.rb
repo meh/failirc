@@ -41,7 +41,7 @@ class Clients < Hash
         end
 
         if key.is_a?(String)
-            key.downcase!
+            key = key.downcase
         end
 
         @semaphore.synchronize {
@@ -53,7 +53,7 @@ class Clients < Hash
         
     def [] (key)
         if key.is_a?(String)
-            key.downcase!
+            key = key.downcase
         end
 
         @semaphore.synchronize {
@@ -65,7 +65,7 @@ class Clients < Hash
 
     def delete (key)
         if key.is_a?(String)
-            key.downcase!
+            key = key.downcase
         end
 
         @semaphore.synchronize {

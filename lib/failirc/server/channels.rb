@@ -40,7 +40,7 @@ class Channels < Hash
             raise 'You can only set a Channel'
         end
 
-        key.downcase!
+        key = key.downcase
 
         @semaphore.synchronize {
             __set(key, value)
@@ -50,7 +50,7 @@ class Channels < Hash
     alias __get []
         
     def [] (key)
-        key.downcase!
+        key = key.downcase
 
         @semaphore.synchronize {
             return __get(key)
@@ -60,7 +60,7 @@ class Channels < Hash
     alias __delete delete
 
     def delete (key)
-        key.downcase!
+        key = key.downcase
 
         @semaphore.synchronize {
             __delete key
