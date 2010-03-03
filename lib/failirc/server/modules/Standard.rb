@@ -18,7 +18,6 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/server/module'
-require 'failirc/utils'
 require 'failirc/server/errors'
 require 'failirc/server/responses'
 
@@ -31,11 +30,9 @@ module IRC
 module Modules
 
 class Standard < Module
-    include Utils
-
     def initialize (server)
         @pingedOut = {}
-        @toPing    = Hash[server.users.values.collect {|client| [client.socket, client]}]
+        @toPing    = Hash[server.clients.values.collect {|client| [client.socket, client]}]
 
         @pingThread = Thread.new {
             sleep server.config.elements['config/server/pingTimeout'].text.to_i
@@ -49,7 +46,7 @@ class Standard < Module
                     end
                 }
 
-                @toPing = Hash[server.users.values.collect {|client| [client.socket, client]}]
+                @toPing = Hash[server.clients.values.collect {|client| [client.socket, client]}]
 
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
@@ -68,6 +65,7 @@ class Standard < Module
                 :PONG => /^PONG( |$)/i,
 
                 :MODE => /^MODE( |$)/i,
+                :OPER => /^OPER( |$)/i,
 
                 :PASS => /^PASS( |$)/i,
                 :NICK => /^(:[^ ] )?NICK( |$)/i,
@@ -110,6 +108,7 @@ class Standard < Module
                 :PONG => self.method(:pong),
 
                 :MODE => self.method(:mode),
+                :OPER => self.method(:oper),
 
                 :PASS => self.method(:auth),
                 :NICK => self.method(:nick),
@@ -155,7 +154,7 @@ class Standard < Module
             thing.send :numeric, ERR_NOTREGISTERED
             stop = true
         # if the client tries to reregister, kill it with fire
-        elsif (event.alias == :PASS || event.alias == :NICK || event.alias == :USER) && thing.modes[:registered]
+        elsif (event.alias == :PASS || event.alias == :USER) && thing.modes[:registered]
             thing.send :numeric, ERR_ALREADYREGISTRED
             stop = true
         end
@@ -199,8 +198,6 @@ class Standard < Module
 
         nick = match[1]
 
-        puts nick.inspect, nick.match(/^[\w\-^\/]{1,23}$/).inspect
-        
         # check if the nickname is valid
         if !nick.match(/^[\w\-^\/]{1,23}$/)
             thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
@@ -210,10 +207,8 @@ class Standard < Module
         if !thing.modes[:registered]
             # if the user hasn't registered yet and the choosen nick is already used,
             # kill it with fire.
-            if thing.server.users[nick]
-                thing.send :numeric, ERR_NICKCOLLISION, nick
-                error(thing, 'Nick collision', :close)
-                thing.server.kill(thing)
+            if thing.server.clients[nick]
+                thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
                 thing.nick = nick
 
@@ -223,7 +218,7 @@ class Standard < Module
         else
             # if the user has already registered and the choosen nick is already used,
             # just tell him that he's a faggot.
-            if thing.server.users[nick]
+            if thing.server.clients[nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
                 mask       = thing.mask
@@ -271,8 +266,8 @@ class Standard < Module
                 thing.modes[:registered] = true
 
                 # clean the temporary hash value and use the nick as key
-                thing.server.users.delete(thing.socket)
-                thing.server.users[thing.nick] = thing
+                thing.server.clients.delete(thing.socket)
+                thing.server.clients[thing.nick] = thing
 
                 thing.server.dispatcher.execute(:registration, thing)
 
@@ -335,8 +330,23 @@ class Standard < Module
         end
     end
 
+    def oper (thing, string)
+        match = string.match(/OPER\s+(.*?)\s+(.*?)$/)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'OPER'
+        else
+            server.config.elements['operators/operator'].each {|element|
+
+            }
+
+            thing.send :numeric, RPL_YOUREOPER
+        end
+    end
+
     def mode (thing, string)
-        
+        # MODE user/channel = +option,-option
+        match = string.match(/MODE\s+(.*?)/i)
     end
 
     def set_mode (user, mode)
@@ -481,7 +491,7 @@ class Standard < Module
     end
 
     def quit (thing, string)
-        match = /QUIT(\s+:(.*))?$/i.match(string)
+        match = /^QUIT\s+(:)?(.*)?$/i.match(string)
 
         thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[2] || thing.nick}")
     end
@@ -523,10 +533,10 @@ class Standard < Module
                         end
                     end
                 else
-                    if !thing.server.users[receiver]
+                    if !thing.server.clients[receiver]
                         thing.send :numeric, ERR_NOSUCHNICK, receiver
                     else
-                        thing.server.dispatcher.execute(:message, thing, thing.server.users[receiver], text)
+                        thing.server.dispatcher.execute(:message, thing, thing.server.clients[receiver], text)
                     end
                 end
             end

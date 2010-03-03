@@ -64,14 +64,16 @@ class Users < Hash
 
         user = self[key]
 
-        user.server.dispatcher.execute(:user_delete, user, message)
+        if user
+            user.server.dispatcher.execute(:user_delete, user, message)
 
-        @semaphore.synchronize {
-            __delete(key)
-        }
+            @semaphore.synchronize {
+                __delete(key)
+            }
 
-        if channel.empty?
-            channel.server.channels.delete(channel.name)
+            if channel.empty?
+                channel.server.channels.delete(channel.name)
+            end
         end
     end
 

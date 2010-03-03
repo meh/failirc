@@ -177,7 +177,7 @@ class Server
             things = @clients.merge(@links)
 
             if things.empty?
-                sleep 1
+                sleep 2
                 next
             end
 
@@ -187,10 +187,10 @@ class Server
             }
 
             begin
-                connections, = IO::select connections, nil, nil, 2
+                reading, = IO::select connections, nil, nil, 2
 
-                if connections
-                    connections.each {|socket|    
+                if reading
+                    reading.each {|socket|    
                         Thread.new {
                             begin
                                 string = socket.gets
@@ -199,13 +199,14 @@ class Server
                                     @dispatcher.dispatch :input, things[socket], string.chomp
                                 end
                             rescue IOError, Errno::EBADF, Errno::EPIPE
+                                kill things[socket], 'Client exited.'
                             rescue Exception => e
                                 debug e
                             end
                         }
                     }
                 end
-            rescue IOError, Errno::EBADF
+            rescue IOError, Errno::EBADF, Errno::EPIPE
             rescue Exception => e
                 self.debug e
             end
@@ -215,6 +216,10 @@ class Server
     def kill (thing, message=nil)
         thing.modes[:quitting] = true
         @dispatcher.execute(:kill, thing, message)
+
+        if thing.is_a?(User)
+            thing = thing.client
+        end
 
         if thing.is_a?(Client)
             if thing.modes[:registered]
@@ -287,22 +292,22 @@ class Server
             @config.elements['config/messages/quit'].text = 'Quit: '
         end
 
-        @modules.each {|mod|
-            mod.finalize
-        }
-
-        @modules.clear
-
         if !@config.elements['config/modules']
             @config.elements['config'].add(Element.new('modules'))
         end
+
+        @modules.each_value {|mod|
+            mod.rehash
+        }
 
         @config.elements.each('config/modules/module') {|element|
             if !element.attributes['path']
                 element.attributes['path'] = 'failirc/server/modules'
             end
 
-            self.loadModule(element.attributes['name'], element.attributes['path'])
+            if !@modules[element.attributes['name']]
+                self.loadModule(element.attributes['name'], element.attributes['path'])
+            end
         }
     end
 

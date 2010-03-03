@@ -37,7 +37,23 @@ class Client
         end
     end
 
-    attr_reader   :server, :socket, :listen, :channels, :modes
+    class Mask
+        attr_reader :client
+
+        def initialize (client)
+            @client = client
+        end
+
+        def match (mask)
+
+        end
+
+        def to_s
+            return "#{client.nick || '*'}!#{client.user || '*'}@#{client.host || '*'}"
+        end
+    end
+
+    attr_reader   :server, :socket, :listen, :channels, :modes, :mask
     attr_writer   :quitting
     attr_accessor :password, :nick, :user, :host, :ip, :realName, :lastAction
 
@@ -53,10 +69,8 @@ class Client
 
         @channels = Channels.new(@server)
         @modes    = Modes.new
-    end
 
-    def mask
-        return "#{nick || '*'}!#{user || '*'}@#{host || '*'}"
+        @mask = Mask.new(self)
     end
 
     def send (symbol, *args)
@@ -75,7 +89,7 @@ class Client
         begin
             @socket.puts text
         rescue IOError, Errno::EPIPE, Errno::EBADFD
-             @server.kill(self, 'Connection reset by peer.')
+             @server.kill(self, 'Client exited.')
         end
     end
 
@@ -83,7 +97,9 @@ class Client
         raw ":#{server.host} #{'%03d' % response[:code]} #{nick || 'faggot'} #{eval(response[:text])}"
     end
 
-    alias to_s mask
+    def to_s
+        mask.to_s
+    end
 
     def inspect
         return "#<Client: #{mask} #{modes}#{(modes[:registered]) ? ' registered' : ''}>"

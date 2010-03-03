@@ -18,22 +18,29 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/server/module'
-require 'failirc/utils'
 
 module IRC
 
 module Modules
 
 class Logger < Module
-    include Utils
-
     def initialize (server)
         @events = {
             :pre  => Event::Callback.new(self.method(:log), -9001),
             :post => Event::Callback.new(self.method(:log), -9001),
+
+            :custom => {
+                :kill => Event::Callback.new(self.method(:logKill), -9001),
+            },
         }
 
         super(server)
+    end
+
+    def rehash
+        if @log && @log != $stdout
+            @log.close
+        end
 
         file = @server.config.elements['config/modules/module[@name="TinyURL"]/file']
 
@@ -52,9 +59,14 @@ class Logger < Module
 
     def log (event, thing, string)
         if (event.chain == :input && event.special == :pre) || (event.chain == :output && event.special == :post)
-            @log.puts "[#{Time.now}] #{thing.mask} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
+            @log.puts "[#{Time.now}] #{thing} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
             @log.flush
         end
+    end
+
+    def logKill (thing, message)
+        @log.puts "[#{Time.now}] #{thing} KILL :#{message}"
+        @log.flush
     end
 end
 

@@ -18,7 +18,6 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/server/module'
-require 'failirc/utils'
 require 'net/http'
 require 'uri'
 
@@ -27,8 +26,6 @@ module IRC
 module Modules
 
 class TinyURL < Module
-    include Utils
-
     def initialize (server)
         @events = {
             :input => {
@@ -39,20 +36,22 @@ class TinyURL < Module
         super(server)
     end
 
+    def rehash
+        @length = @server.config.elements['config/modules/module[@name="TinyURL"]/length']
+
+        if @length
+            @length = @length.text.to_i
+        else
+            @length = 42
+        end
+    end
+
     def tinyurl (thing, string)
         match = string.match(/:(.*)$/)
 
-        length = @server.config.elements['config/modules/module[@name="TinyURL"]/length']
-
-        if length
-            length = length.text.to_i
-        else
-            length = 42
-        end
-
         if match
             URI.extract(match[1]).each {|uri|
-                if uri.length > length
+                if uri.length > @length
                     tiny = tinyurlify(uri)
 
                     if tiny

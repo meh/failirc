@@ -18,10 +18,13 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/server/event'
+require 'failirc/utils'
 
 module IRC
 
 class Module
+    include Utils
+
     attr_reader :server
 
     def initialize (server)
@@ -71,6 +74,13 @@ class Module
                     @server.dispatcher.register(:output, key, value)
                 }
             end
+        end
+
+        begin
+            rehash
+        rescue NameError
+        rescue Exception => e
+            self.debug e
         end
     end
 

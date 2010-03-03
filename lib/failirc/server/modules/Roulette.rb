@@ -18,15 +18,12 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/server/module'
-require 'failirc/utils'
 
 module IRC
 
 module Modules
 
 class Roulette < Module
-    include Utils
-
     def initialize (server)
         @aliases = {
             :input => {
@@ -43,29 +40,31 @@ class Roulette < Module
         super(server)
     end
 
+    def rehash
+        @death = @server.config.elements['config/modules/module[@name="Roulette"]/death']
+
+        if @death
+            @death = @death.text
+        else
+            @death = 'BOOM, dickshot'
+        end
+
+        @life = @server.config.elements['config/modules/module[@name="Roulette"]/life']
+
+        if @life
+            @life = @life.text
+        else
+            @life = 'The faggot shoot but survived :('
+        end
+    end
+
     def roulette (thing, string)
         if rand(3) == 1
-            message = @server.config.elements['config/modules/module[@name="Roulette"]/death']
-
-            if message
-                message = message.text
-            else
-                message = 'BOOM, dickshot'
-            end
-
-            @server.kill(thing, message)
+            @server.kill(thing, @death)
         else
-            message = @server.config.elements['config/modules/module[@name="Roulette"]/life']
-
-            if message
-                message = message.text
-            else
-                message = 'The faggot shoot but survived :('
-            end
-
             @server.clients.each_value {|client|
                 if client.modes[:registered]
-                    @server.modules['Standard'].send_notice(thing, client, message)
+                    @server.modules['Standard'].send_notice(thing, client, @life)
                 end
             }
         end
