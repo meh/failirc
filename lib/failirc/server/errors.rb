@@ -274,4 +274,10 @@ ERR_USERSDONTMATCH = {
     :text => '":Cant change mode for other users"'
 }
 
+# custom
+ERR_BADCHANMASK = {
+    :code => 476,
+    :text => '"#{value} :Bad channel name"'
+}
+
 end

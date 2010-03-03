@@ -60,10 +60,6 @@ class Channel
         @server = server
         @name   = name
 
-        if !Channel.check(name)
-            @name = "##{@name}"
-        end
-
         @createdOn = Time.now
 
         @users = Users.new(self)
@@ -92,10 +88,6 @@ class Channel
 
     def empty?
         return @users.empty?
-    end
-
-    def self.check (text)
-        return text.match(/^[#\$&]/) ? true : false
     end
 end
 

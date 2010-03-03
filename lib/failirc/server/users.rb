@@ -38,6 +38,8 @@ class Users < Hash
             raise 'You can only set User.'
         end
 
+        key.downcase!
+
         @semaphore.synchronize {
             __set(key, value)
         }
@@ -46,6 +48,8 @@ class Users < Hash
     alias __get []
 
     def [] (key)
+        key.downcase!
+
         @semaphore.synchronize {
             return __get key
         }
@@ -61,6 +65,8 @@ class Users < Hash
         if message.nil?
             message = key
         end
+
+        key.downcase!
 
         user = self[key]
 

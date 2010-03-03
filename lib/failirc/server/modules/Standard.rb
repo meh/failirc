@@ -137,6 +137,24 @@ class Standard < Module
         Thread.kill(@pingThread)
     end
 
+    module Utils
+        module Channel
+            def self.isValid (string)
+                string.match(/^[&#+!][^ ,:\a]{0,50}$/) ? true : false
+            end
+    
+            def self.invited? (channel, client)
+                channel.modes[:I].each {|invite|
+
+                }
+            end
+
+            def self.banned? (chanel, client)
+
+            end
+        end
+    end
+
     def check (event, thing, string)
         if event.chain != :input
             return
@@ -344,24 +362,40 @@ class Standard < Module
         end
     end
 
+    @@modes = {
+        :channel => {
+            :a => :anonymous,
+        },
+
+        :user => {
+
+        },
+    }
+
     def mode (thing, string)
         # MODE user/channel = +option,-option
         match = string.match(/MODE\s+(.*?)/i)
     end
 
-    def set_mode (user, mode)
+    def set_mode (thing, mode)
         match = mode.match(/^([+\-])(.*)$/)
 
-        if match[1] == '+'
-            if match[2].match(/o/)
-                user.modes[:o]             = true
-                user.modes[:can_set_topic] = true
+        if thing.is_a?(User)
+            if match[1] == '+'
+                if match[2].match(/o/)
+                    thing.modes[:o]             = true
+                    thing.modes[:can_set_topic] = true
 
-                if !user.modes[:q] && !user.modes[:a]
-                    user.modes[:level] = '@'
+                    if !thing.modes[:q] && !thing.modes[:a]
+                        thing.modes[:level] = '@'
+                    end
                 end
+            else
+
             end
-        else
+        elsif thing.is_a?(Client)
+
+        elsif thing.is_a?(Channel)
 
         end
     end
@@ -375,12 +409,37 @@ class Standard < Module
             channel  = match[1]
             password = match[3]
 
+            if !Utils::Channel::isValid(channel)
+                channel = "##{channel}"
+            end
+
+            if !Utils::Channel::isValid(channel)
+                thing.send :numeric, ERR_BADCHANMASK, channel
+                return
+            end
+
             if thing.channels[channel]
                 return
             end
 
             if !thing.server.channels[channel]
                 thing.server.channels[channel] = Channel.new(server, channel)
+                thing.server.channels[channel].modes[:type] = channel[0, 1]
+            end
+
+            if thing.server.channels[channel].modes[:k] && password != thing.server.channels[channel].modes[:password]
+                thing.send :numeric, ERR_BADCHANNELKEY, channel
+                return 
+            end
+
+            if thing.server.channels[channel].modes[:i] && !Utils::Channel::invited?(channel, thing)
+                thing.send :numeric, ERR_INVITEONLYCHAN, channel
+                return
+            end
+
+            if Utils::Channel::banned?(channel, thing)
+                thing.send :numeric, ERR_BANNEDFROMCHAN, channel
+                return
             end
 
             empty = thing.server.channels[channel].empty?
@@ -514,7 +573,7 @@ class Standard < Module
                 receiver = match[1]
                 text     = match[3]
 
-                if Channel.check(receiver)
+                if Utils::Channel::isValid(receiver)
                     if thing.channels[receiver]
                         if thing.channels[receiver].modes[:m] && !thing.channels[receiver].user(thing).modes[:can_talk]
                             thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver

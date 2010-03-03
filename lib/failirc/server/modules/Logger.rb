@@ -59,14 +59,24 @@ class Logger < Module
 
     def log (event, thing, string)
         if (event.chain == :input && event.special == :pre) || (event.chain == :output && event.special == :post)
-            @log.puts "[#{Time.now}] #{thing} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
+            @log.puts "[#{Time.now}] #{target(thing)} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
             @log.flush
         end
     end
 
     def logKill (thing, message)
-        @log.puts "[#{Time.now}] #{thing} KILL :#{message}"
+        @log.puts "[#{Time.now}] #{target(thing)} KILL :#{message}"
         @log.flush
+    end
+
+    def target (thing)
+        if thing.is_a?(Client) || thing.is_a?(User)
+            target = "#{thing.nick || '*'}!#{thing.user || '*'}@#{thing.ip || '*'}"
+        else
+            target = thing.to_s
+        end
+
+        return target
     end
 end
 

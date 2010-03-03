@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'thread'
 require 'failirc/server/client'
 
 module IRC
@@ -26,6 +27,8 @@ class Clients < Hash
 
     def initialize (server)
         @server = server
+
+        @semaphore = Mutex.new
 
         super()
     end
@@ -37,7 +40,37 @@ class Clients < Hash
             raise 'You can only set a Client'
         end
 
-        __set(key, value)
+        if key.is_a?(String)
+            key.downcase!
+        end
+
+        @semaphore.synchronize {
+            __set(key, value)
+        }
+    end
+
+    alias __get []
+        
+    def [] (key)
+        if key.is_a?(String)
+            key.downcase!
+        end
+
+        @semaphore.synchronize {
+            return __get(key)
+        }
+    end
+
+    alias __delete delete
+
+    def delete (key)
+        if key.is_a?(String)
+            key.downcase!
+        end
+
+        @semaphore.synchronize {
+            __delete(key)
+        }
     end
 
     def inspect

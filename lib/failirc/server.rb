@@ -70,7 +70,10 @@ class Server
                 require "#{path}/#{name}"
             end
 
-            klass = eval("Modules::#{name}")
+            begin
+                klass = eval("Modules::#{name}")
+            rescue
+            end
 
             if klass
                 @modules[name] = klass.new(self)
