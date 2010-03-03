@@ -137,6 +137,8 @@ class Standard < Module
         @toPing.delete(thing.socket)
         @pingedOut.delete(thing.socket)
 
+        thing.lastAction = Client::Action.new(thing, event, string)
+
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire

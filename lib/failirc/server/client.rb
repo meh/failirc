@@ -26,9 +26,20 @@ module IRC
 class Client
     include Utils
 
+    class Action
+        attr_reader :client, :event, :string, :on
+
+        def initialize (client, event, string)
+            @client = client
+            @event  = event
+            @string = string
+            @on     = Time.now
+        end
+    end
+
     attr_reader   :server, :socket, :listen, :channels, :modes
     attr_writer   :quitting
-    attr_accessor :password, :nick, :user, :host, :ip, :realName
+    attr_accessor :password, :nick, :user, :host, :ip, :realName, :lastAction
 
     def initialize (server, socket, listen)
         @server = server
