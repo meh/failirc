@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'thread'
 require 'failirc/server/user'
 
 module IRC
@@ -26,6 +27,8 @@ class Users < Hash
 
     def initialize (channel)
         @channel = channel
+
+        @semaphore = Mutex.new
     end
 
     alias __set []=
@@ -35,7 +38,17 @@ class Users < Hash
             raise 'You can only set User.'
         end
 
-        __set(key, value)
+        @semaphore.synchronize {
+            __set(key, value)
+        }
+    end
+
+    alias __get []
+
+    def [] (key)
+        @semaphore.synchronize {
+            return __get key
+        }
     end
 
     alias __delete delete
@@ -53,7 +66,9 @@ class Users < Hash
 
         user.server.dispatcher.execute(:user_delete, user, message)
 
-        __delete(key)
+        @semaphore.synchronize {
+            __delete(key)
+        }
 
         if channel.empty?
             channel.server.channels.delete(channel.name)
@@ -68,18 +83,22 @@ class Users < Hash
         self[user.nick] = User.new(user, @channel)
 
         user.server.dispatcher.execute(:user_add, self[user.nick])
+
+        return self[user.nick]
     end
 
     def inspect (channel=false)
         result = ""
 
-        each_value {|user|
-            if channel
-                result << " #{user.inspect}"
-            else
+        if channel
+            each_value {|user|
+                result << " #{user}"
+            }
+        else
+            each_value {|user|
                 result << " #{user.client.inspect}"
-            end
-        }
+            }
+        end
 
         return result[1, result.length]
     end

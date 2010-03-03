@@ -17,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'resolv'
-
 require 'failirc/server/module'
 require 'failirc/utils'
 require 'failirc/server/errors'
@@ -130,6 +128,10 @@ class Standard < Module
     end
 
     def check (event, thing, string)
+        if event.chain != :input
+            return
+        end
+
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire
@@ -225,7 +227,8 @@ class Standard < Module
                 thing.user     = match[1]
                 thing.realName = match[2]
 
-                thing.host = Resolv.getname(thing.socket.addr.pop)
+                thing.host = thing.socket.peeraddr[2]
+                thing.ip   = thing.socket.peeraddr[3]
             end
 
             # try to register it
@@ -269,7 +272,7 @@ class Standard < Module
     def error (thing, message, type=nil)
         case type
             when :close
-                error(thing, "Closing Link: #{thing.nick}[#{thing.socket.addr.pop}] (#{message})")
+                error(thing, "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})")
             else
                 thing.send :raw, "ERROR :#{message}"
         end
@@ -320,7 +323,25 @@ class Standard < Module
     end
 
     def mode (thing, string)
+        
+    end
 
+    def set_mode (user, mode)
+        match = mode.match(/^([+\-])(.*)$/)
+
+        if match[1] == '+'
+            puts match[2]
+            if match[2].match(/o/)
+                user.modes[:o]             = true
+                user.modes[:can_set_topic] = true
+
+                if !user.modes[:q] && !user.modes[:a]
+                    user.modes[:level] = '@'
+                end
+            end
+        else
+
+        end
     end
 
     def join (thing, string)
@@ -332,23 +353,28 @@ class Standard < Module
             channel  = match[1]
             password = match[3]
 
+            if thing.channels[channel]
+                return
+            end
+
             if !thing.server.channels[channel]
                 thing.server.channels[channel] = Channel.new(server, channel)
             end
 
-            user = thing.server.channels[channel].users.add(thing)
+            empty = thing.server.channels[channel].empty?
+            user  = thing.server.channels[channel].users.add(thing)
 
-            if thing.server.channels[channel].empty?
-                user.modes[:o] = true
+            if empty
+                set_mode user, '+o'
             end
 
             thing.channels.add(thing.server.channels[channel])
 
             if !thing.channels[channel].topic.nil?
-                thing.server.dispatcher.dispatch :input, thing, "TOPIC #{channel}"
+                topic thing, "TOPIC #{channel}"
             end
 
-            thing.server.dispatcher.dispatch :input, thing, "NAMES #{channel}"
+            names thing, "NAMES #{channel}"
         end
     end
 
@@ -399,10 +425,13 @@ class Standard < Module
         match = string.match(/NAMES\s+(.*)$/i)
 
         if !match
-
             thing.send :numeric, RPL_ENDOFNAMES, thing.nick
         else
             channel = match[1]
+
+            if thing.channels[channel]
+                thing.send :numeric, RPL_NAMREPLY, thing.channels[channel]
+            end
 
             thing.send :numeric, RPL_ENDOFNAMES, channel
         end

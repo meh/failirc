@@ -19,6 +19,7 @@
 
 require 'thread'
 require 'socket'
+require 'resolv'
 require 'openssl'
 
 require 'rexml/document'
@@ -81,7 +82,11 @@ class Server
     end
 
     def ip
-        Resolv.getaddress(@config.elements['config/server/host'].text)
+        begin
+            Resolv.getaddress(@config.elements['config/server/host'].text)
+        rescue
+            return @socket.addr.pop
+        end
     end
 
     def start

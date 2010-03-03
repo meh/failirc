@@ -60,24 +60,8 @@ class User
         @client.send(type, *args)
     end
 
-    def level
-        if modes[:q]
-            return '~'
-        elsif modes[:a]
-            return '&'
-        elsif modes[:o]
-            return '@'
-        elsif modes[:h]
-            return '%'
-        elsif modes[:v]
-            return '+'
-        else
-            return ''
-        end
-    end
-
     def to_s
-        return "#{level}#{nick}"
+        return "#{modes[:level]}#{nick}"
     end
 
     def inspect

@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'thread'
 require 'failirc/server/channel'
 
 module IRC
@@ -26,6 +27,8 @@ class Channels < Hash
 
     def initialize (server)
         @server = server
+
+        @semaphore = Mutex.new
 
         super()
     end
@@ -37,7 +40,25 @@ class Channels < Hash
             raise 'You can only set a Channel'
         end
 
-        __set(key, value)
+        @semaphore.synchronize {
+            __set(key, value)
+        }
+    end
+
+    alias __get []
+        
+    def [] (key)
+        @semaphore.synchronize {
+            return __get(key)
+        }
+    end
+
+    alias __delete delete
+
+    def delete (key)
+        @semaphore.synchronize {
+            __delete key
+        }
     end
 
     # get single users in the channels

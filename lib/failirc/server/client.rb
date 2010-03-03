@@ -28,14 +28,15 @@ class Client
 
     attr_reader   :server, :socket, :listen, :channels, :modes
     attr_writer   :quitting
-    attr_accessor :password, :nick, :user, :host, :realName
+    attr_accessor :password, :nick, :user, :host, :ip, :realName
 
     def initialize (server, socket, listen)
         @server = server
         @socket = socket
         @listen = listen
 
-        @host = socket.addr.pop
+        @host = socket.peeraddr[2]
+        @ip   = socket.peeraddr[3]
 
         @registered = false
 

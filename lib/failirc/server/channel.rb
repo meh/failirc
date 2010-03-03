@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'thread'
 require 'failirc/utils'
 require 'failirc/server/responses'
 require 'failirc/server/users'
@@ -31,11 +32,15 @@ class Channel
         def initialize (channel)
             @server  = channel.server
             @channel = channel
+
+            @semaphore = Mutex.new
         end
 
         def text= (value)
-            @text  = value
-            @setOn = Time.now
+            @semaphore.synchronize {
+                @text  = value
+                @setOn = Time.now
+            }
 
             @server.dispatcher.execute(:topic_change, @channel)
         end
@@ -66,15 +71,19 @@ class Channel
         @modes = {}
 
         @topic = Topic.new(self)
+
+        @semaphore = Mutex.new
     end
 
     def topic= (data)
-        if data.is_a?(Topic)
-            @topic = data
-        elsif data.is_a?(Array)
-            @topic.setBy = user(data[0])
-            @topic.text  = data[1]
-        end
+        @semaphore.synchronize {
+            if data.is_a?(Topic)
+                @topic = data
+            elsif data.is_a?(Array)
+                @topic.setBy = user(data[0])
+                @topic.text  = data[1]
+            end
+        }
     end
 
     def user (client)
