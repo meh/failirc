@@ -49,6 +49,8 @@ class Standard < Module
                     end
                 }
 
+                @toPing = Hash[server.users.values.collect {|client| [client.socket, client]}]
+
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
                 @pingedOut.each_value {|client|
@@ -57,7 +59,6 @@ class Standard < Module
                 }
 
                 @pingedOut.clear
-                @toPing = Hash[server.users.values.collect {|client| [client.socket, client]}]
             end
         }
 
