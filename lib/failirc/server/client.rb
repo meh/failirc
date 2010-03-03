@@ -72,7 +72,11 @@ class Client
     def raw (text)
         text = @server.dispatcher.dispatch :output, self, text
 
-        @socket.puts text
+        begin
+            @socket.puts text
+        rescue IOError, Errno::EPIPE, Errno::EBADFD
+             @server.kill(self, 'Connection reset by peer.')
+        end
     end
 
     def numeric (response, value=nil)

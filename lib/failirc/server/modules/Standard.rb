@@ -77,10 +77,14 @@ class Standard < Module
 
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
                 :NAMES => /^NAMES( |$)/i,
+                :WHO   => /^WHO( |$)/i,
 
                 :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
+                :NOTICE  => /^NOTICE( |$)/i,
 
                 :QUIT => /^QUIT( |$)/i,
+
+                :MAP => /^MAP( |$)/i,
             },
         }
 
@@ -115,10 +119,14 @@ class Standard < Module
 
                 :TOPIC => self.method(:topic),
                 :NAMES => self.method(:names),
+                :WHO   => self.method(:who),
 
                 :PRIVMSG => self.method(:privmsg),
+                :NOTICE  => self.method(:notice),
 
                 :QUIT => self.method(:quit),
+
+                :MAP => self.method(:map),
             },
         }
 
@@ -187,22 +195,26 @@ class Standard < Module
             thing.send :numeric, ERR_NONICKNAMEGIVEN
             return
         end
+
+        nick = match[1]
+
+        puts nick.inspect, nick.match(/^[\w\-^\/]{1,23}$/).inspect
         
         # check if the nickname is valid
-        if !match[1].match(/[\w\-^\/]{1,23}/)
-            thing.send :numeric, ERR_ERRONEUSNICKNAME, match[1]
+        if !nick.match(/^[\w\-^\/]{1,23}$/)
+            thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
             return
         end
 
         if !thing.modes[:registered]
             # if the user hasn't registered yet and the choosen nick is already used,
             # kill it with fire.
-            if thing.server.users[match[1]]
-                thing.send :numeric, ERR_NICKCOLLISION, match[1]
+            if thing.server.users[nick]
+                thing.send :numeric, ERR_NICKCOLLISION, nick
                 error(thing, 'Nick collision', :close)
                 thing.server.kill(thing)
             else
-                thing.nick = match[1]
+                thing.nick = nick
 
                 # try to register it
                 registration(thing)
@@ -210,11 +222,11 @@ class Standard < Module
         else
             # if the user has already registered and the choosen nick is already used,
             # just tell him that he's a faggot.
-            if thing.server.users[match[1]]
-                thing.send :numeric, ERR_NICKNAMEINUSE, match[1]
+            if thing.server.users[nick]
+                thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
                 mask       = thing.mask
-                thing.nick = match[1]
+                thing.nick = nick
 
                 thing.channels.users.each_key {|user|
                     user.send :raw, "#{mask} NICK :#{user}"
@@ -436,6 +448,10 @@ class Standard < Module
         end
     end
 
+    def who (thing, string)
+
+    end
+
     def part (thing, string)
         match = string.match(/PART\s+(.+)(\s+:(.*))?$/i)
 
@@ -526,6 +542,41 @@ class Standard < Module
         elsif to.is_a?(Client) || to.is_a?(User)
             to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :#{text}"
         end
+    end
+
+    def notice (thing, string)
+        match = string.match(/NOTICE\s+(.*?)\s+:(.*)$/i)
+
+        if match
+            name    = match[1]
+            message = match[2]
+
+            if server.clients[name]
+                send_notice(thing, server.clients[name], message)
+            elsif server.channels[name]
+                send_notice(thing, server.channels[name], message)
+            else
+                # unrealircd sends an error if it can't find nick/channel, what should I do?
+            end
+        end
+    end
+
+    def send_notice (from, to, text)
+        if from.is_a?(User)
+            from = from.client
+        end
+
+        if to.is_a?(Client) || to.is_a?(User)
+            to.send :raw, ":#{from} NOTICE #{to.nick} :#{text}"
+        elsif to.is_a?(Channel)
+            to.users.each_value {|user|
+                user.send :raw, ":#{from} NOTICE #{to.name} :#{text}"
+            }
+        end
+    end
+
+    def map (thing, string)
+        send_notice(@server, thing, 'The X tells the point.')
     end
 end
 

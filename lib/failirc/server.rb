@@ -50,7 +50,7 @@ class Server
 
         @dispatcher = EventDispatcher.new(self)
 
-        @modules = []
+        @modules = {}
 
         @channels  = Channels.new(self)
         @clients   = Clients.new(self)
@@ -71,7 +71,13 @@ class Server
             end
 
             klass = eval("Modules::#{name}")
-            @modules.push(klass.new(self))
+
+            if klass
+                @modules[name] = klass.new(self)
+                self.debug "Loaded `#{name}`", ''
+            else
+                self.debug "Failed to load `#{name}`", ''
+            end
         rescue Exception => e
             self.debug(e)
         end
@@ -192,7 +198,7 @@ class Server
                                 if string
                                     @dispatcher.dispatch :input, things[socket], string.chomp
                                 end
-                            rescue IOError, Errno::EBADF
+                            rescue IOError, Errno::EBADF, Errno::EPIPE
                             rescue Exception => e
                                 debug e
                             end
@@ -297,8 +303,6 @@ class Server
             end
 
             self.loadModule(element.attributes['name'], element.attributes['path'])
-
-            self.debug "Loaded #{element.attributes['name']}"
         }
     end
 
@@ -311,6 +315,8 @@ class Server
             self.debug(e)
         end
     end
+
+    alias to_s host
 end
 
 end

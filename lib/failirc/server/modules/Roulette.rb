@@ -19,58 +19,55 @@
 
 require 'failirc/server/module'
 require 'failirc/utils'
-require 'net/http'
-require 'uri'
 
 module IRC
 
 module Modules
 
-class TinyURL < Module
+class Roulette < Module
     include Utils
 
     def initialize (server)
+        @aliases = {
+            :input => {
+                :ROULETTE => /^ROULETTE/i,
+            },
+        }
+
         @events = {
             :input => {
-                :PRIVMSG => Event::Callback.new(self.method(:tinyurl), -9001),
-            }
+                :ROULETTE => self.method(:roulette),
+            },
         }
 
         super(server)
     end
 
-    def tinyurl (thing, string)
-        match = string.match(/:(.*)$/)
+    def roulette (thing, string)
+        if rand(3) == 1
+            message = @server.config.elements['config/modules/module[@name="Roulette"]/death']
 
-        length = @server.config.elements['config/modules/module[@name="TinyURL"]/length']
+            if message
+                message = message.text
+            else
+                message = 'BOOM, dickshot'
+            end
 
-        if length
-            length = length.text.to_i
+            @server.kill(thing, message)
         else
-            length = 42
-        end
+            message = @server.config.elements['config/modules/module[@name="Roulette"]/life']
 
-        if match
-            URI.extract(match[1]).each {|uri|
-                if uri.length > length
-                    tiny = tinyurlify(uri)
+            if message
+                message = message.text
+            else
+                message = 'The faggot shoot but survived :('
+            end
 
-                    if tiny
-                        string.gsub!(/#{Regexp.escape(uri)}/, tiny)
-                    end
+            @server.clients.each_value {|client|
+                if client.modes[:registered]
+                    @server.modules['Standard'].send_notice(thing, client, message)
                 end
             }
-        end
-
-        return string
-    end
-
-    def tinyurlify (url)
-        content = Net::HTTP.post_form(URI.parse('http://tinyurl.com/create.php'), { 'url' => url }).body
-        match   = content.match(/<blockquote><b>(http:\/\/tinyurl.com\/\w+)<\/b>/)
-
-        if match
-            return match[1]
         end
     end
 end
