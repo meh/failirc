@@ -47,7 +47,7 @@ class TinyURL < Module
         if length
             length = length.text.to_i
         else
-            length = 30
+            length = 42
         end
 
         if match
