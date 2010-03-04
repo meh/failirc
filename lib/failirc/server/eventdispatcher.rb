@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'thread'
 require 'failirc/utils'
 require 'failirc/server/event'
 
@@ -25,10 +26,17 @@ module IRC
 class EventDispatcher
     include Utils
 
-    attr_reader :server, :aliases, :events
+    attr_reader :server, :handling, :aliases, :events
 
     def initialize (server)
+        @semaphore = Mutex.new
+
         @server = server
+
+        @handling = {
+            :input  => {},
+            :output => {},
+        }
 
         @aliases = {
             :input  => {},
@@ -47,7 +55,17 @@ class EventDispatcher
         }
     end
 
-    def dispatch (chain, thing, string)
+    def dispatch (chain, thing, string, deep=false)
+        if !thing
+            return
+        end
+
+        if !deep
+            @semaphore.synchronize {
+                @handling[chain][thing.socket] = true
+            }
+        end
+
         event  = Event.new(self, chain, thing, string)
         result = string
 
@@ -63,7 +81,7 @@ class EventDispatcher
             end
 
             if event.type && !event.same?(string)
-                return dispatch(chain, thing, string)
+                return dispatch(chain, thing, string, true)
             end
         }
 
@@ -83,7 +101,7 @@ class EventDispatcher
                     string = result = tmp
     
                     if !event.same?(string)
-                        return dispatch(chain, thing, string)
+                        return dispatch(chain, thing, string, true)
                     end
                 end
             }
@@ -100,7 +118,7 @@ class EventDispatcher
                 end
     
                 if event.type && !event.same?(string)
-                    return dispatch(chain, thing, string)
+                    return dispatch(chain, thing, string, true)
                 end
             }
         end
@@ -117,9 +135,15 @@ class EventDispatcher
             end
 
             if event.type && !event.same?(string)
-                return dispatch(chain, thing, string)
+                return dispatch(chain, thing, string, true)
             end
         }
+
+        if !deep && chain == :input
+            @semaphore.synchronize {
+                @handling[chain][thing.socket] = false
+            }
+        end
 
         return result
     end

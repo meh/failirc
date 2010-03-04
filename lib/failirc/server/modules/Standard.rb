@@ -31,8 +31,8 @@ module Modules
 
 class Standard < Module
     def initialize (server)
-        @pingedOut = {}
-        @toPing    = Hash[server.clients.values.collect {|client| [client.socket, client]}]
+        @pingedOut = Hash.new
+        @toPing    = Hash.new(server.clients.values.collect {|client| [client.socket, client]})
 
         @pingThread = Thread.new {
             sleep server.config.elements['config/server/pingTimeout'].text.to_i
@@ -46,7 +46,7 @@ class Standard < Module
                     end
                 }
 
-                @toPing = Hash[server.clients.values.collect {|client| [client.socket, client]}]
+                @toPing = Hash.new[server.clients.values.collect {|client| [client.socket, client]}]
 
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
@@ -139,6 +139,21 @@ class Standard < Module
 
     module Utils
         module Channel
+            class Ban
+                attr_reader  :setBy, :setOn, :channel, :mask
+
+                def initialize (by, channel, mask)
+                    @setBy   = by
+                    @setOn   = Time.now
+                    @channel = channel
+                    @mask    = mask
+                end
+
+                def to_s
+                    "#{channel.name} #{mask} #{setBy.nick} #{setOn.tv_se}"
+                end
+            end
+
             def self.isValid (string)
                 string.match(/^[&#+!][^ ,:\a]{0,50}$/) ? true : false
             end
@@ -374,20 +389,34 @@ class Standard < Module
 
     def mode (thing, string)
         # MODE user/channel = +option,-option
-        match = string.match(/MODE\s+([^ ]+)/i)
+        match = string.match(/MODE\s+([^ ]+)(\s+(.*))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'MODE'
         else
-            name = match[1]
+            name  = match[1]
+            value = match[3]
 
             if Utils::Channel::isValid(name) && thing.server.channels[name]
-                thing.send :numeric, RPL_CHANNELMODEIS, {
-                    :channel => thing.server.channels[name],
-                    :user    => thing,
-                }
+                if !value
+                    thing.send :numeric, RPL_CHANNELMODEIS, {
+                        :channel => thing.server.channels[name],
+                        :user    => thing,
+                    }
 
-                thing.send :numeric, RPL_CHANCREATEDON, thing.server.channels[name]
+                    thing.send :numeric, RPL_CHANCREATEDON, thing.server.channels[name]
+                elsif value[0, 1] == '='
+
+                else
+                    case value
+                        when /^(\+?)b$/
+                            thing.server.channels[name].modes[:bans].each {|ban|
+                                thing.send :numeric, RPL_BANLIST, ban
+                            }
+
+                            thing.send :numeric, RPL_ENDOFBANLIST, name
+                    end
+                end
             else
 
             end
@@ -442,6 +471,7 @@ class Standard < Module
             if !thing.server.channels[channel]
                 thing.server.channels[channel] = Channel.new(server, channel)
                 thing.server.channels[channel].modes[:type] = channel[0, 1]
+                thing.server.channels[channel].modes[:bans] = []
             end
 
             if thing.server.channels[channel].modes[:k] && password != thing.server.channels[channel].modes[:password]
@@ -547,7 +577,7 @@ class Standard < Module
 
             if Utils::Channel::isValid(name) && thing.server.channels[name]
                 thing.server.channels[name].users.each_value {|user|
-                    user.send :numeric, RPL_WHOREPLY, {
+                    thing.send :numeric, RPL_WHOREPLY, {
                         :channel => thing.server.channels[name],
                         :user    => user,
                         :hops    => 0,

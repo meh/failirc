@@ -17,55 +17,55 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/hash'
-require 'failirc/server/channel'
+require 'thread'
 
 module IRC
 
-class Channels < Hash
-    attr_reader :server
+class Hash < ::Hash
+    def initialize (*args)
+        @semaphore = Mutex.new
 
-    def initialize (server)
-        @server = server
-
-        super()
+        super(*args)
     end
 
-    # get single users in the channels
-    def users
-        result = {}
+    private
 
-        each_value {|channel|
-            channel.users.each {|nick, user|
-                result[nick] = user
-            }
-        }
+    alias __set []=
+    alias __get []
+    alias __delete delete
 
-        return result
-    end
+    public
 
-    def add (channel)
-        self[channel.name] = channel
-    end
+    def []= (key, value)
+        if key.class == String
+            key = key.downcase
+        end
 
-    def clean
-        each {|name, channel|
-            puts channel.empty?.inspect
-
-            if channel.empty?
-                delete(name)
-            end
+        @semaphore.synchronize {
+            return __set(key, value)
         }
     end
 
-    def inspect
-        result = ""
+    alias __get []
 
-        each_value {|channel|
-            result << " ##{channel.name}"
+    def [] (key)
+        if key.class == String
+            key = key.downcase
+        end
+
+        @semaphore.synchronize {
+            return __get(key)
         }
+    end
 
-        return result[1, result.length]
+    def delete (key)
+        if key.class == String
+            key = key.downcase
+        end
+
+        @semaphore.synchronize {
+            return __delete(key)
+        }
     end
 end
 

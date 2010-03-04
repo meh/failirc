@@ -200,14 +200,14 @@ RPL_ENDOFLINKS = {
 
 RPL_BANLIST = {
     :code => 367,
-    :text => '"#{value.channel.name} #{value.id}"'
+    :text => '"#{value}"'
 }
 
 # When listing the active 'bans' for a given channel, a server is required to send the list back using the RPL_BANLIST and RPL_ENDOFBANLIST messages.
 # A separate RPL_BANLIST is sent for each active banid. After the banids have been listed (or if none present) a RPL_ENDOFBANLIST must be sent.
 RPL_ENDOFBANLIST = {
     :code => 368,
-    :text => '"#{value.name} :End of channel ban list"'
+    :text => '"#{value} :End of channel ban list"'
 }
 
 RPL_INFO = {

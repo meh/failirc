@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/hash'
 require 'failirc/server/link'
 
 module IRC
@@ -30,20 +31,10 @@ class Links < Hash
         super()
     end
 
-    alias __set []=
-
-    def []= (key, value)
-        if !value.is_a?(Link)
-            raise 'You can only set a Link'
-        end
-
-        __set(key, value)
-    end
-
     def inspect
         result = ""
 
-        self.each {|link|
+        each {|link|
             result << " #{link.inspect}"
         }
 

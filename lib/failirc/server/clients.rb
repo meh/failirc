@@ -28,49 +28,7 @@ class Clients < Hash
     def initialize (server)
         @server = server
 
-        @semaphore = Mutex.new
-
         super()
-    end
-
-    alias __set []=
-
-    def []= (key, value)
-        if !value.is_a?(Client)
-            raise 'You can only set a Client'
-        end
-
-        if key.is_a?(String)
-            key = key.downcase
-        end
-
-        @semaphore.synchronize {
-            __set(key, value)
-        }
-    end
-
-    alias __get []
-        
-    def [] (key)
-        if key.is_a?(String)
-            key = key.downcase
-        end
-
-        @semaphore.synchronize {
-            return __get(key)
-        }
-    end
-
-    alias __delete delete
-
-    def delete (key)
-        if key.is_a?(String)
-            key = key.downcase
-        end
-
-        @semaphore.synchronize {
-            __delete(key)
-        }
     end
 
     def inspect

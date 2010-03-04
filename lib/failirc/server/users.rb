@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'thread'
+require 'failirc/hash'
 require 'failirc/server/user'
 
 module IRC
@@ -28,31 +28,7 @@ class Users < Hash
     def initialize (channel)
         @channel = channel
 
-        @semaphore = Mutex.new
-    end
-
-    alias __set []=
-
-    def []= (key, value)
-        if !value.is_a?(User)
-            raise 'You can only set User.'
-        end
-
-        key = key.downcase
-
-        @semaphore.synchronize {
-            __set(key, value)
-        }
-    end
-
-    alias __get []
-
-    def [] (key)
-        key = key.downcase
-
-        @semaphore.synchronize {
-            return __get key
-        }
+        super()
     end
 
     alias __delete delete
@@ -73,9 +49,7 @@ class Users < Hash
         if user
             user.server.dispatcher.execute(:user_delete, user, message)
 
-            @semaphore.synchronize {
-                __delete(key)
-            }
+            __delete(key)
 
             if channel.empty?
                 channel.server.channels.delete(channel.name)

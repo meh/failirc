@@ -163,11 +163,11 @@ class Server
                 }
 
                 @clients.each {|key, client|
-                    client.socket.close
+                    kill client, 'Good night sweet prince.'
                 }
 
                 @links.each {|key, link|
-                    link.socket.close
+                    kill client, 'Good night sweet prince.'
                 }
             end
         ensure
@@ -194,15 +194,21 @@ class Server
 
                 if reading
                     reading.each {|socket|    
+                        if @dispatcher.handling[:input][socket]
+                            next
+                        end
+
+                        puts "^_^ #{things[socket]}"
+
                         Thread.new {
                             begin
                                 string = socket.gets
 
-                                if string
+                                if !string || string.empty?
+                                    kill things[socket], 'wat'
+                                else
                                     @dispatcher.dispatch :input, things[socket], string.chomp
                                 end
-                            rescue IOError, Errno::EBADF, Errno::EPIPE
-                                kill things[socket], 'Client exited.'
                             rescue Exception => e
                                 debug e
                             end
@@ -238,7 +244,10 @@ class Server
             @links.delete(thing.host)
         end
 
-        thing.socket.close
+        begin
+            thing.socket.close
+        rescue IOError
+        end
     end
 
     def rehash
