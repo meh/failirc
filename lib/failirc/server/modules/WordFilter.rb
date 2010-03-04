@@ -17,17 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/extensions'
 require 'failirc/server/module'
 
 module IRC
 
 module Modules
 
-class GAYLIFE < Module
+class WordFilter < Module
     def initialize (server)
         @events = {
             :input => {
-                :PRIVMSG => Event::Callback.new(self.method(:gay), -500),
+                :PRIVMSG => Event::Callback.new(self.method(:filter), -500),
             }
         }
 
@@ -35,16 +36,28 @@ class GAYLIFE < Module
     end
 
     def rehash
-        @rainbow = @server.config.elements['config/modules/module[@name="GAYLIFE"]/rainbow']
+        # config for the rainbow filter
+        @rainbow = @server.config.elements['config/modules/module[@name="WordFilter"]/rainbow']
 
         if @rainbow
             @rainbow = @rainbow.text
         else
             @rainbow = 'rrRRyyYYGGggccCCBBppPP'
         end
+
+        # config for the replaces filter
+        @replaces = []
+
+        stuff = @server.config.elements['config/modules/module[@name="WordFilter"]/replaces']
+
+        if stuff
+            stuff.elements['replace'].each {|element|
+                @replaces.push({ :from => element.attributes['word'], :to => element.attributes['with'] })
+            }
+        end
     end
 
-    def gay (thing, string)
+    def filter (thing, string)
         match = string.match(/\s+(.*?)\s+:(.*)$/)
 
         if !match
@@ -54,28 +67,36 @@ class GAYLIFE < Module
         name    = match[1]
         message = match[2]
 
-        if (Channel.check(name) && thing.server.channels[name].modes[:gay]) || thing.modes[:gay]
-            string.sub!(/#{Regexp.escape(message)}/, gayify(message))
+        channel  = Channel.check(name) ? thing.server.channels[name].modes : {}
+        client   = thing.modes
+        original = message.clone
+
+        if channel[:gay] || client[:gay]
+            rainbow(message, 'rrRRyyYYGGggccCCBBppPP')
         end
+
+        string.sub!(/#{Regexp.escape(original)}/, message)
     end
 
-    def gayify (string)
+    def rainbow (string, pattern=@rainbow)
+        string = string.gsub(/\003(\d+(,\d+)?)?/, '')
+
         result   = ''
         position = 0
 
         string.each_char {|char|
-            if position >= @rainbow.length
+            if position >= pattern.length
                 position = 0
             end
 
-            result << GAYLIFE.code(@rainbow[position, 1]) << char
+            result << WordFilter.color(pattern[position, 1]) << char
             position += 1
         }
 
-        return result
+        string.assign!(result)
     end
 
-    def self.code (char)
+    def self.color (char)
         return "\003#{@@colors[char.to_sym]}"
     end
 

@@ -27,7 +27,7 @@ class Roulette < Module
     def initialize (server)
         @aliases = {
             :input => {
-                :ROULETTE => /^ROULETTE/i,
+                :ROULETTE => /^ROULETTE( |$)/i,
             },
         }
 
@@ -54,7 +54,7 @@ class Roulette < Module
         if @life
             @life = @life.text
         else
-            @life = 'The faggot shoot but survived :('
+            @life = 'The faggot shot but survived :('
         end
     end
 

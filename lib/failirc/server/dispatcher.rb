@@ -18,7 +18,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'thread'
-require 'failirc/hash'
+require 'failirc/extensions'
 require 'failirc/utils'
 require 'failirc/server/event'
 
@@ -27,7 +27,7 @@ module IRC
 class Dispatcher
     include Utils
 
-    class Input < Hash
+    class Input < ThreadSafeHash
         def initialize
             super()
         end
@@ -49,9 +49,9 @@ class Dispatcher
         end
     end
 
-    class Output < ::Hash
+    class Output < Hash
         def initialize
-            @handling = Hash.new
+            @handling = ThreadSafeHash.new
 
             super()
         end
@@ -137,20 +137,23 @@ class Dispatcher
                                 string = socket.gets
 
                                 if !string || string.empty?
-                                    server.kill thing, 'Client exited.'
+                                    raise Errno::EPIPE
                                 else
                                     if !string.strip!.empty?
                                         dispatch :input, thing, string
                                     end
                                 end
-                            rescue IOError
+                            rescue IOError, Errno::EBADF, Errno::EPIPE
+                                server.kill thing, 'Client exited.'
+                            rescue Errno::ECONNRESET
+                                server.kill thing, 'Connection reset by peer.'
                             rescue Exception => e
                                 debug e
                             end
                         }
                     }
                 end
-            rescue IOError, Errno::EBADF, Errno::EPIPE
+            rescue IOError, Errno::EBADF, Errno::EPIPE, Errno::ECONNRESET
             rescue Exception => e
                 self.debug e
             end

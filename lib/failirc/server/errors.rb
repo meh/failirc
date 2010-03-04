@@ -145,7 +145,7 @@ ERR_USERNOTINCHANNEL = {
 # Returned by the server whenever a client tries to perform a channel effecting command for which the client isn't a member.
 ERR_NOTONCHANNEL = {
     :code => 442,
-    :text => '"#{value.name} :You\'re not on that channel"'
+    :text => '"#{value} :You\'re not on that channel"'
 }
 
 # Returned when a client tries to invite a user to a channel they are already on.

@@ -33,8 +33,8 @@ module Modules
 
 class Standard < Module
     def initialize (server)
-        @pingedOut = Hash.new
-        @toPing    = Hash.new
+        @pingedOut = ThreadSafeHash.new
+        @toPing    = ThreadSafeHash.new
 
         @pingThread = Thread.new {
             while true
@@ -53,7 +53,7 @@ class Standard < Module
 
                 @pingedOut.each_value {|client|
                     if !client.socket.closed?
-                        error(client, 'Ping timeout', :close)
+                        Utils::error(client, 'Ping timeout', :close)
                         server.kill(client, 'Ping timeout')
                     end
                 }
@@ -84,9 +84,9 @@ class Standard < Module
                 :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
                 :NOTICE  => /^NOTICE( |$)/i,
 
-                :QUIT => /^QUIT( |$)/i,
-
                 :MAP => /^MAP( |$)/i,
+
+                :QUIT => /^QUIT( |$)/i,
             },
         }
 
@@ -113,7 +113,7 @@ class Standard < Module
                 :MODE => self.method(:mode),
                 :OPER => self.method(:oper),
 
-                :PASS => self.method(:auth),
+                :PASS => self.method(:pass),
                 :NICK => self.method(:nick),
                 :USER => self.method(:user),
 
@@ -127,9 +127,9 @@ class Standard < Module
                 :PRIVMSG => self.method(:privmsg),
                 :NOTICE  => self.method(:notice),
 
-                :QUIT => self.method(:quit),
-
                 :MAP => self.method(:map),
+
+                :QUIT => self.method(:quit),
             },
         }
 
@@ -203,7 +203,7 @@ class Standard < Module
                 return false
             end
 
-            def self.banned? (chanel, client)
+            def self.banned? (channel, client)
                 channel.modes[:bans].each {|ban|
                     if ban.mask.match(client.mask)
                         return true
@@ -211,6 +211,58 @@ class Standard < Module
                 }
 
                 return false
+            end
+        end
+
+        def error (thing, message, type=nil)
+            case type
+                when :close
+                    error(thing, "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})")
+                else
+                    thing.send :raw, "ERROR :#{message}"
+            end
+        end
+
+        def motd (user)
+            user.send :numeric, RPL_MOTDSTART
+    
+            offset = 0
+            motd   = user.server.config.elements['config/server/motd'].text.strip
+    
+            while line = motd[offset, 80]
+                user.send :numeric, RPL_MOTD, line
+                offset += 80
+            end
+    
+            user.send :numeric, RPL_ENDOFMOTD
+        end
+
+        def setMode (thing, mode)
+            match = mode.match(/^\s*([=+\-])\s*(.*)$/)
+    
+            if !match
+                return false
+            end
+    
+            if thing.is_a?(User)
+                case match[1]
+                    when '+'
+                        if match[2].match(/o/)
+                            thing.modes[:o]             = true
+                            thing.modes[:can_set_topic] = true
+        
+                            if !thing.modes[:q] && !thing.modes[:a]
+                                thing.modes[:level] = '@'
+                            end
+                        end
+                    when '-'
+    
+                    when '='
+                end
+            elsif thing.is_a?(Client)
+    
+            elsif thing.is_a?(Channel)
+    
             end
         end
     end
@@ -248,7 +300,109 @@ class Standard < Module
         end
     end
 
-    def auth (thing, string)
+    def ping (thing, string)
+        match = string.match(/PING\s+(.*)$/i)
+
+        if !match
+            thing.send :numeric, ERR_NOORIGIN
+        else
+            thing.send :raw, ":#{thing.server.host} PONG #{thing.server.host} :#{match[1]}"
+
+            # RFC isn't that clear about when this error should be shoot
+            # thing.send :numeric, ERR_NOSUCHSERVER, match[1]
+        end
+    end
+
+    def pong (thing, string)
+        match = string.match(/PONG\s+(:)?(.*)$/i)
+
+        if !match
+            thing.send :numeric, ERR_NOORIGIN
+        else
+            if match[2] == thing.server.host
+                @pingedOut.delete(thing.socket)
+            else
+                thing.send :numeric, ERR_NOSUCHSERVER, match[2]
+            end
+        end
+    end
+
+    @@modes = {
+        :channel => {
+            :a => :anonymous,
+            :m => :moderated,
+            :i => :inviteOnly,
+            :s => :secret,
+        },
+
+        :user => {
+            :o => :operator,
+            :v => :speaker,
+        },
+
+        :client => {
+            :o => :operator,
+        },
+    }
+
+    def mode (thing, string)
+        # MODE user/channel = +option,-option
+        match = string.match(/MODE\s+([^ ]+)(\s+(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'MODE'
+        else
+            name  = match[1]
+            value = match[3]
+
+            if Utils::Channel::isValid(name) && thing.server.channels[name]
+                channel = thing.server.channels[name]
+
+                if !value
+                    thing.send :numeric, RPL_CHANNELMODEIS, {
+                        :channel => channel,
+                        :user    => thing,
+                    }
+
+                    thing.send :numeric, RPL_CHANCREATEDON, channel
+                elsif value[0, 1] == '='
+                    Utils::setMode channel, value
+                else
+                    if match = value.match(/^(\+)?b(.*)$/)
+                        value = match[2]
+
+                        if !value.empty?
+                            
+                        else
+                            thing.server.channels[name].modes[:bans].each {|ban|
+                                thing.send :numeric, RPL_BANLIST, ban
+                            }
+
+                            thing.send :numeric, RPL_ENDOFBANLIST, name
+                        end
+                    end
+                end
+            else
+
+            end
+        end
+    end
+
+    def oper (thing, string)
+        match = string.match(/OPER\s+(.*?)\s+(.*?)$/)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'OPER'
+        else
+            server.config.elements['operators/operator'].each {|element|
+                thing.send :numeric, RPL_YOUREOPER
+            }
+
+            thing.send :numeric, ERR_NOOPERHOST
+        end
+    end
+
+    def pass (thing, string)
         match = string.match(/PASS\s+(.+)$/i)
 
         if !match
@@ -363,155 +517,13 @@ class Standard < Module
                 thing.send :numeric, RPL_HOSTEDBY, thing
                 thing.send :numeric, RPL_SERVCREATEDON
 
-                send_motd(thing)
+                Utils::motd(thing)
             end
-        end
-    end
-
-    def error (thing, message, type=nil)
-        case type
-            when :close
-                error(thing, "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})")
-            else
-                thing.send :raw, "ERROR :#{message}"
-        end
-    end
-
-    def send_motd (user)
-        user.send :numeric, RPL_MOTDSTART
-
-        offset = 0
-        motd   = user.server.config.elements['config/server/motd'].text.strip
-
-        while line = motd[offset, 80]
-            user.send :numeric, RPL_MOTD, line
-            offset += 80
-        end
-
-        user.send :numeric, RPL_ENDOFMOTD
-    end
-
-    def ping (thing, string)
-        match = string.match(/PING\s+(.*)$/i)
-
-        if !match
-            thing.send :numeric, ERR_NOORIGIN
-        else
-            thing.send :raw, ":#{thing.server.host} PONG #{thing.server.host} :#{match[1]}"
-
-            # RFC isn't that clear about when this error should be shoot
-            # thing.send :numeric, ERR_NOSUCHSERVER, match[1]
-        end
-    end
-
-    def pong (thing, string)
-        match = string.match(/PONG\s+(:)?(.*)$/i)
-
-        if !match
-            thing.send :numeric, ERR_NOORIGIN
-        else
-            if match[2] == thing.server.host
-                @pingedOut.delete(thing.socket)
-            else
-                thing.send :numeric, ERR_NOSUCHSERVER, match[2]
-            end
-        end
-    end
-
-    def oper (thing, string)
-        match = string.match(/OPER\s+(.*?)\s+(.*?)$/)
-
-        if !match
-            thing.send :numeric, ERR_NEEDMOREPARAMS, 'OPER'
-        else
-            server.config.elements['operators/operator'].each {|element|
-
-            }
-
-            thing.send :numeric, RPL_YOUREOPER
-        end
-    end
-
-    @@modes = {
-        :channel => {
-            :a => :anonymous,
-        },
-
-        :user => {
-
-        },
-    }
-
-    def mode (thing, string)
-        # MODE user/channel = +option,-option
-        match = string.match(/MODE\s+([^ ]+)(\s+(.*))?$/i)
-
-        if !match
-            thing.send :numeric, ERR_NEEDMOREPARAMS, 'MODE'
-        else
-            name  = match[1]
-            value = match[3]
-
-            if Utils::Channel::isValid(name) && thing.server.channels[name]
-                if !value
-                    thing.send :numeric, RPL_CHANNELMODEIS, {
-                        :channel => thing.server.channels[name],
-                        :user    => thing,
-                    }
-
-                    thing.send :numeric, RPL_CHANCREATEDON, thing.server.channels[name]
-                elsif value[0, 1] == '='
-                    set_mode thing.server.channels[name], value
-                else
-                    if match = value.match(/^(\+)?b(.*)$/)
-                        value = match[2]
-
-                        if value
-                            
-                        else
-                            thing.server.channels[name].modes[:bans].each {|ban|
-                                thing.send :numeric, RPL_BANLIST, ban
-                            }
-
-                            thing.send :numeric, RPL_ENDOFBANLIST, name
-                        end
-                    end
-                end
-            else
-
-            end
-        end
-    end
-
-    def set_mode (thing, mode)
-        match = mode.match(/^\s*([=+\-])\s*(.*)$/)
-
-        if !match
-            return false
-        end
-
-        if thing.is_a?(User)
-            case match[1] '+'
-                if match[2].match(/o/)
-                    thing.modes[:o]             = true
-                    thing.modes[:can_set_topic] = true
-
-                    if !thing.modes[:q] && !thing.modes[:a]
-                        thing.modes[:level] = '@'
-                    end
-                end
-            else
-
-            end
-        elsif thing.is_a?(Client)
-
-        elsif thing.is_a?(Channel)
-
         end
     end
 
     def join (thing, string)
-        match = string.match(/JOIN\s+(.+)(\s+(.+))?$/i)
+        match = string.match(/JOIN\s+(.+?)(\s+(.+))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'JOIN'
@@ -533,47 +545,80 @@ class Standard < Module
             end
 
             if !thing.server.channels[channel]
-                thing.server.channels[channel]                 = Channel.new(server, channel)
-                thing.server.channels[channel].modes[:type]    = channel[0, 1]
-                thing.server.channels[channel].modes[:bans]    = []
-                thing.server.channels[channel].modes[:invites] = []
+                channel = thing.server.channels[channel] = Channel.new(server, channel)
+                channel.modes[:type]    = channel.name[0, 1]
+                channel.modes[:bans]    = []
+                channel.modes[:invites] = []
+            else
+                channel = thing.server.channels[channel]
             end
 
-            if thing.server.channels[channel].modes[:k] && password != thing.server.channels[channel].modes[:password]
+            if channel.modes[:k] && password != channel.modes[:password]
                 thing.send :numeric, ERR_BADCHANNELKEY, channel
                 return 
             end
 
-            if thing.server.channels[channel].modes[:i] && !Utils::Channel::invited?(channel, thing)
-                thing.send :numeric, ERR_INVITEONLYCHAN, channel
+            if channel.modes[:i] && !Utils::Channel::invited?(channel, thing)
+                thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
                 return
             end
 
             if Utils::Channel::banned?(channel, thing)
-                thing.send :numeric, ERR_BANNEDFROMCHAN, channel
+                thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
                 return
             end
 
-            empty = thing.server.channels[channel].empty?
-            user  = thing.server.channels[channel].users.add(thing)
+            empty = channel.empty?
+            user  = channel.users.add(thing)
 
             if empty
-                set_mode user, '+o'
+                Utils::setMode user, '+o'
             end
 
-            thing.channels.add(thing.server.channels[channel])
+            thing.channels.add(channel)
 
-            if !thing.channels[channel].topic.nil?
-                topic thing, "TOPIC #{channel}"
+            if !channel.topic.nil?
+                topic thing, "TOPIC #{channel.name}"
             end
 
-            names thing, "NAMES #{channel}"
+            names thing, "NAMES #{channel.name}"
         end
     end
 
     def send_join (thing)
         thing.channel.users.each_value {|user|
             user.send :raw, ":#{thing.mask} JOIN :#{thing.channel.name}"
+        }
+    end
+
+    def part (thing, string)
+        match = string.match(/PART\s+(.+?)(\s+:(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'PART'
+        else
+            name    = match[1]
+            message = match[3]
+            channel = thing.server.channels[name]
+
+            if !channel
+                thing.send :numeric, ERR_NOSUCHCHANNEL, name
+            elsif !thing.channels[name]
+                thing.send :numeric, ERR_NOTONCHANNEL, name
+            else
+                channel.users.delete(thing, message)
+                thing.channels.delete(name)
+            end
+        end
+    end
+
+    def send_part (thing, message)
+        if thing.client.modes[:quitting]
+            return
+        end
+
+        thing.channel.users.each_value {|user|
+            user.send :raw, ":#{thing.mask} PART #{thing.channel.name} :#{message}"
         }
     end
 
@@ -655,45 +700,6 @@ class Standard < Module
 
         thing.send :numeric, RPL_ENDOFWHO, name
     end
-
-    def part (thing, string)
-        match = string.match(/PART\s+(.+)(\s+:(.*))?$/i)
-
-        if !match
-            thing.send :numeric, ERR_NEEDMOREPARAMS, 'PART'
-        else
-            if !thing.server.channels[match[1]]
-                thing.send :numeric, ERR_NOSUCHCHANNEL, match[1]
-            elsif !thing.channels[match[1]]
-                thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[match[1]]
-            else
-                thing.server.channels[match[1]].users.delete(thing, match[2])
-                thing.channels.delete(match[1])
-            end
-        end
-    end
-
-    def send_part (thing, message)
-        if thing.client.modes[:quitting]
-            return
-        end
-
-        thing.channel.users.each_value {|user|
-            user.send :raw, ":#{thing.mask} PART #{thing.channel.name} :#{message}"
-        }
-    end
-
-    def quit (thing, string)
-        match = /^QUIT((\s+)(:)?(.*)?)?$/i.match(string)
-
-        thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[4] || thing.nick}")
-    end
-
-    def send_quit (thing, message)
-        thing.channels.users.each_value {|user|
-            user.send :raw, ":#{thing.mask} QUIT :#{message}"
-        }
-    end 
 
     def privmsg (thing, string)
         match = string.match(/PRIVMSG\s+(.*?)(\s+:(.*))?$/i)
@@ -782,6 +788,18 @@ class Standard < Module
     def map (thing, string)
         send_notice(@server, thing, 'The X tells the point.')
     end
+
+    def quit (thing, string)
+        match = /^QUIT((\s+)(:)?(.*)?)?$/i.match(string)
+
+        thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[4] || thing.nick}")
+    end
+
+    def send_quit (thing, message)
+        thing.channels.users.each_value {|user|
+            user.send :raw, ":#{thing.mask} QUIT :#{message}"
+        }
+    end 
 end
 
 end

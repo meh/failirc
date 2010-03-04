@@ -17,12 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/hash'
+require 'failirc/extensions'
 require 'failirc/server/link'
 
 module IRC
 
-class Links < Hash
+class Links < ThreadSafeHash
     attr_reader :server
 
     def initialize (server)

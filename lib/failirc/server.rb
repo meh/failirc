@@ -55,8 +55,8 @@ class Server
 
             self[:sockets] = []
             self[:things]  = {}
-            self[:clients] = {}
-            self[:links]   = {}
+            self[:clients] = CaseInsensitiveHash.new
+            self[:links]   = CaseInsensitiveHash.new
         end
 
         def empty?
@@ -101,7 +101,7 @@ class Server
         @connections = Connections.new(self)
         @channels    = Channels.new(self)
 
-        @killing = Hash.new
+        @killing = ThreadSafeHash.new
 
         self.config = conf
     end

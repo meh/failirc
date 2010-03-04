@@ -24,3 +24,87 @@ class String
         self
     end
 end
+
+class CaseInsensitiveHash < Hash
+    def initialize (*args)
+        super(*args)
+    end
+
+    private
+
+    alias ___set___ []=
+    alias ___get___ []
+    alias ___delete___ delete
+
+    public
+
+    def []= (key, value)
+        if key.class == String
+            key = key.downcase
+        end
+
+        ___set___(key, value)
+    end
+
+    def [] (key)
+        if key.class == String
+            key = key.downcase
+        end
+        
+        return ___get___(key)
+    end
+
+    def delete (key)
+        if key.class == String
+            key = key.downcase
+        end
+
+        ___delete___(key)
+    end
+end
+
+class ThreadSafeHash < CaseInsensitiveHash
+    def initialize (*args)
+        @semaphore = Mutex.new
+
+        super(*args)
+    end
+
+    private
+
+    alias __set__ []=
+    alias __get__ []
+    alias __delete__ delete
+
+    public
+
+    def []= (key, value)
+        begin
+            @semaphore.synchronize {
+                return __set__(key, value)
+            }
+        rescue ThreadError
+            return __set__(key, value)
+        end
+    end
+
+    def [] (key)
+        begin
+            @semaphore.synchronize {
+                return __get__(key)
+            }
+        rescue ThreadError
+            return __get__(key)
+        end
+    end
+
+    def delete (key)
+        begin
+            @semaphore.synchronize {
+                return __delete__(key)
+            }
+        rescue ThreadError
+            return __delete__(key)
+        end
+    end
+end
