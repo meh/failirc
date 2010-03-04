@@ -30,9 +30,9 @@ class Hash < ::Hash
 
     private
 
-    alias __set []=
-    alias __get []
-    alias __delete delete
+    alias __set__ []=
+    alias __get__ []
+    alias __delete__ delete
 
     public
 
@@ -43,10 +43,10 @@ class Hash < ::Hash
 
         begin
             @semaphore.synchronize {
-                return __set(key, value)
+                return __set__(key, value)
             }
         rescue ThreadError
-            return __set(key, value)
+            return __set__(key, value)
         end
     end
 
@@ -57,10 +57,10 @@ class Hash < ::Hash
 
         begin
             @semaphore.synchronize {
-                return __get(key)
+                return __get__(key)
             }
         rescue ThreadError
-            return __get(key)
+            return __get__(key)
         end
     end
 
@@ -71,10 +71,10 @@ class Hash < ::Hash
 
         begin
             @semaphore.synchronize {
-                return __delete(key)
+                return __delete__(key)
             }
         rescue ThreadError
-            return __delete(key)
+            return __delete__(key)
         end
     end
 end

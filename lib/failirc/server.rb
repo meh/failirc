@@ -66,10 +66,18 @@ class Server
         alias __delete delete
 
         def delete (socket)
+            thing = self[:things][socket]
+
+            if thing.is_a?(Client)
+                self[:clients].delete(thing.nick)
+                self[:clients].delete(socket)
+            elsif thing.is_a?(Link)
+                self[:links].delete(thing.host)
+                self[:links].delete(socket)
+            end
+
             self[:sockets].delete(socket)
             self[:things].delete(socket)
-            self[:clients].delete(socket)
-            self[:links].delete(socket)
 
             socket.close rescue IOError
         end
