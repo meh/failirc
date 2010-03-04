@@ -41,9 +41,13 @@ class Hash < ::Hash
             key = key.downcase
         end
 
-        @semaphore.synchronize {
+        begin
+            @semaphore.synchronize {
+                return __set(key, value)
+            }
+        rescue ThreadError
             return __set(key, value)
-        }
+        end
     end
 
     def [] (key)
@@ -51,9 +55,13 @@ class Hash < ::Hash
             key = key.downcase
         end
 
-        @semaphore.synchronize {
+        begin
+            @semaphore.synchronize {
+                return __get(key)
+            }
+        rescue ThreadError
             return __get(key)
-        }
+        end
     end
 
     def delete (key)
@@ -61,9 +69,13 @@ class Hash < ::Hash
             key = key.downcase
         end
 
-        @semaphore.synchronize {
+        begin
+            @semaphore.synchronize {
+                return __delete(key)
+            }
+        rescue ThreadError
             return __delete(key)
-        }
+        end
     end
 end
 

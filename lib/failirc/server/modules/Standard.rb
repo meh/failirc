@@ -187,7 +187,7 @@ class Standard < Module
     end
 
     def check (event, thing, string)
-        if event.chain != :input && !thing && !string
+        if event.chain != :input || !thing || !string
             return
         end
 
@@ -303,10 +303,10 @@ class Standard < Module
 
                 thing.host = thing.socket.peeraddr[2]
                 thing.ip   = thing.socket.peeraddr[3]
-            end
 
-            # try to register it
-            registration(thing)
+                # try to register it
+                registration(thing)
+            end
         elsif thing.is_a?(Link)
 
         end

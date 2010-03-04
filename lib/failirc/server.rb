@@ -62,6 +62,17 @@ class Server
         def empty?
             self[:sockets].empty?
         end
+
+        alias __delete delete
+
+        def delete (socket)
+            self[:sockets].delete(socket)
+            self[:things].delete(socket)
+            self[:clients].delete(socket)
+            self[:links].delete(socket)
+
+            socket.close rescue IOError
+        end
     end
 
     attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :connections, :config
@@ -77,6 +88,8 @@ class Server
 
         @connections = Connections.new(self)
         @channels    = Channels.new(self)
+
+        @killing = Hash.new
 
         self.config = conf
     end
@@ -226,32 +239,33 @@ class Server
 
     # kill connection with harpoons on fire
     def kill (thing, message=nil)
+        if @killing[thing]
+            return
+        end
+
         if thing.is_a?(User)
             thing = thing.client
         end
 
-        thing.modes[:quitting] = true
+        @killing[thing] = true
+
         @dispatcher.execute(:kill, thing, message)
 
         if thing.is_a?(Client)
-            @connections[:clients].delete(thing.socket)
+            thing.modes[:quitting] = true
 
             if thing.modes[:registered]
-                @connections[:clients].delete(thing.nick)
-
                 @channels.each_value {|channel|
                     channel.users.delete(thing.nick)
                 }
             end
         elsif thing.is_a?(Link)
-            @connections[:links].delete(thing.host)
-            @connections[:links].delete(thing.socket)
+            # wat
         end
 
-        @connections[:things].delete(thing.socket)
-        @connections[:sockets].delete(thing.socket)
+        @connections.delete(thing.socket)
 
-        thing.socket.close
+        @killing.delete(thing)
     end
 
     # reload the config and modules' configurations
