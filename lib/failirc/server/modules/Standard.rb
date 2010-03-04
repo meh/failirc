@@ -46,7 +46,8 @@ class Standard < Module
                     end
                 }
 
-                @toPing = Hash.new[server.clients.values.collect {|client| [client.socket, client]}]
+                @toPing.clear
+                @toPing.merge!(::Hash[server.clients.values.collect {|client| [client.socket, client]}])
 
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 

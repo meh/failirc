@@ -27,15 +27,75 @@ module IRC
 class Dispatcher
     include Utils
 
-    attr_reader :server, :handling, :aliases, :events
+    class Input < Hash
+        def initialize
+            super()
+        end
+
+        def start (chain, deep, socket)
+            if !deep && chain == :input
+                self[socket] = true
+            end
+        end
+
+        def stop (chain, deep, socket)
+            if !deep && chain == :input
+                self[socket] = false
+            end
+        end
+
+        def handling? (socket)
+            self[socket]
+        end
+    end
+
+    class Output < ::Hash
+        def initialize
+            @handling = Hash.new
+
+            super()
+        end
+
+        alias __get []
+
+        def [] (socket)
+            if !__get(socket)
+                self[socket] = Queue.new
+            end
+
+            return __get(socket)
+        end
+
+        def push (socket, text)
+            self[socket].push(text)
+        end
+
+        def pop (socket)
+            self[socket].pop(true) rescue nil
+        end
+
+        def flush (socket)
+            if @handling[socket]
+                return
+            end
+
+            @handling[socket] = true
+            
+            while out = pop(socket)
+                socket.puts out
+            end
+
+            @handling[socket] = false
+        end
+    end
+
+    attr_reader :server, :output, :handling, :aliases, :events
 
     def initialize (server)
         @server = server
 
-        @handling = Hash.new(
-            :input  => {},
-            :output => {},
-        )
+        @input  = Input.new
+        @output = Output.new
 
         @aliases = {
             :input  => {},
@@ -68,7 +128,7 @@ class Dispatcher
                     reading.each {|socket|
                         thing = server.connections[:things][socket]
 
-                        if @dispatcher.handling[:input][socket]
+                        if @input.handling?(socket)
                             next
                         end
 
@@ -77,9 +137,9 @@ class Dispatcher
                                 string = socket.gets
 
                                 if !string || string.empty?
-                                    kill thing, 'wat'
+                                    server.kill thing, 'wat'
                                 else
-                                    @dispatcher.dispatch :input, thing, string.chomp
+                                    dispatch :input, thing, string.chomp
                                 end
                             rescue Exception => e
                                 debug e
@@ -99,11 +159,7 @@ class Dispatcher
             return
         end
 
-        if !deep
-            @semaphore.synchronize {
-                @handling[chain][thing.socket] = true
-            }
-        end
+        @input.start(chain, deep, thing.socket)
 
         event  = Event.new(self, chain, thing, string)
         result = string
@@ -114,13 +170,18 @@ class Dispatcher
             tmp = callback.call(event, thing, string)
 
             if tmp == false
+                @input.stop(chain, deep, thing.socket)
                 return false
             elsif tmp.is_a?(String)
                 string = result = tmp
             end
 
             if event.type && !event.same?(string)
-                return dispatch(chain, thing, string, true)
+                result = dispatch(chain, thing, string, true)
+
+                @input.stop(chain, deep, thing.socket)
+
+                return result
             end
         }
 
@@ -135,12 +196,17 @@ class Dispatcher
                 end
     
                 if tmp == false
+                    @input.stop(chain, deep, thing.socket)
                     return false
                 elsif tmp.is_a?(String)
                     string = result = tmp
     
                     if !event.same?(string)
-                        return dispatch(chain, thing, string, true)
+                        result = dispatch(chain, thing, string, true)
+
+                        @input.stop(chain, deep, thing.socket)
+
+                        return result
                     end
                 end
             }
@@ -151,13 +217,20 @@ class Dispatcher
                 tmp = callback.call(event, thing, string)
     
                 if tmp == false
+                    @input.stop(chain, deep, thing.socket)
                     return false
                 elsif tmp.is_a?(String)
                     string = result = tmp
                 end
     
                 if event.type && !event.same?(string)
-                    return dispatch(chain, thing, string, true)
+                    result = dispatch(chain, thing, string, true)
+
+                    if !deep && chain == :input
+                        @handling[thing.socket] = false
+                    end
+
+                    return result
                 end
             }
         end
@@ -168,21 +241,22 @@ class Dispatcher
             tmp = callback.call(event, thing, string)
 
             if tmp == false
+                @input.stop(chain, deep, thing.socket)
                 return false
             elsif tmp.is_a?(String)
                 string = result = tmp
             end
 
             if event.type && !event.same?(string)
-                return dispatch(chain, thing, string, true)
+                result = dispatch(chain, thing, string, true)
+
+                @input.stop(chain, deep, thing.socket)
+
+                return result
             end
         }
 
-        if !deep && chain == :input
-            @semaphore.synchronize {
-                @handling[chain][thing.socket] = false
-            }
-        end
+        @input.stop(chain, deep, thing.socket)
 
         return result
     end

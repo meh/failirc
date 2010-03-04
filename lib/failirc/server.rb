@@ -77,7 +77,7 @@ class Server
         @connections = Connections.new(self)
         @channels    = Channels.new(self)
 
-        config = conf
+        self.config = conf
     end
 
     def clients
@@ -105,9 +105,9 @@ class Server
 
             if klass
                 @modules[name] = klass.new(self)
-                self.debug "Loaded `#{name}`", nil
+                self.debug "Loaded `#{name}`.", nil
             else
-                self.debug "Failed to load `#{name}`", ''
+                self.debug "Failed to load `#{name}`.", nil
             end
         rescue Exception => e
             self.debug(e)
@@ -212,8 +212,11 @@ class Server
 
     # Executed with each incoming connection
     def run (socket, listen)
+        # here, somehow we should check if the incoming peer is a linked server or a real client
+
         begin
-            @clients[socket] = IRC::Client.new(self, socket, listen)
+            @connections[:sockets].push(socket)
+            @connections[:things][socket]  = @connections[:clients][socket] = IRC::Client.new(self, socket, listen)
         rescue Exception => e
             socket.close
             self.debug(e)
@@ -222,26 +225,29 @@ class Server
 
     # kill connection with harpoons on fire
     def kill (thing, message=nil)
-        thing.modes[:quitting] = true
-        @dispatcher.execute(:kill, thing, message)
-
         if thing.is_a?(User)
             thing = thing.client
         end
 
+        thing.modes[:quitting] = true
+        @dispatcher.execute(:kill, thing, message)
+
         if thing.is_a?(Client)
-            @clients.delete(thing.socket)
+            @connections[:clients].delete(thing.socket)
 
             if thing.modes[:registered]
-                @clients.delete(thing.nick)
+                @connections[:clients].delete(thing.nick)
 
                 @channels.each_value {|channel|
                     channel.users.delete(thing.nick)
                 }
             end
         elsif thing.is_a?(Link)
-            @links.delete(thing.host)
+            @connections[:links].delete(thing.host)
+            @connections[:links].delete(thing.socket)
         end
+
+        @connection[:things].delete(thing.socket)
 
         thing.socket.close rescue nil
     end
@@ -308,6 +314,8 @@ class Server
         @modules.each_value {|mod|
             mod.rehash
         }
+
+        self.debug 'Loading modules.', nil
 
         @config.elements.each('config/modules/module') {|element|
             if !element.attributes['path']

@@ -126,7 +126,7 @@ RPL_LISTEND = {
 
 RPL_CHANNELMODEIS = {
     :code => 324,
-    :text => '"#{value[:user].nick} #{value[:channel].name} #{value[:channel].modes}"'
+    :text => '"#{value[:channel].name} #{value[:channel].modes}"'
 }
 
 RPL_NOTOPIC = {
