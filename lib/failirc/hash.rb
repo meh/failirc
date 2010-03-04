@@ -46,8 +46,6 @@ class Hash < ::Hash
         }
     end
 
-    alias __get []
-
     def [] (key)
         if key.class == String
             key = key.downcase

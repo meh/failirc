@@ -138,6 +138,19 @@ class Standard < Module
     end
 
     module Utils
+        module Client
+            class Action
+                attr_reader :client, :event, :string, :on
+
+                def initialize (client, event, string)
+                    @client = client
+                    @event  = event
+                    @string = string
+                    @on     = Time.now
+                end
+            end
+        end
+
         module Channel
             class Ban
                 attr_reader  :setBy, :setOn, :channel, :mask
@@ -178,7 +191,7 @@ class Standard < Module
         @toPing.delete(thing.socket)
         @pingedOut.delete(thing.socket)
 
-        thing.lastAction = Client::Action.new(thing, event, string)
+        thing.modes[:last_action] = Utils::Client::Action.new(thing, event, string)
 
         stop = false
 

@@ -18,25 +18,24 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'thread'
+require 'failirc/hash'
 require 'failirc/utils'
 require 'failirc/server/event'
 
 module IRC
 
-class EventDispatcher
+class Dispatcher
     include Utils
 
     attr_reader :server, :handling, :aliases, :events
 
     def initialize (server)
-        @semaphore = Mutex.new
-
         @server = server
 
-        @handling = {
+        @handling = Hash.new(
             :input  => {},
             :output => {},
-        }
+        )
 
         @aliases = {
             :input  => {},
@@ -53,6 +52,46 @@ class EventDispatcher
             :input  => {},
             :output => {},
         }
+    end
+
+    def loop
+        while !server.stopping?
+            if server.connections.empty?
+                sleep 2
+                next
+            end
+
+            begin
+                reading, = IO::select server.connections[:sockets], nil, nil, 2
+
+                if reading
+                    reading.each {|socket|
+                        thing = server.connections[:things][socket]
+
+                        if @dispatcher.handling[:input][socket]
+                            next
+                        end
+
+                        Thread.new {
+                            begin
+                                string = socket.gets
+
+                                if !string || string.empty?
+                                    kill thing, 'wat'
+                                else
+                                    @dispatcher.dispatch :input, thing, string.chomp
+                                end
+                            rescue Exception => e
+                                debug e
+                            end
+                        }
+                    }
+                end
+            rescue IOError, Errno::EBADF, Errno::EPIPE
+            rescue Exception => e
+                self.debug e
+            end
+        end
     end
 
     def dispatch (chain, thing, string, deep=false)

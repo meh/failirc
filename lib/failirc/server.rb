@@ -32,32 +32,60 @@ require 'failirc/server/channels'
 require 'failirc/utils'
 require 'failirc/server/errors'
 require 'failirc/server/responses'
-require 'failirc/server/eventdispatcher'
+require 'failirc/server/dispatcher'
 
 module IRC
 
 class Server
     include Utils
 
-    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :clients, :links, :listening, :config
+    class Connections < ::Hash
+        attr_reader :server
 
-    alias users clients
+        def initialize (server)
+            @server = server
+
+            super()
+
+            self[:listening] = {
+                :sockets => [],
+                :servers => {},
+            }
+
+            self[:sockets] = []
+            self[:things]  = {}
+            self[:clients] = {}
+            self[:links]   = {}
+        end
+
+        def empty?
+            self[:sockets].empty?
+        end
+    end
+
+    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :connections, :config
 
     def initialize (conf, verbose)
         @version   = IRC::VERSION
         @createdOn = Time.now
         @verbose   = verbose ? true : false
 
-        @dispatcher = EventDispatcher.new(self)
+        @dispatcher = Dispatcher.new(self)
 
         @modules = {}
 
-        @channels  = Channels.new(self)
-        @clients   = Clients.new(self)
-        @links     = Links.new(self)
-        @listening = []
+        @connections = Connections.new(self)
+        @channels    = Channels.new(self)
 
-        self.config = conf
+        config = conf
+    end
+
+    def clients
+        @connections[:clients]
+    end
+
+    def links
+        @connections[:links]
     end
 
     def loadModule (name, path=nil)
@@ -120,7 +148,8 @@ class Server
                         server = OpenSSL::SSL::SSLServer(server, context)
                     end
 
-                    @listening.push({ :socket => server, :listen => listen })
+                    @connections[:listening][:sockets].push(server)
+                    @connections[:listening][:servers][server] = listen
                 }
             rescue Exception => e
                 self.debug(e)
@@ -129,27 +158,29 @@ class Server
 
             while true
                 begin
-                    @listening.each {|server|
-                        socket, = server[:socket].accept_nonblock
+                    @connections[:listening][:sockets].each {|server|
+                        socket, = server.accept_nonblock
 
                         if socket
-                            run(socket, server[:listen])
+                            run socket, @connections[:listening][:servers][server]
                         end
                     }
                 rescue Errno::EAGAIN, Errno::ECONNABORTED, Errno::EPROTO, Errno::EINTR
-                    IO::select(@listening.map {|server| server[:socket]})
+                    IO::select(@connections[:listening][:sockets])
                 rescue Exception => e
-                    self.debug(e)
+                    self.debug e
                 end
             end
         }
 
         @started = true
 
-        self.loop()
+        @dispatcher.loop()
     end
 
     def stop
+        @stopping = true
+
         begin
             if @started
                 @modules.each {|mod|
@@ -175,53 +206,21 @@ class Server
         end
     end
 
-    def loop
-        while true
-            things = @clients.merge(@links)
+    def stopping?
+        @stopping
+    end
 
-            if things.empty?
-                sleep 2
-                next
-            end
-
-            connections = things.map {|key, thing|
-                things[thing.socket] = thing
-                thing.socket
-            }
-
-            begin
-                reading, = IO::select connections, nil, nil, 2
-
-                if reading
-                    reading.each {|socket|    
-                        if @dispatcher.handling[:input][socket]
-                            next
-                        end
-
-                        puts "^_^ #{things[socket]}"
-
-                        Thread.new {
-                            begin
-                                string = socket.gets
-
-                                if !string || string.empty?
-                                    kill things[socket], 'wat'
-                                else
-                                    @dispatcher.dispatch :input, things[socket], string.chomp
-                                end
-                            rescue Exception => e
-                                debug e
-                            end
-                        }
-                    }
-                end
-            rescue IOError, Errno::EBADF, Errno::EPIPE
-            rescue Exception => e
-                self.debug e
-            end
+    # Executed with each incoming connection
+    def run (socket, listen)
+        begin
+            @clients[socket] = IRC::Client.new(self, socket, listen)
+        rescue Exception => e
+            socket.close
+            self.debug(e)
         end
     end
 
+    # kill connection with harpoons on fire
     def kill (thing, message=nil)
         thing.modes[:quitting] = true
         @dispatcher.execute(:kill, thing, message)
@@ -231,25 +230,23 @@ class Server
         end
 
         if thing.is_a?(Client)
+            @clients.delete(thing.socket)
+
             if thing.modes[:registered]
                 @clients.delete(thing.nick)
 
                 @channels.each_value {|channel|
                     channel.users.delete(thing.nick)
                 }
-            else
-                @clients.delete(thing.socket)
             end
         elsif thing.is_a?(Link)
             @links.delete(thing.host)
         end
 
-        begin
-            thing.socket.close
-        rescue IOError
-        end
+        thing.socket.close rescue nil
     end
 
+    # reload the config and modules' configurations
     def rehash
         self.config = @configReference
     end
@@ -269,7 +266,7 @@ class Server
 
         if !@config.elements['config/server/host']
             @config.elements['config/server'].add(Element.new('host'))
-            @config.elements['config/server/host'].text = Socket.gethostname.split(/\./).shift
+            @config.elements['config/server/host'].text = Socket.gethostname
         end
 
         if !@config.elements['config/server/pingTimeout']
@@ -323,16 +320,6 @@ class Server
         }
 
         self.debug 'Finished loading modules.'
-    end
-
-    # Executed with each incoming connection
-    def run (socket, listen)
-        begin
-            @clients[socket] = IRC::Client.new(self, socket, listen)
-        rescue Exception => e
-            socket.close
-            self.debug(e)
-        end
     end
 
     alias to_s host
