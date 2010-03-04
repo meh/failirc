@@ -156,7 +156,7 @@ class Standard < Module
 
         module Channel
             class Ban
-                attr_reader  :setBy, :setOn, :channel, :mask
+                attr_reader :setBy, :setOn, :channel, :mask
 
                 def initialize (by, channel, mask)
                     @setBy   = by
@@ -166,7 +166,22 @@ class Standard < Module
                 end
 
                 def to_s
-                    "#{channel.name} #{mask} #{setBy.nick} #{setOn.tv_se}"
+                    "#{channel.name} #{mask} #{setBy.nick} #{setOn.tv_sec}"
+                end
+            end
+
+            class Invitation
+                attr_reader :setBy, :setOn, :channel, :mask
+
+                def initialize (by, channel, mask)
+                    @setBy   = by
+                    @setOn   = Time.now
+                    @channel = channel
+                    @mask    = mask
+                end
+
+                def to_s
+                    "#{channel.name} #{mask} #{setBy.nick} #{setOn.tv_sec}"
                 end
             end
 
@@ -175,13 +190,27 @@ class Standard < Module
             end
     
             def self.invited? (channel, client)
-                channel.modes[:I].each {|invite|
+                if !channel.modes[:i]
+                    return true
+                end
 
+                channel.modes[:invites].each {|invite|
+                    if invite.mask.match(client.mask)
+                        return true
+                    end
                 }
+
+                return false
             end
 
             def self.banned? (chanel, client)
+                channel.modes[:bans].each {|ban|
+                    if ban.mask.match(client.mask)
+                        return true
+                    end
+                }
 
+                return false
             end
         end
     end
@@ -432,15 +461,20 @@ class Standard < Module
 
                     thing.send :numeric, RPL_CHANCREATEDON, thing.server.channels[name]
                 elsif value[0, 1] == '='
-
+                    set_mode thing.server.channels[name], value
                 else
-                    case value
-                        when /^(\+?)b$/
+                    if match = value.match(/^(\+)?b(.*)$/)
+                        value = match[2]
+
+                        if value
+                            
+                        else
                             thing.server.channels[name].modes[:bans].each {|ban|
                                 thing.send :numeric, RPL_BANLIST, ban
                             }
 
                             thing.send :numeric, RPL_ENDOFBANLIST, name
+                        end
                     end
                 end
             else
@@ -450,10 +484,14 @@ class Standard < Module
     end
 
     def set_mode (thing, mode)
-        match = mode.match(/^([+\-])(.*)$/)
+        match = mode.match(/^\s*([=+\-])\s*(.*)$/)
+
+        if !match
+            return false
+        end
 
         if thing.is_a?(User)
-            if match[1] == '+'
+            case match[1] '+'
                 if match[2].match(/o/)
                     thing.modes[:o]             = true
                     thing.modes[:can_set_topic] = true
@@ -495,9 +533,10 @@ class Standard < Module
             end
 
             if !thing.server.channels[channel]
-                thing.server.channels[channel] = Channel.new(server, channel)
-                thing.server.channels[channel].modes[:type] = channel[0, 1]
-                thing.server.channels[channel].modes[:bans] = []
+                thing.server.channels[channel]                 = Channel.new(server, channel)
+                thing.server.channels[channel].modes[:type]    = channel[0, 1]
+                thing.server.channels[channel].modes[:bans]    = []
+                thing.server.channels[channel].modes[:invites] = []
             end
 
             if thing.server.channels[channel].modes[:k] && password != thing.server.channels[channel].modes[:password]

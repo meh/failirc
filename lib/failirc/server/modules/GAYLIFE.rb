@@ -54,11 +54,9 @@ class GAYLIFE < Module
         name    = match[1]
         message = match[2]
 
-        if Channel.check(name) && thing.server.channels[name].modes[:gay] || thing.modes[:gay]
+        if (Channel.check(name) && thing.server.channels[name].modes[:gay]) || thing.modes[:gay]
             string.sub!(/#{Regexp.escape(message)}/, gayify(message))
         end
-
-        return string
     end
 
     def gayify (string)
@@ -70,7 +68,7 @@ class GAYLIFE < Module
                 position = 0
             end
 
-            result << self.code(@rainbow[position, 1]) << char
+            result << GAYLIFE.code(@rainbow[position, 1]) << char
             position += 1
         }
 
@@ -78,29 +76,27 @@ class GAYLIFE < Module
     end
 
     def self.code (char)
-        return "\003#{Channel.colors[char.to_sym]}"
+        return "\003#{@@colors[char.to_sym]}"
     end
 
-    def self.colors
-        return {
-            :w => '15',
-            :W => '0',
-            :n => '1',
-            :N => '14',
-            :b => '2',
-            :B => '12',
-            :g => '3',
-            :G => '9',
-            :r => '5',
-            :R => '4',
-            :p => '6',
-            :P => '13',
-            :y => '7',
-            :Y => '8',
+    @@colors = {
+        :w => '15',
+        :W => '0',
+        :n => '1',
+        :N => '14',
+        :b => '2',
+        :B => '12',
+        :g => '3',
+        :G => '9',
+        :r => '5',
+        :R => '4',
+        :p => '6',
+        :P => '13',
+        :y => '7',
+        :Y => '8',
 
-            nil => ''
-        }
-    end
+        nil => ''
+    }
 end
 
 end

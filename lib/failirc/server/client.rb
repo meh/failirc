@@ -20,31 +20,16 @@
 require 'failirc/utils'
 require 'failirc/server/modes'
 require 'failirc/server/channels'
+require 'failirc/mask'
 
 module IRC
 
 class Client
     include Utils
 
-    class Mask
-        attr_reader :client
-
-        def initialize (client)
-            @client = client
-        end
-
-        def match (mask)
-
-        end
-
-        def to_s
-            return "#{client.nick || '*'}!#{client.user || '*'}@#{client.host || '*'}"
-        end
-    end
-
-    attr_reader   :server, :socket, :listen, :channels, :modes, :mask
+    attr_reader   :server, :socket, :listen, :channels, :modes, :mask, :nick, :user, :host
     attr_writer   :quitting
-    attr_accessor :password, :nick, :user, :host, :ip, :realName, :lastAction
+    attr_accessor :password, :ip, :realName, :lastAction
 
     def initialize (server, socket, listen)
         @server = server
@@ -59,16 +44,26 @@ class Client
         @channels = Channels.new(@server)
         @modes    = Modes.new
 
-        @mask = Mask.new(self)
+        @mask = Mask.new
+    end
+
+    def nick= (value)
+        @mask.nick = @nick = value
+    end
+
+    def user= (value)
+        @mask.user = @user = value
+    end
+
+    def host= (value)
+        @mask.host = @host = value
     end
 
     def send (symbol, *args)
-        if self.method(symbol)
-            begin
-                self.method(symbol).call(*args)
-            rescue Exception => e
-                self.debug(e)
-            end
+        begin
+            self.method(symbol).call(*args)
+        rescue Exception => e
+            self.debug(e)
         end
     end
 

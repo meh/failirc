@@ -19,6 +19,7 @@
 
 require 'failirc/server/event'
 require 'failirc/utils'
+require 'failirc/extensions'
 
 module IRC
 
