@@ -50,8 +50,6 @@ class Netlog < Module
                 end
             }
         end
-
-        return string
     end
 end
 

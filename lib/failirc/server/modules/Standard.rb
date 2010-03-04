@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/extensions'
+
 require 'failirc/server/module'
 require 'failirc/server/errors'
 require 'failirc/server/responses'
@@ -245,6 +247,8 @@ class Standard < Module
 
         nick = match[1]
 
+        thing.server.dispatcher.execute(:user_nick_change, thing, nick)
+
         # check if the nickname is valid
         if !nick.match(/^[\w\-^\/]{1,23}$/)
             thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
@@ -268,12 +272,20 @@ class Standard < Module
             if thing.server.clients[nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
-                mask       = thing.mask
+                thing.server.clients.delete(thing.nick)
+
+                mask       = thing.mask.to_s
                 thing.nick = nick
 
-                thing.channels.users.each_key {|user|
-                    user.send :raw, "#{mask} NICK :#{user}"
-                }
+                thing.server.clients[thing.nick] = thing
+
+                if thing.channels.empty?
+                    thing.send :raw, ":#{mask} NICK :#{nick}"
+                else
+                    thing.channels.users.each_value {|user|
+                        user.send :raw, ":#{mask} NICK :#{nick}"
+                    }
+                end
             end
         end
 

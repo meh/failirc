@@ -137,10 +137,13 @@ class Dispatcher
                                 string = socket.gets
 
                                 if !string || string.empty?
-                                    server.kill thing, 'wat'
+                                    server.kill thing, 'Client exited.'
                                 else
-                                    dispatch :input, thing, string.chomp
+                                    if !string.strip!.empty?
+                                        dispatch :input, thing, string
+                                    end
                                 end
+                            rescue IOError
                             rescue Exception => e
                                 debug e
                             end
@@ -167,13 +170,9 @@ class Dispatcher
         @events[:pre].each {|callback|
             event.special = :pre
 
-            tmp = callback.call(event, thing, string)
-
-            if tmp == false
+            if callback.call(event, thing, string) == false
                 @input.stop(chain, deep, thing.socket)
                 return false
-            elsif tmp.is_a?(String)
-                string = result = tmp
             end
 
             if event.type && !event.same?(string)
@@ -190,37 +189,29 @@ class Dispatcher
 
             event.callbacks.each {|callback|
                 begin
-                    tmp = callback.call(thing, string)
+                    if callback.call(thing, string) == false
+                        @input.stop(chain, deep, thing.socket)
+                        return false
+                    end
                 rescue Exception => e
                     self.debug e
                 end
     
-                if tmp == false
+                if !event.same?(string)
+                    result = dispatch(chain, thing, string, true)
+
                     @input.stop(chain, deep, thing.socket)
-                    return false
-                elsif tmp.is_a?(String)
-                    string = result = tmp
-    
-                    if !event.same?(string)
-                        result = dispatch(chain, thing, string, true)
 
-                        @input.stop(chain, deep, thing.socket)
-
-                        return result
-                    end
+                    return result
                 end
             }
         elsif chain == :input
             @events[:default].each {|callback|
                 event.special = :default
     
-                tmp = callback.call(event, thing, string)
-    
-                if tmp == false
+                if callback.call(event, thing, string) == false
                     @input.stop(chain, deep, thing.socket)
                     return false
-                elsif tmp.is_a?(String)
-                    string = result = tmp
                 end
     
                 if event.type && !event.same?(string)
@@ -238,13 +229,9 @@ class Dispatcher
         @events[:post].each {|callback|
             event.special = :post
 
-            tmp = callback.call(event, thing, string)
-
-            if tmp == false
+            if callback.call(event, thing, string) == false
                 @input.stop(chain, deep, thing.socket)
                 return false
-            elsif tmp.is_a?(String)
-                string = result = tmp
             end
 
             if event.type && !event.same?(string)

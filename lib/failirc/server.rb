@@ -26,6 +26,7 @@ require 'rexml/document'
 include REXML
 
 require 'failirc'
+require 'failirc/extensions'
 require 'failirc/server/clients'
 require 'failirc/server/links'
 require 'failirc/server/channels'
@@ -247,9 +248,10 @@ class Server
             @connections[:links].delete(thing.socket)
         end
 
-        @connection[:things].delete(thing.socket)
+        @connections[:things].delete(thing.socket)
+        @connections[:sockets].delete(thing.socket)
 
-        thing.socket.close rescue nil
+        thing.socket.close
     end
 
     # reload the config and modules' configurations
