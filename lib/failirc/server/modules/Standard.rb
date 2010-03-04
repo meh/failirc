@@ -34,11 +34,9 @@ module Modules
 class Standard < Module
     def initialize (server)
         @pingedOut = Hash.new
-        @toPing    = Hash.new(server.clients.values.collect {|client| [client.socket, client]})
+        @toPing    = Hash.new
 
         @pingThread = Thread.new {
-            sleep server.config.elements['config/server/pingTimeout'].text.to_i
-
             while true
                 @toPing.each_value {|client|
                     @pingedOut[client.socket] = client
@@ -54,8 +52,10 @@ class Standard < Module
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
                 @pingedOut.each_value {|client|
-                    error(client, 'Ping timeout', :close)
-                    server.kill(client, 'Ping timeout')
+                    if !client.socket.closed?
+                        error(client, 'Ping timeout', :close)
+                        server.kill(client, 'Ping timeout')
+                    end
                 }
 
                 @pingedOut.clear
@@ -647,7 +647,7 @@ class Standard < Module
     def quit (thing, string)
         match = /^QUIT((\s+)(:)?(.*)?)?$/i.match(string)
 
-        thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[2] || thing.nick}")
+        thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[4] || thing.nick}")
     end
 
     def send_quit (thing, message)

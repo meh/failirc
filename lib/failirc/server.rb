@@ -63,6 +63,10 @@ class Server
             self[:sockets].empty?
         end
 
+        def exists? (socket)
+            self[:things][socket] ? true : false
+        end
+
         alias __delete delete
 
         def delete (socket)
@@ -247,7 +251,7 @@ class Server
 
     # kill connection with harpoons on fire
     def kill (thing, message=nil)
-        if @killing[thing]
+        if @killing[thing] || !@connections.exists?(thing.socket)
             return
         end
 
