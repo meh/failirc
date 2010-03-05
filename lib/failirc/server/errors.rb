@@ -139,7 +139,7 @@ ERR_NICKCOLLISION = {
 # Returned by the server to indicate that the target user of the command is not on the given channel.
 ERR_USERNOTINCHANNEL = {
     :code => 441,
-    :text => '"#{value[:user].nick} #{value[:channel].name} :They aren\'t on that channel"'
+    :text => '"#{value[:nick]} #{value[:channel]} :They aren\'t on that channel"'
 }
 
 # Returned by the server whenever a client tries to perform a channel effecting command for which the client isn't a member.

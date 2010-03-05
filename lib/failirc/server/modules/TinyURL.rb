@@ -29,8 +29,8 @@ module Modules
 class TinyURL < Module
     def initialize (server)
         @events = {
-            :input => {
-                :PRIVMSG => Event::Callback.new(self.method(:tinyurl), -9001),
+            :custom => {
+                :message => Event::Callback.new(self.method(:tinyurl), -9001),
             }
         }
 
@@ -47,20 +47,16 @@ class TinyURL < Module
         end
     end
 
-    def tinyurl (thing, string)
-        match = string.match(/:(.*)$/)
+    def tinyurl (sender, receiver, message)
+        URI.extract(message).each {|uri|
+            if uri.length > @length
+                tiny = tinyurlify(uri)
 
-        if match
-            URI.extract(match[1]).each {|uri|
-                if uri.length > @length
-                    tiny = tinyurlify(uri)
-
-                    if tiny
-                        string.gsub!(/#{Regexp.escape(uri)}/, tiny)
-                    end
+                if tiny
+                    message.gsub!(/#{Regexp.escape(uri)}/, tiny)
                 end
-            }
-        end
+            end
+        }
     end
 
     def tinyurlify (url)

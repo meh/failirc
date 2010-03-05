@@ -126,7 +126,7 @@ RPL_LISTEND = {
 
 RPL_CHANNELMODEIS = {
     :code => 324,
-    :text => '"#{value[:channel].name} #{value[:channel].modes}"'
+    :text => '"#{value.name} #{value.modes}"'
 }
 
 RPL_NOTOPIC = {
@@ -158,7 +158,7 @@ RPL_SUMMONING = {
 # The "comments" field may contain any comments about the version or further version details.
 RPL_VERSION = {
     :code => 351,
-    :text => '"#{server.version}.#{server.debugLevel} #{server.host} :#{server.comments}"'
+    :text => '"failirc-#{server.version}. #{server.host} :THE GAME"'
 }
 
 RPL_WHOREPLY = {

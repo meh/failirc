@@ -27,8 +27,8 @@ module Modules
 class WordFilter < Module
     def initialize (server)
         @events = {
-            :input => {
-                :PRIVMSG => Event::Callback.new(self.method(:filter), -500),
+            :custom => {
+                :message => Event::Callback.new(self.method(:filter), -500),
             }
         }
 
@@ -57,25 +57,14 @@ class WordFilter < Module
         end
     end
 
-    def filter (thing, string)
-        match = string.match(/\s+(.*?)\s+:(.*)$/)
-
-        if !match
-            return
-        end
-
-        name    = match[1]
-        message = match[2]
-
-        channel  = Channel.check(name) ? thing.server.channels[name].modes : {}
-        client   = thing.modes
+    def filter (sender, receiver, message)
+        channel  = (receiver.is_a?(Channel)) ? receiver.modes : {}
+        client   = sender.modes
         original = message.clone
 
         if channel[:gay] || client[:gay]
             rainbow(message, 'rrRRyyYYGGggccCCBBppPP')
         end
-
-        string.sub!(/#{Regexp.escape(original)}/, message)
     end
 
     def rainbow (string, pattern=@rainbow)

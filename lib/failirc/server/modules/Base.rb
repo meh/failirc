@@ -31,7 +31,7 @@ module IRC
 
 module Modules
 
-class Standard < Module
+class Base < Module
     def initialize (server)
         @pingedOut = ThreadSafeHash.new
         @toPing    = ThreadSafeHash.new
@@ -84,7 +84,8 @@ class Standard < Module
                 :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
                 :NOTICE  => /^NOTICE( |$)/i,
 
-                :MAP => /^MAP( |$)/i,
+                :MAP     => /^MAP( |$)/i,
+                :VERSION => /^VERSION( |$)/i,
 
                 :QUIT => /^QUIT( |$)/i,
             },
@@ -100,6 +101,7 @@ class Standard < Module
                 :user_delete => self.method(:send_part),
 
                 :message => self.method(:send_message),
+                :notice  => self.method(:send_notice),
 
                 :topic_change => self.method(:send_topic),
             },
@@ -127,7 +129,8 @@ class Standard < Module
                 :PRIVMSG => self.method(:privmsg),
                 :NOTICE  => self.method(:notice),
 
-                :MAP => self.method(:map),
+                :MAP     => self.method(:map),
+                :VERSION => self.method(:version),
 
                 :QUIT => self.method(:quit),
             },
@@ -214,7 +217,34 @@ class Standard < Module
             end
         end
 
-        def error (thing, message, type=nil)
+        def self.registration (thing)
+            if !thing.modes[:registered]
+                # if the client isn't registered but has all the needed attributes, register it
+                if thing.user && thing.nick
+                    if thing.listen.attributes['password']
+                        if thing.listen.attributes['password'] != thing.password
+                            return false
+                        end
+                    end
+    
+                    thing.modes[:registered] = true
+    
+                    # clean the temporary hash value and use the nick as key
+                    thing.server.clients.delete(thing.socket)
+                    thing.server.clients[thing.nick] = thing
+    
+                    thing.server.dispatcher.execute(:registration, thing)
+    
+                    thing.send :numeric, RPL_WELCOME, thing
+                    thing.send :numeric, RPL_HOSTEDBY, thing
+                    thing.send :numeric, RPL_SERVCREATEDON
+    
+                    motd(thing)
+                end
+            end
+        end
+
+        def self.error (thing, message, type=nil)
             case type
                 when :close
                     error(thing, "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})")
@@ -223,7 +253,7 @@ class Standard < Module
             end
         end
 
-        def motd (user)
+        def self.motd (user)
             user.send :numeric, RPL_MOTDSTART
     
             offset = 0
@@ -237,16 +267,18 @@ class Standard < Module
             user.send :numeric, RPL_ENDOFMOTD
         end
 
-        def setMode (thing, mode)
-            match = mode.match(/^\s*([=+\-])\s*(.*)$/)
+        def self.setMode (from, thing, mode, long=false)
+            if long
+
+            else
+                match = mode.match(/^\s*([+\-])\s*(.*)$/)
     
-            if !match
-                return false
-            end
+                if !match
+                    return false
+                end
     
-            if thing.is_a?(User)
-                case match[1]
-                    when '+'
+                if thing.is_a?(User)
+                    if match[1] == '+'
                         if match[2].match(/o/)
                             thing.modes[:o]             = true
                             thing.modes[:can_set_topic] = true
@@ -255,14 +287,14 @@ class Standard < Module
                                 thing.modes[:level] = '@'
                             end
                         end
-                    when '-'
+                    else
+
+                    end
+                elsif thing.is_a?(Client)
+
+                elsif thing.is_a?(Channel)
     
-                    when '='
                 end
-            elsif thing.is_a?(Client)
-    
-            elsif thing.is_a?(Channel)
-    
             end
         end
     end
@@ -337,7 +369,7 @@ class Standard < Module
 
         :user => {
             :o => :operator,
-            :v => :speaker,
+            :v => :voice,
         },
 
         :client => {
@@ -351,39 +383,80 @@ class Standard < Module
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'MODE'
-        else
-            name  = match[1]
-            value = match[3]
+            return
+        end
 
-            if Utils::Channel::isValid(name) && thing.server.channels[name]
-                channel = thing.server.channels[name]
+        name  = match[1]
+        value = match[3]
 
-                if !value
-                    thing.send :numeric, RPL_CHANNELMODEIS, {
-                        :channel => channel,
-                        :user    => thing,
-                    }
-
-                    thing.send :numeric, RPL_CHANCREATEDON, channel
-                elsif value[0, 1] == '='
-                    Utils::setMode channel, value
+        # long options, extended protocol
+        if match = value.match(/^=\s+(.*)$/)
+            if Utils::Channel::isValid(name)
+                if thing.server.channels[name]
+                    Utils::setMode(thing, thing.server.channels[name], match[1], true)
                 else
-                    if match = value.match(/^(\+)?b(.*)$/)
-                        value = match[2]
+                    thing.send :numeric, ERR_NOSUCHCHANNEL, name
+                end
+            elsif match = name.match(/^([^@])@(.*)$/)
+                user    = match[1]
+                channel = match[2]
 
-                        if !value.empty?
-                            
+                if thing.server.channels[channel]
+                    if thing.server.clients[user]
+                        if thing.server.channels[channel].users[user]
+                            Utils::setMode(thing, thing.server.channels[channel].users[user], value, true)
                         else
-                            thing.server.channels[name].modes[:bans].each {|ban|
-                                thing.send :numeric, RPL_BANLIST, ban
+                            thing.send :numeric, ERR_USERNOTINCHANNEL, {
+                                :nick    => user,
+                                :channel => channel,
                             }
-
-                            thing.send :numeric, RPL_ENDOFBANLIST, name
                         end
+                    else
+                        thing.send :numeric, ERR_NOSUCHNICK, user
                     end
+                else
+                    thing.send :numeric, ERR_NOSUCHCHANNEL, channel
                 end
             else
+                if thing.server.clients[name]
+                    Utils::setMode(thing, thing.server.clients[name], value, true)
+                else
+                    thing.send :numeric, ERR_NOSUCHNICK, name
+                end
+            end
+        # usual shit
+        else
+            if Utils::Channel::isValid(name)
+                if thing.server.channels[name]
+                    channel = thing.server.channels[name]
 
+                    if !value
+                        thing.send :numeric, RPL_CHANNELMODEIS, channel
+                        thing.send :numeric, RPL_CHANCREATEDON, channel
+                    else
+                        if match = value.match(/^(\+)?b(.*)$/)
+                            value = match[2]
+
+                            if !value.empty?
+                            
+                            else
+                                thing.server.channels[name].modes[:bans].each {|ban|
+                                    thing.send :numeric, RPL_BANLIST, ban
+                                }
+
+                                thing.send :numeric, RPL_ENDOFBANLIST, name
+                            end
+                        end
+                    end
+                else
+                    thing.send :numeric, ERR_NOSUCHCHANNEL, name
+                end
+            else
+                if thing.server.clients[name]
+                    Utils::setMode(thing, thing.server.clients[name], value)
+                else
+                    thing.send :numeric, ERR_NOSUCHNICK, name
+                end
             end
         end
     end
@@ -411,7 +484,7 @@ class Standard < Module
             thing.password = match[1]
 
             # try to register it
-            registration(thing)
+            Utils::registration(thing)
         end
     end
 
@@ -447,7 +520,7 @@ class Standard < Module
                 thing.nick = nick
 
                 # try to register it
-                registration(thing)
+                Utils::registration(thing)
             end
         else
             # if the user has already registered and the choosen nick is already used,
@@ -488,37 +561,10 @@ class Standard < Module
                 thing.ip   = thing.socket.peeraddr[3]
 
                 # try to register it
-                registration(thing)
+                Utils::registration(thing)
             end
         elsif thing.is_a?(Link)
 
-        end
-    end
-
-    def registration (thing)
-        if !thing.modes[:registered]
-            # if the client isn't registered but has all the needed attributes, register it
-            if thing.user && thing.nick
-                if thing.listen.attributes['password']
-                    if thing.listen.attributes['password'] != thing.password
-                        return false
-                    end
-                end
-
-                thing.modes[:registered] = true
-
-                # clean the temporary hash value and use the nick as key
-                thing.server.clients.delete(thing.socket)
-                thing.server.clients[thing.nick] = thing
-
-                thing.server.dispatcher.execute(:registration, thing)
-
-                thing.send :numeric, RPL_WELCOME, thing
-                thing.send :numeric, RPL_HOSTEDBY, thing
-                thing.send :numeric, RPL_SERVCREATEDON
-
-                Utils::motd(thing)
-            end
         end
     end
 
@@ -572,7 +618,7 @@ class Standard < Module
             user  = channel.users.add(thing)
 
             if empty
-                Utils::setMode user, '+o'
+                Utils::setMode @server, user, '+o'
             end
 
             thing.channels.add(channel)
@@ -762,31 +808,35 @@ class Standard < Module
             message = match[2]
 
             if server.clients[name]
-                send_notice(thing, server.clients[name], message)
+                thing.server.dispatcher.execute(:notice, thing, server.clients[name], message)
             elsif server.channels[name]
-                send_notice(thing, server.channels[name], message)
+                thing.server.dispatcher.execute(:notice, thing, server.channels[name], message)
             else
                 # unrealircd sends an error if it can't find nick/channel, what should I do?
             end
         end
     end
 
-    def send_notice (from, to, text)
-        if from.is_a?(User)
-            from = from.client
+    def send_notice (sender, receiver, message)
+        if sender.is_a?(User)
+            sender = sender.client
         end
 
-        if to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from} NOTICE #{to.nick} :#{text}"
+        if receiver.is_a?(Client) || receiver.is_a?(User)
+            receiver.send :raw, ":#{sender} NOTICE #{receiver.nick} :#{message}"
         elsif to.is_a?(Channel)
-            to.users.each_value {|user|
-                user.send :raw, ":#{from} NOTICE #{to.name} :#{text}"
+            receiver.users.each_value {|user|
+                user.send :raw, ":#{sender} NOTICE #{receiver.name} :#{message}"
             }
         end
     end
 
     def map (thing, string)
-        send_notice(@server, thing, 'The X tells the point.')
+        thing.server.dispatcher.execute(:notice, server, thing, 'The X tells the point.')
+    end
+
+    def version (thing, string)
+        thing.send :numeric, RPL_VERSION
     end
 
     def quit (thing, string)

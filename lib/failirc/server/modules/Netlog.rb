@@ -26,30 +26,26 @@ module Modules
 class Netlog < Module
     def initialize (server)
         @events = {
-            :input => {
-                :PRIVMSG => Event::Callback.new(self.method(:netlog), -9002),
+            :custom => {
+                :message => Event::Callback.new(self.method(:netlog), -9002),
             }
         }
 
         super(server)
     end
 
-    def netlog (thing, string)
-        match = string.match(/:(.*)$/)
+    def netlog (sender, receiver, message)
+        URI.extract(message).each {|uri|
+            match = uri.match(/http:\/\/(\w+?)\.netlog.com.*?photo.*?(\d+)/);
 
-        if match
-            URI.extract(match[1]).each {|uri|
-                match = uri.match(/http:\/\/(\w+?)\.netlog.com.*?photo.*?(\d+)/);
+            if match
+                country = match[1]
+                url     = match[2]
+                code    = "000000000#{url}".match(/(\d{3})(\d{3})\d{3}$/)
 
-                if match
-                    country = match[1]
-                    url     = match[2]
-                    code    = "000000000#{url}".match(/(\d{3})(\d{3})\d{3}$/)
-
-                    string.gsub!(/#{Regexp.escape(uri)}/, "http://#{country}.netlogstatic.com/p/oo/#{code[1]}/#{code[2]}/#{url}.jpg")
-                end
-            }
-        end
+                message.gsub!(/#{Regexp.escape(uri)}/, "http://#{country}.netlogstatic.com/p/oo/#{code[1]}/#{code[2]}/#{url}.jpg")
+            end
+        }
     end
 end
 
