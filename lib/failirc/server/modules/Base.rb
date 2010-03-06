@@ -774,10 +774,9 @@ class Base < Module
         end
 
         if thing.modes[:can_kick]
-            channel.delete(user)
-
-            if server.dispatcher.execute(:kick, thing, user, message) == false
-                channel.add(user)
+            if server.dispatcher.execute(:kick, thing, user, message) != false
+                channel.delete(user)
+                user.client.channels.delete(channel)
             end
         end
     end
