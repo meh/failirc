@@ -44,6 +44,10 @@ class Client
         @channels = Channels.new(@server)
         @modes    = Modes.new
 
+        if listen.attributes['ssl'] == 'enabled'
+            @modes[:ssl] = true
+        end
+
         @mask = Mask.new
     end
 
