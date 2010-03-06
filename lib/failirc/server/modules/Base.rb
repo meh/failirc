@@ -33,7 +33,6 @@ module Modules
 
 class Base < Module
     def initialize (server)
-        @nicks     = ThreadSafeHash.new
         @pingedOut = ThreadSafeHash.new
         @toPing    = ThreadSafeHash.new
 
@@ -233,12 +232,16 @@ class Base < Module
             end
         end
 
+        @nicks = ThreadSafeHash.new
+
         def self.registration (thing)
             if !thing.modes[:registered]
-                if @nicks[thing.nick] || thing.server.clients[thing.nick]
-                    thing.send :numeric, ERR_NICKNAMEINUSE, nick
+                if (@nicks[thing.nick] && @nicks[thing.nick] != thing) || thing.server.clients[thing.nick]
+                    thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
                     return
                 end
+
+                @nicks[thing.nick] = thing
 
                 # if the client isn't registered but has all the needed attributes, register it
                 if thing.user && thing.nick
@@ -251,6 +254,8 @@ class Base < Module
                     # clean the temporary hash value and use the nick as key
                     thing.server.clients.delete(thing.socket)
                     thing.server.clients[thing.nick] = thing
+
+                    @nicks.delete(thing.nick)
     
                     thing.server.dispatcher.execute(:registration, thing)
     
@@ -674,17 +679,13 @@ class Base < Module
         if !thing.modes[:registered]
             # if the user hasn't registered yet and the choosen nick is already used,
             # kill it with fire.
-            if @nicks[nick] || thing.server.clients[nick]
+            if thing.server.clients[nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
-                @nicks[nick] = true
-
                 thing.nick = nick
 
                 # try to register it
                 Utils::registration(thing)
-
-                @nicks.delete(nick)
             end
         else
             # if the user has already registered and the choosen nick is already used,
