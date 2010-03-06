@@ -132,9 +132,8 @@ class Server
                 key  = OpenSSL::PKey::RSA.new File.read key
             end
 
-            context.cert        = cert
-            context.key         = key
-            context.verify_mode = OpenSSL::SSL::VERIFY_NONE
+            context.cert = cert
+            context.key  = key
 
             return context
         end
@@ -199,9 +198,9 @@ class Server
 
     def ip
         begin
-            Resolv.getaddress(@config.elements['config/server/host'].text)
+            return Resolv.getaddress(@config.elements['config/server/host'].text)
         rescue
-            return @socket.addr.pop
+            return @connections[:listening][:sockets].first.addr.pop
         end
     end
 

@@ -234,17 +234,12 @@ class Base < Module
 
         def self.registration (thing)
             if !thing.modes[:registered]
-                if thing.user || thing.nick && thing.listen.attributes['password']
-                    if thing.listen.attributes['password'] != thing.password
-                        self.error(thing, 'Password mismatch', :close)
-                        thing.server.kill thing, 'Password mismatch'
-
-                        return
-                    end
-                end
-
                 # if the client isn't registered but has all the needed attributes, register it
                 if thing.user && thing.nick
+                    if thing.listen.attributes['password'] && thing.listen.attributes['password'] != thing.password
+                        return false
+                    end
+
                     thing.modes[:registered] = true
     
                     # clean the temporary hash value and use the nick as key
