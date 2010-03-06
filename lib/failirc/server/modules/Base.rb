@@ -737,65 +737,73 @@ class Base < Module
             return
         end
 
-        channel  = match[1]
-        password = match[3]
+        channels  = match[1].split(/,/)
+        passwords = match[3].split(/,/)
 
-        if !Utils::Channel::isValid(channel)
-            channel = "##{channel}"
-        end
-
-        if !Utils::Channel::isValid(channel)
-            thing.send :numeric, ERR_BADCHANMASK, channel
-            return
-        end
-
-        if thing.channels[channel]
-            return
-        end
-
-        if !thing.server.channels[channel]
-            channel = thing.server.channels[channel] = Channel.new(server, channel)
-            channel.modes[:type]    = channel.name[0, 1]
-            channel.modes[:bans]    = []
-            channel.modes[:invites] = []
-        else
-            channel = thing.server.channels[channel]
-        end
-
-        if channel.modes[:k] && password != channel.modes[:password]
-            thing.send :numeric, ERR_BADCHANNELKEY, channel
-            return 
-        end
-
-        if channel.modes[:i] && !Utils::Channel::invited?(channel, thing)
-            thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
-            return
-        end
-
-        if Utils::Channel::banned?(channel, thing)
-            thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
-            return
-        end
-
-        empty = channel.empty?
-        user  = channel.add(thing)
-
-        if empty
-            Utils::setMode @server, channel, "+o #{user.nick}", true
-        end
-
-        thing.channels.add(channel)
-
-        if server.dispatcher.execute(:join, user) != false
-            if !channel.topic.nil?
-                topic thing, "TOPIC #{channel}"
+        channels.eac {|channel|
+            if !Utils::Channel::isValid(channel)
+                channel = "##{channel}"
             end
 
-            names thing, "NAMES #{channel}"
-        else
-            user.channel.delete(user)
-            thing.channels.delete(channel)
-        end
+            if !Utils::Channel::isValid(channel)
+                thing.send :numeric, ERR_BADCHANMASK, channel
+                return
+            end
+
+            if thing.channels[channel]
+                return
+            end
+
+            if !thing.server.channels[channel]
+                channel = thing.server.channels[channel] = Channel.new(server, channel)
+                channel.modes[:type]    = channel.name[0, 1]
+                channel.modes[:bans]    = []
+                channel.modes[:invites] = []
+            else
+                channel = thing.server.channels[channel]
+            end
+
+            if channel.modes[:password]
+                password = passwords.shift
+            else
+                password = ''
+            end
+
+            if channel.modes[:k] && password != channel.modes[:password]
+                thing.send :numeric, ERR_BADCHANNELKEY, channel
+                return 
+            end
+
+            if channel.modes[:i] && !Utils::Channel::invited?(channel, thing)
+                thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
+                return
+            end
+
+            if Utils::Channel::banned?(channel, thing)
+                thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
+                return
+            end
+
+            empty = channel.empty?
+            user  = channel.add(thing)
+
+            if empty
+                Utils::setMode @server, channel, "+o #{user.nick}", true
+            end
+
+            thing.channels.add(channel)
+
+            if server.dispatcher.execute(:join, user) != false
+                if !channel.topic.nil?
+                    topic thing, "TOPIC #{channel}"
+                end
+
+                names thing, "NAMES #{channel}"
+            else
+                user.channel.delete(user)
+                thing.channels.delete(channel)
+            end
+        }
     end
 
     def send_join (user)
