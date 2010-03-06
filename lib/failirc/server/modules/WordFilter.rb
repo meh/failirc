@@ -18,6 +18,8 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/extensions'
+require 'failirc/server/channel'
+require 'failirc/server/modes'
 require 'failirc/server/module'
 
 module IRC
@@ -54,17 +56,16 @@ class WordFilter < Module
     end
 
     def filter (sender, receiver, message)
-        channel  = (receiver.is_a?(Channel)) ? receiver.modes : {}
-        client   = sender.modes
-        original = message.clone
+        channel = (receiver.is_a?(Channel)) ? receiver.modes : Modes.new
+        client  = sender.modes
 
-        if channel[:gay] || client[:gay]
+        if channel[:extended][:gay] || client[:extended][:gay]
             rainbow(message, 'rrRRyyYYGGggccCCBBppPP')
         end
     end
 
     def rainbow (string, pattern=@rainbow)
-        string = string.gsub(/\003(\d+(,\d+)?)?/, '')
+        string.gsub!(/\003(\d+(,\d+)?)?/, '')
 
         result   = ''
         position = 0
@@ -96,6 +97,8 @@ class WordFilter < Module
         :G => '9',
         :r => '5',
         :R => '4',
+        :c => '10',
+        :C => '11',
         :p => '6',
         :P => '13',
         :y => '7',

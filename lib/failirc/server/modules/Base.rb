@@ -295,9 +295,10 @@ class Base < Module
             :user => {
                 :can_change_channel_modes => [:can_change_topic_mode],
 
-                :a => :o,
-                :o => [:operator, :can_kick, :can_change_topic, :can_give_channel_operator, :can_change_channel_modes, :can_change_user_modes],
-                :v => :voice,
+                :a => [:o, :admin],
+                :o => [:h, :operator, :can_kick, :can_change_topic, :can_give_channel_operator, :can_change_channel_modes, :can_change_user_modes],
+                :h => [:v, :halfoperator, :can_kick],
+                :v => [:voice, :can_talk],
             },
 
             :client => {
@@ -333,8 +334,57 @@ class Base < Module
         end
 
         def self.setMode (from, thing, request, noAnswer=false)
-            if request[0, 1] == '='
+            if match = request.match(/^=(.*)$/)
+                value = match[1].strip
 
+                if value == '?'
+                    if thing.is_a?(IRC::Channel)
+                        name = thing.name
+                    elsif thing.is_a?(IRC::User)
+                        name = "#{thing.nick}@#{thing.channel.name}"
+                    elsif thing.is_a?(IRC::Client)
+                        name = thing.nick
+                    end
+
+                    thing.modes[:extended].each {|key, value|
+                        from.server.dispatcher.execute :notice, from.server, from, "#{name} #{key} = #{value}"
+                    }
+
+                    return
+                end
+
+                if thing.is_a?(IRC::Channel) && !from.modes[:can_change_channel_modes]
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    return
+                elsif thing.is_a?(IRC::User) && from.nick != thing.nick && !from.modes[:can_change_user_modes]
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
+                    return
+                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !from.modes[:can_change_client_modes]
+                    from.send :numeric, ERR_NOPRIVILEGES
+                    return
+                end
+
+                modes = value.split(/,/)
+
+                modes.each {|mode|
+                    if mode[0, 1] == '-'
+                        type = '-'
+                    else
+                        type = '+'
+                    end
+
+                    if mode.match(/^[+\-]/)
+                        mode = mode[1, mode.length]
+                    end
+
+                    mode = mode.split(/=/)
+
+                    if type == '+'
+                        thing.modes[:extended][mode[0].to_sym] = mode[1] || true
+                    else
+                        thing.modes[:extended].delete(mode[0].to_sym)
+                    end
+                }
             else
                 match = request.match(/^\s*([+\-])?\s*([^ ]+)(\s+(.+))?$/)
 
@@ -358,7 +408,7 @@ class Base < Module
                                 value = values.shift
 
                                 if !(user = thing.users[value])
-                                    from.send :numeric, ERR_NOSUCHNICK, values
+                                    from.send :numeric, ERR_NOSUCHNICK, value
                                     next
                                 end
 
@@ -490,8 +540,10 @@ class Base < Module
         # long options, extended protocol
         if match = value.match(/^=\s+(.*)$/)
             if Utils::Channel::isValid(name)
-                if thing.server.channels[name]
-                    Utils::setMode(thing, thing.server.channels[name], value)
+                channel = thing.server.channels[name]
+
+                if channel
+                    Utils::setMode(channel.user(thing) || thing, channel, value)
                 else
                     thing.send :numeric, ERR_NOSUCHCHANNEL, name
                 end
@@ -499,10 +551,14 @@ class Base < Module
                 user    = match[1]
                 channel = match[2]
 
-                if thing.server.channels[channel]
-                    if thing.server.clients[user]
-                        if thing.server.channels[channel].users[user]
-                            Utils::setMode(thing, thing.server.channels[channel].users[user], value)
+                if tmp = thing.server.channels[channel]
+                    channel = tmp
+
+                    if tmp = thing.server.clients[user]
+                        if tmp = channel.user(tmp)
+                            user = tmp
+
+                            Utils::setMode(thing, user, value)
                         else
                             thing.send :numeric, ERR_USERNOTINCHANNEL, {
                                 :nick    => user,
@@ -516,8 +572,10 @@ class Base < Module
                     thing.send :numeric, ERR_NOSUCHCHANNEL, channel
                 end
             else
-                if thing.server.clients[name]
-                    Utils::setMode(thing, thing.server.clients[name], value)
+                if tmp = thing.server.clients[name]
+                    client = tmp
+
+                    Utils::setMode(thing, client, value)
                 else
                     thing.send :numeric, ERR_NOSUCHNICK, name
                 end
@@ -902,31 +960,43 @@ class Base < Module
             thing.send :numeric, ERR_NOTEXTTOSEND
         else
             receiver = match[1]
-            text     = match[3]
+            message  = match[3]
 
             if Utils::Channel::isValid(receiver)
-                if thing.channels[receiver]
-                    if thing.channels[receiver].modes[:m] && !thing.channels[receiver].user(thing).modes[:can_talk]
-                        thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
-                    else
-                        thing.server.dispatcher.execute(:message, thing, thing.channels[receiver], text)
+                channel = thing.channels[receiver] || thing.server.channels[receiver]
+
+                if channel
+                    user = channel.user(thing)
+
+                    if channel.modes[:m] && !user.modes[:can_talk] && !thing.modes[:can_talk]
+                        thing.send :numeric, ERR_YOUNEEDVOICE, channel.name
+                        return
                     end
-                else
-                    if !thing.server.channels[receiver]
-                        thing.send :numeric, ERR_NOSUCHNICK, receiver
+
+                    if Utils::Channel::banned?(channel, thing)
+                        thing.send :numeric, ERR_YOUAREBANNED, channel.name
+                        return
+                    end
+
+                    if user
+                        thing.server.dispatcher.execute(:message, thing, channel, message)
                     else
                         if thing.server.channels[receiver].modes[:n]
-                            thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
+                            thing.send :numeric, ERR_ERR_NOEXTERNALMESSAGES, channel.name
                         else
-                            thing.server.dispatcher.execute(:message, thing, thing.server.channels[receiver], text)
+                            thing.server.dispatcher.execute(:message, thing, channel, message)
                         end
                     end
+                else
+                    thing.send :numeric, ERR_NOSUCHNICK, receiver
                 end
             else
-                if !thing.server.clients[receiver]
+                client = thing.server.clients[receiver]
+
+                if !client
                     thing.send :numeric, ERR_NOSUCHNICK, receiver
                 else
-                    thing.server.dispatcher.execute(:message, thing, thing.server.clients[receiver], text)
+                    thing.server.dispatcher.execute(:message, thing, client, message)
                 end
             end
         end

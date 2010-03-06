@@ -40,7 +40,22 @@ ERR_NOSUCHCHANNEL = {
 # Sent to a user who is either (a) not on a channel which is mode +n or (b) not a chanop (or mode +v) on a channel which has mode +m set and is trying to send a PRIVMSG message to that channel.
 ERR_CANNOTSENDTOCHAN = {
     :code => 404,
-    :text => '"#{value} :Cannot send to channel"'
+    :text => '"#{value} :Cannot send to channel "'
+}
+
+ERR_YOUNEEDVOICE = {
+    :code => 404,
+    :text => '"#{value} :You need voice (+v) (#{value})"'
+}
+
+ERR_NOEXTERNALMESSAGES = {
+    :code => 404,
+    :text => '"#{value} :No external channel messages (#{value})"'
+}
+
+ERR_YOUAREBANNED = {
+    :code => 404,
+    :text => '"#{value} :You are banned (#{value})"'
 }
 
 # Sent to a user when they have joined the maximum number of allowed channels and they try to join another channel.

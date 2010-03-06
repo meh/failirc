@@ -139,7 +139,9 @@ class Dispatcher
                                 if !string || string.empty?
                                     raise Errno::EPIPE
                                 else
-                                    if !string.strip!.empty?
+                                    string.strip!
+
+                                    if !string.empty?
                                         dispatch :input, thing, string
                                     end
                                 end
