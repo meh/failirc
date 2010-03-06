@@ -81,8 +81,16 @@ class Dispatcher
 
             @handling[socket] = true
             
-            while out = pop(socket)
-                socket.puts out
+            begin
+                while out = pop(socket)
+                    socket.puts out
+                end
+            rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+                server.kill server.connections[:things][socket], 'Client exited.'
+            rescue Errno::ECONNRESET
+                server.kill server.connections[:things][socket], 'Connection reset by peer.'
+            rescue Exception => e
+                debug e
             end
 
             @handling[socket] = false
