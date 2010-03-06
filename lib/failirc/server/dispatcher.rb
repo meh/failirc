@@ -145,7 +145,7 @@ class Dispatcher
                                         dispatch :input, thing, string
                                     end
                                 end
-                            rescue IOError, Errno::EBADF, Errno::EPIPE
+                            rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
                                 server.kill thing, 'Client exited.'
                             rescue Errno::ECONNRESET
                                 server.kill thing, 'Connection reset by peer.'
@@ -155,7 +155,7 @@ class Dispatcher
                         }
                     }
                 end
-            rescue IOError, Errno::EBADF, Errno::EPIPE, Errno::ECONNRESET
+            rescue IOError, Errno::EBADF, Errno::EPIPE, Errno::ECONNRESET, OpenSSL::SSL::SSLError
             rescue Exception => e
                 self.debug e
             end
