@@ -157,6 +157,8 @@ class Base < Module
     end
 
     module Utils
+        include IRC::Utils
+
         module Client
             class Action
                 attr_reader :client, :event, :string, :on
@@ -283,13 +285,18 @@ class Base < Module
         @@modes = {
             :channel => {
                 :a => :anonymous,
-                :m => :moderated,
                 :i => :inviteOnly,
+                :m => :moderated,
                 :s => :secret,
+                :t => :topic_change_needs_privileges,
+                :z => :ssl_only,
             },
 
             :user => {
-                :o => [:operator, :can_kick, :can_change_topic, :can_give_channel_operator],
+                :can_change_channel_modes => [:can_change_topic_mode],
+
+                :a => :o,
+                :o => [:operator, :can_kick, :can_change_topic, :can_give_channel_operator, :can_change_channel_modes, :can_change_user_modes],
                 :v => :voice,
             },
 
@@ -299,19 +306,26 @@ class Base < Module
         }
 
         def self.setFlags (thing, type, value)
-            if thing.is_a?(Channel)
-                modes = @@modes[:channel][type]
-            elsif thing.is_a?(User)
-                modes = @@modes[:user][type]
-            elsif thing.is_a?(Client)
-                modes = @@modes[:client][type]
+            if thing.is_a?(IRC::Channel)
+                main = @@modes[:channel]
+            elsif thing.is_a?(IRC::User)
+                main = @@modes[:user]
+            elsif thing.is_a?(IRC::Client)
+                main = @@modes[:client]
+            else
+                raise 'I don\'t know what to do'
             end
 
+            modes             = main[type]
             thing.modes[type] = value
 
             if modes.is_a?(Array)
                 modes.each {|mode|
-                    thing.modes[mode] = value
+                    if main.has_key?(mode) && !thing.modes.has_key?(mode)
+                        self.setFlags(thing, mode, value)
+                    else
+                        thing.modes[mode] = value
+                    end
                 }
             else
                 thing.modes[modes] = value
@@ -337,28 +351,34 @@ class Base < Module
 
                 modes.each {|mode|
                     if thing.is_a?(IRC::Channel)
-                        if mode == 'o' && (from.is_a?(Server) || from.modes[:can_give_channel_operator])
-                            value = values.shift
+                        case mode
 
-                            if !(user = thing.users[value])
-                                from.send :numeric, ERR_NOSUCHNICK, values
-                                next
-                            end
+                        when 'o'
+                            if from.is_a?(Server) || from.modes[:can_give_channel_operator]
+                                value = values.shift
 
-                            if type == '+'
-                                self.setFlags(user, :o, true)
-
-                                if !user.modes[:q] && !user.modes[:a]
-                                    user.modes[:level] = '@'
+                                if !(user = thing.users[value])
+                                    from.send :numeric, ERR_NOSUCHNICK, values
+                                    next
                                 end
+
+                                if type == '+'
+                                    self.setFlags(user, :o, true)
+
+                                    if !user.modes[:q] && !user.modes[:a]
+                                        user.modes[:level] = '@'
+                                    end
+                                else
+                                    self.setFlags(user, :o, false)
+                                end
+
+                                outputModes.push('o')
+                                outputValues.push(value)
                             else
-                                self.setFlags(user, :o, false)
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
 
-
-                            outputModes.push('o')
-                            outputValues.push(value)
-                        elsif mode == 'b'
+                        when 'b'
                             if type == '+'
                                 if values.empty?
                                     thing.modes[:bans].each {|ban|
@@ -369,6 +389,14 @@ class Base < Module
                                 else
                                 end
                             end
+                        when 't'
+                            if from.modes[:can_change_topic_mode]
+                                self.setFlags(thing, :t, type == '+')
+
+                                outputModes.push('t')
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                            end
                         end
                     elsif thing.is_a?(IRC::Client)
                     end
@@ -377,7 +405,7 @@ class Base < Module
                         from = from.client
                     end
 
-                    if !noAnswer && (!outputModes.empty? && !outputValues.empty?)
+                    if !noAnswer && (!outputModes.empty? || !outputValues.empty?)
                         thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{type}#{outputModes.join('')} #{outputValues.join(' ')}"
                     end
                 }
@@ -795,13 +823,13 @@ class Base < Module
 
         channel = match[1]
 
-        if !thing.channels[channel]
+        if !thing.modes[:can_change_topic] && !thing.channels[channel]
             thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[channel]
         else
             if match[2]
                 topic = match[3].to_s
 
-                if thing.channels[channel].modes[:t] && !thing.channels[channel].user(thing).modes[:can_set_topic]
+                if thing.channels[channel].modes[:t] && (!thing.channels[channel].user(thing).modes[:can_change_topic] && !thing.modes[:can_change_topic])
                     thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[channel]
                 else
                     thing.channels[channel].topic = [thing, topic]
