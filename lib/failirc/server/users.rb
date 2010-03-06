@@ -31,6 +31,10 @@ class Users < ThreadSafeHash
         super()
     end
 
+    def server
+        @channel.server
+    end
+
     alias __get []
 
     def [] (user)
