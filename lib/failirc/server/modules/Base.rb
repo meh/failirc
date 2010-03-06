@@ -236,11 +236,9 @@ class Base < Module
 
         def self.registration (thing)
             if !thing.modes[:registered]
-                if @nicks[thing.nick] || thing.server.clients[thing.nick]
-                    if @nick[thing.nick] != thing
-                        thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
-                        return
-                    end
+                if (@nicks[thing.nick] && @nicks[thing.nick] != thing) || thing.server.clients[thing.nick]
+                    thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
+                    return
                 end
 
                 @nicks[thing.nick] = thing
