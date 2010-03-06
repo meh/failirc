@@ -22,21 +22,24 @@ module IRC
 module Utils
 
 def debug (argument, separator="\n")
-    if @verbose || @server.verbose
-        if argument.is_a?(Exception)
-            puts "#{self.class}: #{argument.class}: #{argument.message}"
-            puts argument.backtrace.collect {|stack|
-                "#{self.class}: #{stack}"
-            }.join("\n")
-        elsif argument.is_a?(String)
-            puts "#{self.class}: #{argument}"
-        else
-            puts "#{self.class}: #{argument.inspect}"
-        end
+    begin
+        if @verbose || @server.verbose
+            if argument.is_a?(Exception)
+                puts "#{self.class}: #{argument.class}: #{argument.message}"
+                puts argument.backtrace.collect {|stack|
+                    "#{self.class}: #{stack}"
+                }.join("\n")
+            elsif argument.is_a?(String)
+                puts "#{self.class}: #{argument}"
+            else
+                puts "#{self.class}: #{argument.inspect}"
+            end
 
-        if separator
-            puts separator
+            if separator
+                puts separator
+            end
         end
+    rescue
     end
 end
 
