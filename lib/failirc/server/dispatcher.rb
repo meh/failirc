@@ -255,7 +255,9 @@ class Dispatcher
         if @events[:custom][event]
             @events[:custom][event].each {|callback|
                 begin
-                    callback.method.call(*args)
+                    if callback.method.call(*args) == false
+                        return false
+                    end
                 rescue Exception => e
                     self.debug(e)
                 end

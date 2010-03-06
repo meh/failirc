@@ -74,8 +74,9 @@ class Base < Module
                 :NICK => /^(:[^ ] )?NICK( |$)/i,
                 :USER => /^(:[^ ] )?USER( |$)/i,
 
-                :JOIN  => /^(:[^ ] )?JOIN( |$)/i,
-                :PART  => /^(:[^ ] )?PART( |$)/i,
+                :JOIN => /^(:[^ ] )?JOIN( |$)/i,
+                :PART => /^(:[^ ] )?PART( |$)/i,
+                :KICK => /^(:[^ ] )?KICK( |$)/i,
 
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
                 :NAMES => /^NAMES( |$)/i,
@@ -97,8 +98,9 @@ class Base < Module
             :custom => {
                 :kill => self.method(:send_quit),
 
-                :user_add    => self.method(:send_join),
-                :user_delete => self.method(:send_part),
+                :join => self.method(:send_join),
+                :part => self.method(:send_part),
+                :kick => self.method(:send_kick),
 
                 :message => self.method(:send_message),
                 :notice  => self.method(:send_notice),
@@ -119,8 +121,9 @@ class Base < Module
                 :NICK => self.method(:nick),
                 :USER => self.method(:user),
 
-                :JOIN  => self.method(:join),
-                :PART  => self.method(:part),
+                :JOIN => self.method(:join),
+                :PART => self.method(:part),
+                :KICK => self.method(:kick),
 
                 :TOPIC => self.method(:topic),
                 :NAMES => self.method(:names),
@@ -137,6 +140,16 @@ class Base < Module
         }
 
         super(server)
+    end
+
+    def rehash
+        @messages = {}
+
+        if tmp = server.config.elements['config/modules/modules[@name="Base"]/messages/quit']
+            @messages[:quit] = tmp.text
+        else
+            @messages[:quit] = 'Quit: #{message}'
+        end
     end
 
     def finalize
@@ -169,7 +182,7 @@ class Base < Module
                 end
 
                 def to_s
-                    "#{channel.name} #{mask} #{setBy.nick} #{setOn.tv_sec}"
+                    "#{channel} #{mask} #{setBy.nick} #{setOn.tv_sec}"
                 end
             end
 
@@ -184,7 +197,7 @@ class Base < Module
                 end
 
                 def to_s
-                    "#{channel.name} #{mask} #{setBy.nick} #{setOn.tv_sec}"
+                    "#{channel} #{mask} #{setBy.nick} #{setOn.tv_sec}"
                 end
             end
 
@@ -267,6 +280,44 @@ class Base < Module
             user.send :numeric, RPL_ENDOFMOTD
         end
 
+        @@modes = {
+            :channel => {
+                :a => :anonymous,
+                :m => :moderated,
+                :i => :inviteOnly,
+                :s => :secret,
+            },
+
+            :user => {
+                :o => [:operator, :can_kick, :can_change_topic, :can_give_channel_operator],
+                :v => :voice,
+            },
+
+            :client => {
+                :o => [:operator, :can_kick, :can_change_topic, :can_give_channel_operator],
+            },
+        }
+
+        def self.setFlags (thing, type, value)
+            if thing.is_a?(Channel)
+                modes = @@modes[:channel][type]
+            elsif thing.is_a?(User)
+                modes = @@modes[:user][type]
+            elsif thing.is_a?(Client)
+                modes = @@modes[:client][type]
+            end
+
+            thing.modes[type] = value
+
+            if modes.is_a?(Array)
+                modes.each {|mode|
+                    thing.modes[mode] = value
+                }
+            else
+                thing.modes[modes] = value
+            end
+        end
+
         def self.setMode (from, thing, request, noAnswer=false)
             if request[0, 1] == '='
 
@@ -280,33 +331,35 @@ class Base < Module
                 outputModes  = []
                 outputValues = []
 
-                type   = match[1]
+                type   = match[1] || '+'
                 modes  = match[2].split(//)
                 values = (match[4] || '').split(/ /)
 
-                puts "#{from} #{thing.class} #{type.inspect} #{modes.inspect} #{values.inspect}"
-    
                 modes.each {|mode|
                     if thing.is_a?(IRC::Channel)
-                        if !type || type == '+'
-                            if mode == 'o' && (from.is_a?(Server) || from.modes[:can_give_channel_operator])
-                                value = values.shift
+                        if mode == 'o' && (from.is_a?(Server) || from.modes[:can_give_channel_operator])
+                            value = values.shift
 
-                                if user = thing.users[value]
-                                    user.modes[:o]                         = true
-                                    user.modes[:can_set_topic]             = true
-                                    user.modes[:can_give_channel_operator] = true
-        
-                                    if !user.modes[:q] && !user.modes[:a]
-                                        user.modes[:level] = '@'
-                                    end
+                            if !(user = thing.users[value])
+                                from.send :numeric, ERR_NOSUCHNICK, values
+                                next
+                            end
 
-                                    outputModes.push('o')
-                                    outputValues.push(value)
-                                else
-                                    from.send :numeric, ERR_NOSUCHNICK, values
+                            if type == '+'
+                                self.setFlags(user, :o, true)
+
+                                if !user.modes[:q] && !user.modes[:a]
+                                    user.modes[:level] = '@'
                                 end
-                            elsif mode == 'b'
+                            else
+                                self.setFlags(user, :o, false)
+                            end
+
+
+                            outputModes.push('o')
+                            outputValues.push(value)
+                        elsif mode == 'b'
+                            if type == '+'
                                 if values.empty?
                                     thing.modes[:bans].each {|ban|
                                         from.send :numeric, RPL_BANLIST, ban
@@ -316,7 +369,6 @@ class Base < Module
                                 else
                                 end
                             end
-                        else
                         end
                     elsif thing.is_a?(IRC::Client)
                     end
@@ -371,12 +423,13 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NOORIGIN
-        else
-            thing.send :raw, ":#{thing.server.host} PONG #{thing.server.host} :#{match[1]}"
-
-            # RFC isn't that clear about when this error should be shoot
-            # thing.send :numeric, ERR_NOSUCHSERVER, match[1]
+            return
         end
+
+        thing.send :raw, ":#{thing.server.host} PONG #{thing.server.host} :#{match[1]}"
+
+        # RFC isn't that clear about when this error should be shoot
+        # thing.send :numeric, ERR_NOSUCHSERVER, match[1]
     end
 
     def pong (thing, string)
@@ -384,32 +437,15 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NOORIGIN
+            return
+        end
+
+        if match[2] == thing.server.host
+            @pingedOut.delete(thing.socket)
         else
-            if match[2] == thing.server.host
-                @pingedOut.delete(thing.socket)
-            else
-                thing.send :numeric, ERR_NOSUCHSERVER, match[2]
-            end
+            thing.send :numeric, ERR_NOSUCHSERVER, match[2]
         end
     end
-
-    @@modes = {
-        :channel => {
-            :a => :anonymous,
-            :m => :moderated,
-            :i => :inviteOnly,
-            :s => :secret,
-        },
-
-        :user => {
-            :o => :operator,
-            :v => :voice,
-        },
-
-        :client => {
-            :o => :operator,
-        },
-    }
 
     def mode (thing, string)
         # MODE user/channel = +option,-option
@@ -492,13 +528,14 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'OPER'
-        else
-            server.config.elements['operators/operator'].each {|element|
-                thing.send :numeric, RPL_YOUREOPER
-            }
-
-            thing.send :numeric, ERR_NOOPERHOST
+            return
         end
+
+        server.config.elements['operators/operator'].each {|element|
+            thing.send :numeric, RPL_YOUREOPER
+        }
+
+        thing.send :numeric, ERR_NOOPERHOST
     end
 
     def pass (thing, string)
@@ -564,7 +601,7 @@ class Base < Module
                 if thing.channels.empty?
                     thing.send :raw, ":#{mask} NICK :#{nick}"
                 else
-                    thing.channels.users :raw, ":#{mask} NICK :#{nick}"
+                    thing.channels.unique_users :raw, ":#{mask} NICK :#{nick}"
                 end
             end
         end
@@ -597,66 +634,72 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'JOIN'
+            return
+        end
+
+        channel  = match[1]
+        password = match[3]
+
+        if !Utils::Channel::isValid(channel)
+            channel = "##{channel}"
+        end
+
+        if !Utils::Channel::isValid(channel)
+            thing.send :numeric, ERR_BADCHANMASK, channel
+            return
+        end
+
+        if thing.channels[channel]
+            return
+        end
+
+        if !thing.server.channels[channel]
+            channel = thing.server.channels[channel] = Channel.new(server, channel)
+            channel.modes[:type]    = channel.name[0, 1]
+            channel.modes[:bans]    = []
+            channel.modes[:invites] = []
         else
-            channel  = match[1]
-            password = match[3]
+            channel = thing.server.channels[channel]
+        end
 
-            if !Utils::Channel::isValid(channel)
-                channel = "##{channel}"
-            end
+        if channel.modes[:k] && password != channel.modes[:password]
+            thing.send :numeric, ERR_BADCHANNELKEY, channel
+            return 
+        end
 
-            if !Utils::Channel::isValid(channel)
-                thing.send :numeric, ERR_BADCHANMASK, channel
-                return
-            end
+        if channel.modes[:i] && !Utils::Channel::invited?(channel, thing)
+            thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
+            return
+        end
 
-            if thing.channels[channel]
-                return
-            end
+        if Utils::Channel::banned?(channel, thing)
+            thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
+            return
+        end
 
-            if !thing.server.channels[channel]
-                channel = thing.server.channels[channel] = Channel.new(server, channel)
-                channel.modes[:type]    = channel.name[0, 1]
-                channel.modes[:bans]    = []
-                channel.modes[:invites] = []
-            else
-                channel = thing.server.channels[channel]
-            end
+        empty = channel.empty?
+        user  = channel.add(thing)
 
-            if channel.modes[:k] && password != channel.modes[:password]
-                thing.send :numeric, ERR_BADCHANNELKEY, channel
-                return 
-            end
+        if empty
+            Utils::setMode @server, channel, "+o #{user.nick}", true
+        end
 
-            if channel.modes[:i] && !Utils::Channel::invited?(channel, thing)
-                thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
-                return
-            end
+        thing.channels.add(channel)
 
-            if Utils::Channel::banned?(channel, thing)
-                thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
-                return
-            end
-
-            empty = channel.empty?
-            user  = channel.users.add(thing)
-
-            if empty
-                Utils::setMode @server, channel, "+o #{user.nick}", true
-            end
-
-            thing.channels.add(channel)
-
+        if server.dispatcher.execute(:join, user) != false
             if !channel.topic.nil?
-                topic thing, "TOPIC #{channel.name}"
+                topic thing, "TOPIC #{channel}"
             end
 
-            names thing, "NAMES #{channel.name}"
+            names thing, "NAMES #{channel}"
+        else
+            user.channel.delete(user)
+            thing.channels.delete(channel)
         end
     end
 
-    def send_join (thing)
-        thing.channel.send :raw, ":#{thing.mask} JOIN :#{thing.channel.name}"
+    def send_join (user)
+        user.channel.send :raw, ":#{user.mask} JOIN :#{user.channel}"
     end
 
     def part (thing, string)
@@ -664,28 +707,83 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'PART'
-        else
-            name    = match[1]
-            message = match[3]
-            channel = thing.server.channels[name]
+            return
+        end
 
-            if !channel
-                thing.send :numeric, ERR_NOSUCHCHANNEL, name
-            elsif !thing.channels[name]
-                thing.send :numeric, ERR_NOTONCHANNEL, name
-            else
-                channel.users.delete(thing, message)
+        name    = match[1]
+        message = match[3]
+        channel = thing.server.channels[name]
+
+        if !channel
+            thing.send :numeric, ERR_NOSUCHCHANNEL, name
+        elsif !thing.channels[name]
+            thing.send :numeric, ERR_NOTONCHANNEL, name
+        else
+            if server.dispatcher.execute(:part, thing.channels[name].user(thing), message) != false
+                channel.delete(thing)
                 thing.channels.delete(name)
             end
         end
     end
 
-    def send_part (thing, message)
-        if thing.client.modes[:quitting]
+    def send_part (user, message)
+        if user.client.modes[:quitting]
             return
         end
 
-        thing.channel.send :raw, ":#{thing.mask} PART #{thing.channel.name} :#{message}"
+        user.channel.send :raw, ":#{user.mask} PART #{user.channel} :#{message}"
+    end
+
+    def kick (thing, string)
+        match = string.match(/KICK\s+(.+?)\s+(.+?)(\s+:(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'KICK'
+            return
+        end
+
+        channel = match[1]
+        user    = match[2]
+        message = match[4]
+
+        if !Utils::Channel::isValid(channel)
+            thing.send :numeric, ERR_BADCHANMASK, channel
+            return
+        end
+
+        if !thing.server.channels[channel]
+            thing.send :numeric, ERR_NOSUCHCHANNEL, channel
+            return
+        end
+
+        if !thing.server.clients[user]
+            thing.send :numeric, ERR_NOSUCHNICK, user
+            return
+        end
+
+        channel = thing.server.channels[channel]
+        user    = channel[user]
+
+        if !user
+            thing.send :numeric, ERR_NOTONCHANNEL, channel.name
+            return
+        end
+
+        if thing.channels[channel.name]
+            thing = thing.channels[channel.name].user(thing)
+        end
+
+        if thing.modes[:can_kick]
+            channel.delete(user)
+
+            if server.dispatcher.execute(:kick, thing, user, message) == false
+                channel.add(user)
+            end
+        end
+    end
+
+    def send_kick (kicker, kicked, message)
+        kicked.channel.send :raw, ":#{kicker.mask} KICK #{kicked.channel} #{kicked.nick} :#{message}"
     end
 
     def topic (thing, string)
@@ -693,34 +791,35 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'TOPIC'
+            return
+        end
+
+        channel = match[1]
+
+        if !thing.channels[channel]
+            thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[channel]
         else
-            channel = match[1]
+            if match[2]
+                topic = match[3].to_s
 
-            if !thing.channels[channel]
-                thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[channel]
-            else
-                if match[2]
-                    topic = match[3].to_s
-
-                    if thing.channels[channel].modes[:t] && !thing.channels[channel].user(thing).modes[:can_set_topic]
-                        thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[channel]
-                    else
-                        thing.channels[channel].topic = [thing, topic]
-                    end
+                if thing.channels[channel].modes[:t] && !thing.channels[channel].user(thing).modes[:can_set_topic]
+                    thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[channel]
                 else
-                    if thing.channels[channel].topic.nil?
-                        thing.send :numeric, RPL_NOTOPIC, thing.server.channels[channel]
-                    else
-                        thing.send :numeric, RPL_TOPIC, thing.server.channels[channel].topic
-                        thing.send :numeric, RPL_TOPICSETON, thing.channels[channel].topic
-                    end
+                    thing.channels[channel].topic = [thing, topic]
+                end
+            else
+                if thing.channels[channel].topic.nil?
+                    thing.send :numeric, RPL_NOTOPIC, thing.server.channels[channel]
+                else
+                    thing.send :numeric, RPL_TOPIC, thing.server.channels[channel].topic
+                    thing.send :numeric, RPL_TOPICSETON, thing.channels[channel].topic
                 end
             end
         end
     end
 
     def send_topic (channel)
-        channel.send :raw, ":#{channel.topic.setBy.mask} TOPIC #{channel.name} :#{channel.topic}"
+        channel.send :raw, ":#{channel.topic.setBy.mask} TOPIC #{channel} :#{channel.topic}"
     end
 
     def names (thing, string)
@@ -728,15 +827,16 @@ class Base < Module
 
         if !match
             thing.send :numeric, RPL_ENDOFNAMES, thing.nick
-        else
-            channel = match[1]
-
-            if thing.channels[channel]
-                thing.send :numeric, RPL_NAMREPLY, thing.channels[channel]
-            end
-
-            thing.send :numeric, RPL_ENDOFNAMES, channel
+            return
         end
+
+        channel = match[1]
+
+        if thing.channels[channel]
+            thing.send :numeric, RPL_NAMREPLY, thing.channels[channel]
+        end
+
+        thing.send :numeric, RPL_ENDOFNAMES, channel
     end
 
     def who (thing, string)
@@ -744,9 +844,7 @@ class Base < Module
 
         name = match[1] || '*'
 
-        if !match
-
-        else
+        if match
             op = match[2]
 
             if Utils::Channel::isValid(name) && thing.server.channels[name]
@@ -770,37 +868,38 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NORECIPIENT, 'PRIVMSG'
-        else
-            if !match[3]
-                thing.send :numeric, ERR_NOTEXTTOSEND
-            else
-                receiver = match[1]
-                text     = match[3]
+            return
+        end
 
-                if Utils::Channel::isValid(receiver)
-                    if thing.channels[receiver]
-                        if thing.channels[receiver].modes[:m] && !thing.channels[receiver].user(thing).modes[:can_talk]
-                            thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
-                        else
-                            thing.server.dispatcher.execute(:message, thing, thing.channels[receiver], text)
-                        end
+        if !match[3]
+            thing.send :numeric, ERR_NOTEXTTOSEND
+        else
+            receiver = match[1]
+            text     = match[3]
+
+            if Utils::Channel::isValid(receiver)
+                if thing.channels[receiver]
+                    if thing.channels[receiver].modes[:m] && !thing.channels[receiver].user(thing).modes[:can_talk]
+                        thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
                     else
-                        if !thing.server.channels[receiver]
-                            thing.send :numeric, ERR_NOSUCHNICK, receiver
-                        else
-                            if thing.server.channels[receiver].modes[:n]
-                                thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
-                            else
-                                thing.server.dispatcher.execute(:message, thing, thing.server.channels[receiver], text)
-                            end
-                        end
+                        thing.server.dispatcher.execute(:message, thing, thing.channels[receiver], text)
                     end
                 else
-                    if !thing.server.clients[receiver]
+                    if !thing.server.channels[receiver]
                         thing.send :numeric, ERR_NOSUCHNICK, receiver
                     else
-                        thing.server.dispatcher.execute(:message, thing, thing.server.clients[receiver], text)
+                        if thing.server.channels[receiver].modes[:n]
+                            thing.send :numeric, ERR_CANNOTSENDTOCHAN, receiver
+                        else
+                            thing.server.dispatcher.execute(:message, thing, thing.server.channels[receiver], text)
+                        end
                     end
+                end
+            else
+                if !thing.server.clients[receiver]
+                    thing.send :numeric, ERR_NOSUCHNICK, receiver
+                else
+                    thing.server.dispatcher.execute(:message, thing, thing.server.clients[receiver], text)
                 end
             end
         end
@@ -854,11 +953,15 @@ class Base < Module
     def quit (thing, string)
         match = /^QUIT((\s+)(:)?(.*)?)?$/i.match(string)
 
-        thing.server.kill(thing, "#{thing.server.config.elements['config/messages/quit'].text}#{match[4] || thing.nick}")
+        user    = thing
+        message = match[4] || user.nick
+        text    = eval(@messages[:quit].inspect.gsub(/\\#/, '#'))
+
+        thing.server.kill(thing, text)
     end
 
     def send_quit (thing, message)
-        thing.channels.users.send :raw, ":#{thing.mask} QUIT :#{message}"
+        thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
     end 
 end
 

@@ -38,10 +38,8 @@ class TinyURL < Module
     end
 
     def rehash
-        @length = @server.config.elements['config/modules/module[@name="TinyURL"]/length']
-
-        if @length
-            @length = @length.text.to_i
+        if tmp = @server.config.elements['config/modules/module[@name="TinyURL"]/length']
+            @length = tmp.text.to_i
         else
             @length = 42
         end

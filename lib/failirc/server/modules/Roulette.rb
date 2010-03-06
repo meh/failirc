@@ -41,18 +41,14 @@ class Roulette < Module
     end
 
     def rehash
-        @death = @server.config.elements['config/modules/module[@name="Roulette"]/death']
-
-        if @death
-            @death = @death.text
+        if tmp = @server.config.elements['config/modules/module[@name="Roulette"]/death']
+            @death = tmp.text
         else
             @death = 'BOOM, dickshot'
         end
 
-        @life = @server.config.elements['config/modules/module[@name="Roulette"]/life']
-
-        if @life
-            @life = @life.text
+        if tmp = @server.config.elements['config/modules/module[@name="Roulette"]/life']
+            @life = tmp.text
         else
             @life = '#{user.nick} shot but survived :('
         end

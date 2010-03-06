@@ -31,15 +31,31 @@ class Users < ThreadSafeHash
         super()
     end
 
-    alias __delete delete
-    
-    def delete (key, message=nil)
-        if key.is_a?(User) || key.is_a?(Client)
-            key = key.nick
+    alias __get []
+
+    def [] (user)
+        if user.is_a?(Client) || user.is_a?(User)
+            user = user.nick
         end
 
-        if message.nil?
-            message = key
+        __get(user)
+    end
+
+    alias __set []=
+
+    def []= (user, value)
+        if user.is_a?(Client) || user.is_a?(User)
+            user = user.nick
+        end
+
+        __set(user, value)
+    end
+
+    alias __delete delete
+    
+    def delete (key)
+        if key.is_a?(User) || key.is_a?(Client)
+            key = key.nick
         end
 
         key = key.downcase
@@ -47,12 +63,10 @@ class Users < ThreadSafeHash
         user = self[key]
 
         if user
-            user.server.dispatcher.execute(:user_delete, user, message)
-
             __delete(key)
 
             if channel.empty?
-                channel.server.channels.delete(channel.name)
+                server.channels.delete(channel)
             end
         end
     end
@@ -63,10 +77,6 @@ class Users < ThreadSafeHash
         end
 
         self[user.nick] = User.new(user, @channel)
-
-        user.server.dispatcher.execute(:user_add, self[user.nick])
-
-        return self[user.nick]
     end
 
     def send (*args)

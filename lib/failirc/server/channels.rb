@@ -32,8 +32,22 @@ class Channels < ThreadSafeHash
         super()
     end
 
+    alias __delete delete
+
+    def delete (channel)
+        if channel.is_a?(Channel)
+            __delete(channel.name)
+        else
+            __delete(channel)
+        end
+    end
+
+    def add (channel)
+        self[channel.name] = channel
+    end
+
     # get single users in the channels
-    def users
+    def unique_users
         result = Clients.new(server)
 
         each_value {|channel|
@@ -43,20 +57,6 @@ class Channels < ThreadSafeHash
         }
 
         return result
-    end
-
-    def add (channel)
-        self[channel.name] = channel
-    end
-
-    def clean
-        each {|name, channel|
-            puts channel.empty?.inspect
-
-            if channel.empty?
-                delete(name)
-            end
-        }
     end
 
     def inspect

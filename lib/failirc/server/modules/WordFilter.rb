@@ -37,10 +37,8 @@ class WordFilter < Module
 
     def rehash
         # config for the rainbow filter
-        @rainbow = @server.config.elements['config/modules/module[@name="WordFilter"]/rainbow']
-
-        if @rainbow
-            @rainbow = @rainbow.text
+        if tmp = @server.config.elements['config/modules/module[@name="WordFilter"]/rainbow']
+            @rainbow = tmp.text
         else
             @rainbow = 'rrRRyyYYGGggccCCBBppPP'
         end
@@ -48,10 +46,8 @@ class WordFilter < Module
         # config for the replaces filter
         @replaces = []
 
-        stuff = @server.config.elements['config/modules/module[@name="WordFilter"]/replaces']
-
-        if stuff
-            stuff.elements['replace'].each {|element|
+        if tmp = @server.config.elements['config/modules/module[@name="WordFilter"]/replaces']
+            tmp.elements['replace'].each {|element|
                 @replaces.push({ :from => element.attributes['word'], :to => element.attributes['with'] })
             }
         end

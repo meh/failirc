@@ -83,6 +83,18 @@ class Channel
         }
     end
 
+    def [] (user)
+        users[user]
+    end
+
+    def add (user)
+        users.add(user)
+    end
+
+    def delete (user)
+        users.delete(user)
+    end
+
     def user (client)
         return @users[client.nick]
     end
@@ -93,6 +105,10 @@ class Channel
 
     def send (*args)
         users.send(*args)
+    end
+
+    def to_s
+        @name
     end
 end
 
