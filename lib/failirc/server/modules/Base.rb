@@ -33,6 +33,7 @@ module Modules
 
 class Base < Module
     def initialize (server)
+        @nicks     = ThreadSafeHash.new
         @pingedOut = ThreadSafeHash.new
         @toPing    = ThreadSafeHash.new
 
@@ -668,13 +669,17 @@ class Base < Module
         if !thing.modes[:registered]
             # if the user hasn't registered yet and the choosen nick is already used,
             # kill it with fire.
-            if thing.server.clients[nick]
+            if @nicks[nick] || thing.server.clients[nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
+                @nicks[nick] = true
+
                 thing.nick = nick
 
                 # try to register it
                 Utils::registration(thing)
+
+                @nicks.delete(nick)
             end
         else
             # if the user has already registered and the choosen nick is already used,
@@ -696,7 +701,6 @@ class Base < Module
                 end
             end
         end
-
     end
 
     def user (thing, string)
