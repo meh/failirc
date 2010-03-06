@@ -69,6 +69,12 @@ class Users < ThreadSafeHash
         return self[user.nick]
     end
 
+    def send (*args)
+        each_value {|user|
+            user.send(*args)
+        }
+    end
+
     def inspect (channel=false)
         result = ""
 

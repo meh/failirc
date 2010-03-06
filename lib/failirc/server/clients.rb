@@ -31,6 +31,12 @@ class Clients < Hash
         super()
     end
 
+    def send (*args)
+        each_value {|user|
+            user.send(*args)
+        }
+    end
+
     def inspect
         result = ""
 

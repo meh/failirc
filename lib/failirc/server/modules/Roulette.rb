@@ -54,17 +54,19 @@ class Roulette < Module
         if @life
             @life = @life.text
         else
-            @life = 'The faggot shot but survived :('
+            @life = '#{user.nick} shot but survived :('
         end
     end
 
     def roulette (thing, string)
+        user = thing
+
         if rand(3) == 1
-            @server.kill(thing, @death)
+            @server.kill thing, eval(@death.inspect.gsub(/\\#/, '#'))
         else
             @server.clients.each_value {|client|
                 if client.modes[:registered]
-                    @server.modules['Standard'].send_notice(thing, client, @life)
+                    @server.dispatcher.execute :notice, @server, client, eval(@life.inspect.gsub(/\\#/, '#'))
                 end
             }
         end

@@ -18,6 +18,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/extensions'
+require 'failirc/server/clients'
 require 'failirc/server/channel'
 
 module IRC
@@ -33,7 +34,7 @@ class Channels < ThreadSafeHash
 
     # get single users in the channels
     def users
-        result = {}
+        result = Clients.new(server)
 
         each_value {|channel|
             channel.users.each {|nick, user|

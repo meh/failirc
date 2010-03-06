@@ -90,6 +90,10 @@ class Channel
     def empty?
         return @users.empty?
     end
+
+    def send (*args)
+        users.send(*args)
+    end
 end
 
 end
