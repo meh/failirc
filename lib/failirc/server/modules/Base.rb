@@ -236,9 +236,11 @@ class Base < Module
 
         def self.registration (thing)
             if !thing.modes[:registered]
-                if (@nicks[thing.nick] && @nicks[thing.nick] != thing) || thing.server.clients[thing.nick]
-                    thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
-                    return
+                if @nicks[thing.nick] || thing.server.clients[thing.nick]
+                    if @nick[thing.nick] != thing
+                        thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
+                        return
+                    end
                 end
 
                 @nicks[thing.nick] = thing
@@ -648,6 +650,14 @@ class Base < Module
         else
             thing.password = match[1]
 
+            if thing.listen.attributes['password']
+                if thing.password != thing.listen.attributes['password']
+                    error(thing, :close, 'Password mismatch')
+                    server.kill thing, 'Password mismatch'
+                    return
+                end
+            end
+
             # try to register it
             Utils::registration(thing)
         end
@@ -703,7 +713,7 @@ class Base < Module
                 if thing.channels.empty?
                     thing.send :raw, ":#{mask} NICK :#{nick}"
                 else
-                    thing.channels.unique_users :raw, ":#{mask} NICK :#{nick}"
+                    thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
                 end
             end
         end
