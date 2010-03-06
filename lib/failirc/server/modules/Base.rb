@@ -287,13 +287,14 @@ class Base < Module
                 :a => :anonymous,
                 :i => :inviteOnly,
                 :m => :moderated,
+                :n => :no_external_messages,
                 :s => :secret,
                 :t => :topic_change_needs_privileges,
                 :z => :ssl_only,
             },
 
             :user => {
-                :can_change_channel_modes => [:can_change_topic_mode],
+                :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode],
 
                 :a => [:o, :admin],
                 :o => [:h, :operator, :can_kick, :can_change_topic, :can_give_channel_operator, :can_change_channel_modes, :can_change_user_modes],
@@ -353,13 +354,13 @@ class Base < Module
                     return
                 end
 
-                if thing.is_a?(IRC::Channel) && !from.modes[:can_change_channel_modes]
+                if thing.is_a?(IRC::Channel) && !from.modes[:can_change_channel_extended_modes]
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                     return
-                elsif thing.is_a?(IRC::User) && from.nick != thing.nick && !from.modes[:can_change_user_modes]
+                elsif thing.is_a?(IRC::User) && !from.modes[:can_change_user_extended_modes]
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
                     return
-                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !from.modes[:can_change_client_modes]
+                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !from.modes[:can_change_client_extended_modes]
                     from.send :numeric, ERR_NOPRIVILEGES
                     return
                 end
@@ -403,6 +404,23 @@ class Base < Module
                     if thing.is_a?(IRC::Channel)
                         case mode
 
+                        when 'b'
+                            if type == '+'
+                                if values.empty?
+                                    thing.modes[:bans].each {|ban|
+                                        from.send :numeric, RPL_BANLIST, ban
+                                    }
+
+                                    from.send :numeric, RPL_ENDOFBANLIST, thing.name
+                                else
+                                end
+                            end
+
+                        when 'n'
+                            if from.is_a?(Server) || from.modes[:can_change_no_external_messages_mode]
+
+                            end
+
                         when 'o'
                             if from.is_a?(Server) || from.modes[:can_give_channel_operator]
                                 value = values.shift
@@ -428,17 +446,6 @@ class Base < Module
                                 from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
 
-                        when 'b'
-                            if type == '+'
-                                if values.empty?
-                                    thing.modes[:bans].each {|ban|
-                                        from.send :numeric, RPL_BANLIST, ban
-                                    }
-
-                                    from.send :numeric, RPL_ENDOFBANLIST, thing.name
-                                else
-                                end
-                            end
                         when 't'
                             if from.modes[:can_change_topic_mode]
                                 self.setFlags(thing, :t, type == '+')
