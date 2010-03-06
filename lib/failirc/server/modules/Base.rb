@@ -739,9 +739,9 @@ class Base < Module
         end
 
         channels  = match[1].split(/,/)
-        passwords = match[3].split(/,/)
+        passwords = (match[3] || '').split(/,/)
 
-        channels.eac {|channel|
+        channels.each {|channel|
             if !Utils::Channel::isValid(channel)
                 channel = "##{channel}"
             end
