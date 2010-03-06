@@ -236,12 +236,14 @@ class Base < Module
 
         def self.registration (thing)
             if !thing.modes[:registered]
-                if (@nicks[thing.nick] && @nicks[thing.nick] != thing) || thing.server.clients[thing.nick]
-                    thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
-                    return
-                end
+                if thing.nick
+                    if (@nicks[thing.nick] && @nicks[thing.nick] != thing) || thing.server.clients[thing.nick]
+                        thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
+                        return
+                    end
 
-                @nicks[thing.nick] = thing
+                    @nicks[thing.nick] = thing
+                end
 
                 # if the client isn't registered but has all the needed attributes, register it
                 if thing.user && thing.nick

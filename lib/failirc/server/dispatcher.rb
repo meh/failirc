@@ -28,7 +28,11 @@ class Dispatcher
     include Utils
 
     class Input < ThreadSafeHash
-        def initialize
+        attr_reader :server
+
+        def initialize (server)
+            @server = server
+
             super()
         end
 
@@ -50,7 +54,11 @@ class Dispatcher
     end
 
     class Output < Hash
-        def initialize
+        attr_reader :server
+
+        def initialize (server)
+            @server = server
+
             @handling = ThreadSafeHash.new
 
             super()
@@ -102,8 +110,8 @@ class Dispatcher
     def initialize (server)
         @server = server
 
-        @input  = Input.new
-        @output = Output.new
+        @input  = Input.new(server)
+        @output = Output.new(server)
 
         @aliases = {
             :input  => {},
