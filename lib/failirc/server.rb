@@ -153,8 +153,6 @@ class Server
         @connections = Connections.new(self)
         @channels    = Channels.new(self)
 
-        @killing = ThreadSafeHash.new
-
         self.config = conf
     end
 
@@ -336,8 +334,6 @@ class Server
         end
 
         @connections.delete(thing.socket)
-
-        @killing.delete(thing)
     end
 
     # reload the config and modules' configurations
