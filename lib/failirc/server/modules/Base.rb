@@ -67,6 +67,7 @@ class Base < Module
                 :PING => /^PING( |$)/i,
                 :PONG => /^PONG( |$)/i,
 
+                :AWAY => /^AWAY( |$)/i,
                 :MODE => /^MODE( |$)/i,
                 :OPER => /^OPER( |$)/i,
 
@@ -114,6 +115,7 @@ class Base < Module
                 :PING => self.method(:ping),
                 :PONG => self.method(:pong),
 
+                :AWAY => self.method(:away),
                 :MODE => self.method(:mode),
                 :OPER => self.method(:oper),
 
@@ -540,6 +542,18 @@ class Base < Module
             @pingedOut.delete(thing.socket)
         else
             thing.send :numeric, ERR_NOSUCHSERVER, match[2]
+        end
+    end
+
+    def away (thing, string)
+        match = string.match(/AWAY\s+(:)?(.*)$/i)
+
+        if !match || match[2].empty?
+            thing.modes[:away] = false
+            thing.send :numeric, RPL_UNAWAY
+        else
+            thing.modes[:away] = match[2]
+            thing.send :numeric, RPL_NOWAWAY
         end
     end
 
