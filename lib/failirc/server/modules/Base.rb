@@ -69,7 +69,6 @@ class Base < Module
 
                 :AWAY => /^AWAY( |$)/i,
                 :MODE => /^MODE( |$)/i,
-                :OPER => /^OPER( |$)/i,
 
                 :PASS => /^PASS( |$)/i,
                 :NICK => /^(:[^ ] )?NICK( |$)/i,
@@ -88,6 +87,9 @@ class Base < Module
 
                 :MAP     => /^MAP( |$)/i,
                 :VERSION => /^VERSION( |$)/i,
+
+                :OPER => /^OPER( |$)/i,
+                :KILL => /^KILL( |$)/i,
 
                 :QUIT => /^QUIT( |$)/i,
             },
@@ -117,7 +119,6 @@ class Base < Module
 
                 :AWAY => self.method(:away),
                 :MODE => self.method(:mode),
-                :OPER => self.method(:oper),
 
                 :PASS => self.method(:pass),
                 :NICK => self.method(:nick),
@@ -137,6 +138,9 @@ class Base < Module
                 :MAP     => self.method(:map),
                 :VERSION => self.method(:version),
 
+                :OPER => self.method(:oper),
+                :KILL => self.method(:kill),
+
                 :QUIT => self.method(:quit),
             },
         }
@@ -151,6 +155,12 @@ class Base < Module
             @messages[:quit] = tmp.text
         else
             @messages[:quit] = 'Quit: #{message}'
+        end
+
+        if tmp = server.config.elements['config/modules/modules[@name="Base"]/messages/kill']
+            @messages[:kill] = tmp.text
+        else
+            @messages[:kill] = 'Kill: #{message} (#{sender.nick})'
         end
     end
 
@@ -316,7 +326,11 @@ class Base < Module
             },
 
             :client => {
-                :o => [:operator, :can_kick, :can_change_topic, :can_give_channel_operator],
+                :netadmin => [:N, :operator],
+                :operator => [:o, :can_kill, :can_kick, :can_change_topic, :can_give_channel_operator],
+
+                :N => [:netadmin],
+                :o => [:operator],
             },
         }
 
@@ -347,6 +361,20 @@ class Base < Module
             end
         end
 
+        def self.checkFlag (thing, type)
+            if thing.is_a?(IRC::Server)
+                return true
+            end
+
+            result = thing.modes[type]
+
+            if !result && thing.is_a?(IRC::User)
+                result = thing.client.modes[type]
+            end
+
+            return result
+        end
+
         def self.setMode (from, thing, request, noAnswer=false)
             if match = request.match(/^=(.*)$/)
                 value = match[1].strip
@@ -367,13 +395,13 @@ class Base < Module
                     return
                 end
 
-                if thing.is_a?(IRC::Channel) && !from.modes[:can_change_channel_extended_modes]
+                if thing.is_a?(IRC::Channel) && !self.checkFlag(from, :can_change_channel_extended_modes)
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                     return
-                elsif thing.is_a?(IRC::User) && !from.modes[:can_change_user_extended_modes]
+                elsif thing.is_a?(IRC::User) && !self.checkFlag(from, :can_change_user_extended_modes)
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
                     return
-                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !from.modes[:can_change_client_extended_modes]
+                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !self.checkFlag(from, :can_change_client_extended_modes)
                     from.send :numeric, ERR_NOPRIVILEGES
                     return
                 end
@@ -430,12 +458,12 @@ class Base < Module
                             end
 
                         when 'n'
-                            if from.is_a?(Server) || from.modes[:can_change_no_external_messages_mode]
+                            if self.checkFlag(from, :can_change_no_external_messages_mode)
 
                             end
 
                         when 'o'
-                            if from.is_a?(Server) || from.modes[:can_give_channel_operator]
+                            if self.checkFlag(from, :can_give_channel_operator)
                                 value = values.shift
 
                                 if !(user = thing.users[value])
@@ -460,7 +488,7 @@ class Base < Module
                             end
 
                         when 't'
-                            if from.modes[:can_change_topic_mode]
+                            if self.checkFlag(from, :can_change_topic_mode)
                                 self.setFlags(thing, :t, type == '+')
 
                                 outputModes.push('t')
@@ -559,7 +587,7 @@ class Base < Module
 
     def mode (thing, string)
         # MODE user/channel = +option,-option
-        match = string.match(/MODE\s+([^ ]+)(\s+(.*))?$/i)
+        match = string.match(/MODE\s+([^ ]+)(\s+(:)?(.*))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'MODE'
@@ -567,7 +595,7 @@ class Base < Module
         end
 
         name  = match[1]
-        value = match[3] || ''
+        value = match[4] || ''
 
         # long options, extended protocol
         if match = value.match(/^=\s+(.*)$/)
@@ -641,21 +669,6 @@ class Base < Module
         end
     end
 
-    def oper (thing, string)
-        match = string.match(/OPER\s+(.*?)\s+(.*?)$/)
-
-        if !match
-            thing.send :numeric, ERR_NEEDMOREPARAMS, 'OPER'
-            return
-        end
-
-        server.config.elements['operators/operator'].each {|element|
-            thing.send :numeric, RPL_YOUREOPER
-        }
-
-        thing.send :numeric, ERR_NOOPERHOST
-    end
-
     def pass (thing, string)
         match = string.match(/PASS\s+(.+)$/i)
 
@@ -666,7 +679,7 @@ class Base < Module
 
             if thing.listen.attributes['password']
                 if thing.password != thing.listen.attributes['password']
-                    error(thing, :close, 'Password mismatch')
+                    Utils::error(thing, :close, 'Password mismatch')
                     server.kill thing, 'Password mismatch'
                     return
                 end
@@ -928,13 +941,13 @@ class Base < Module
 
         channel = match[1]
 
-        if !thing.modes[:can_change_topic] && !thing.channels[channel]
+        if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel]
             thing.send :numeric, ERR_NOTONCHANNEL, thing.server.channels[channel]
         else
             if match[2]
                 topic = match[3].to_s
 
-                if thing.channels[channel].modes[:t] && (!thing.channels[channel].user(thing).modes[:can_change_topic] && !thing.modes[:can_change_topic])
+                if thing.channels[channel].modes[:t] && !Util::checkFlag(thing.channels[channel].user(thing), :can_change_topic)
                     thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[channel]
                 else
                     thing.channels[channel].topic = [thing, topic]
@@ -1015,7 +1028,7 @@ class Base < Module
                 if channel
                     user = channel.user(thing)
 
-                    if channel.modes[:m] && !user.modes[:can_talk] && !thing.modes[:can_talk]
+                    if channel.modes[:m] && !Utils::checkFlag(user, :can_talk)
                         thing.send :numeric, ERR_YOUNEEDVOICE, channel.name
                         return
                     end
@@ -1092,6 +1105,59 @@ class Base < Module
 
     def version (thing, string)
         thing.send :numeric, RPL_VERSION
+    end
+
+    def oper (thing, string)
+        match = string.match(/OPER\s+(.*?)(\s+(.*?))?$/)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'OPER'
+            return
+        end
+
+        password = match[3] || match[1]
+
+        server.config.elements['config/operators'].elements.each('operator') {|element|
+            if thing.mask.match(element.attributes['mask']) && password == element.attributes['password']
+                element.attributes['flags'].split(/,/).each {|flag|
+                    Utils::setFlags(thing, flag.to_sym, true)
+                }
+
+                thing.send :numeric, RPL_YOUREOPER
+                return
+            end
+        }
+
+        thing.send :numeric, ERR_NOOPERHOST
+    end
+
+    def kill (thing, string)
+        match = string.match(/KILL\s+(.*?)(\s+(:)?(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'KILL'
+            return
+        end
+
+        if !Utils::checkFlag(thing, :can_kill)
+            thing.send :numeric, ERR_NOPRIVILEGES
+            return
+        end
+
+        nick    = match[1]
+        user    = thing.server.clients[nick]
+        message = match[4]
+
+        if !user
+            thing.send :numeric, ERR_NOSUCHNICK, nick
+            return
+        end
+
+        sender = thing
+
+        text = eval(@messages[:kill].inspect.gsub(/\\#/, '#'))
+
+        thing.server.kill user, text
     end
 
     def quit (thing, string)

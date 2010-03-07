@@ -49,7 +49,7 @@ class WordFilter < Module
         @replaces = []
 
         if tmp = @server.config.elements['config/modules/module[@name="WordFilter"]/replaces']
-            tmp.elements['replace'].each {|element|
+            tmp.elements.each('replace') {|element|
                 @replaces.push({ :from => element.attributes['word'], :to => element.attributes['with'] })
             }
         end

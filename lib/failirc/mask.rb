@@ -29,11 +29,53 @@ class Mask
     end
 
     def match (mask)
+        if !mask || mask.is_a?(String)
+            mask = Mask.parse(mask || '*!*@*')
+        end
 
+        matches = {}
+
+        if !nick || !mask.nick || /#{Regexp.escape(nick).gsub(/\*/, '.*?')}/.match(mask.nick)
+            matches[:nick] = true
+        end
+
+        if !user || !mask.user || /#{Regexp.escape(user).gsub(/\*/, '.*?')}/.match(mask.user)
+            matches[:user] = true
+        end
+
+        if !host || !mask.host || /#{Regexp.escape(host).gsub(/\*/, '.*?')}/.match(mask.host)
+            matches[:host] = true
+        end
+
+        return matches[:nick] && matches[:user] && matches[:host]
     end
 
     def to_s
         return "#{nick || '*'}!#{user || '*'}@#{host || '*'}"
+    end
+
+    def self.parse (string)
+        match = string.match(/^((.+?)!)?(.+?)(@(.+?))?$/)
+
+        if !match[2] || match[2] == '*'
+            nick = nil
+        else
+            nick = match[2]
+        end
+
+        if match[3] == '*'
+            user = nil
+        else
+            user = match[3]
+        end
+
+        if !match[5] || match[5] == '*'
+            host = nil
+        else
+            host = match[5]
+        end
+
+        return Mask.new(nick, user, host)
     end
 end
 
