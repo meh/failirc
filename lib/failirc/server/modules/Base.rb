@@ -1124,6 +1124,7 @@ class Base < Module
                 }
 
                 thing.send :numeric, RPL_YOUREOPER
+                thing.send :raw, ":#{thing.server} MODE #{thing.nick} #{thing.modes}"
                 return
             end
         }
