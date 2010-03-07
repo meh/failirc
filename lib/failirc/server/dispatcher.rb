@@ -161,17 +161,22 @@ class Dispatcher
                                         dispatch :input, thing, string
                                     end
                                 end
-                            rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+                            rescue IOError
+                                server.kill thing, 'Input/output error.'
+                            rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
                                 server.kill thing, 'Client exited.'
                             rescue Errno::ECONNRESET
                                 server.kill thing, 'Connection reset by peer.'
+                            rescue Errno::ETIMEDOUT
+                                server.kill thing, 'Ping timeout.'
+                            rescue Errno::EHOSTUNREACH
+                                server.kill thing, 'No route to host.'
                             rescue Exception => e
                                 debug e
                             end
                         }
                     }
                 end
-            rescue IOError, Errno::EBADF, Errno::EPIPE, Errno::ECONNRESET, OpenSSL::SSL::SSLError
             rescue Exception => e
                 self.debug e
             end
