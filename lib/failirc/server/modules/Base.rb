@@ -142,6 +142,7 @@ class Base < Module
                 :TOPIC => self.method(:topic),
                 :NAMES => self.method(:names),
                 :WHO   => self.method(:who),
+                :WHOIS => self.method(:whois),
 
                 :PRIVMSG => self.method(:privmsg),
                 :NOTICE  => self.method(:notice),
@@ -224,6 +225,10 @@ class Base < Module
                 def to_s
                     "#{channel} #{mask} #{setBy.nick} #{setOn.tv_sec}"
                 end
+            end
+
+            def self.type (string)
+                string.match(/^([&#+!])/)
             end
 
             def self.isValid (string)
@@ -796,7 +801,7 @@ class Base < Module
         passwords = (match[3] || '').split(/,/)
 
         channels.each {|channel|
-            if !Utils::Channel::isValid(channel)
+            if !Utils::Channel::type(channel)
                 channel = "##{channel}"
             end
 
@@ -873,20 +878,27 @@ class Base < Module
             return
         end
 
-        name    = match[1]
+        names   = match[1].split(/,/)
         message = match[3]
-        channel = thing.server.channels[name]
 
-        if !channel
-            thing.send :numeric, ERR_NOSUCHCHANNEL, name
-        elsif !thing.channels[name]
-            thing.send :numeric, ERR_NOTONCHANNEL, name
-        else
-            if server.dispatcher.execute(:part, thing.channels[name].user(thing), message) != false
-                channel.delete(thing)
-                thing.channels.delete(name)
+        names.each {|name|
+            if !Utils::Channel::type(name)
+                name = "##{name}"
             end
-        end
+
+            channel = thing.server.channels[name]
+
+            if !channel
+                thing.send :numeric, ERR_NOSUCHCHANNEL, name
+            elsif !thing.channels[name]
+                thing.send :numeric, ERR_NOTONCHANNEL, name
+            else
+                if server.dispatcher.execute(:part, thing.channels[name].user(thing), message) != false
+                    channel.delete(thing)
+                    thing.channels.delete(name)
+                end
+            end
+        }
     end
 
     def send_part (user, message)
@@ -1026,7 +1038,23 @@ class Base < Module
     end
 
     def whois (thing, string)
+        match = string.match(/WHOIS\s+(.+)$/i)
 
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'WHOIS'
+            return
+        end
+
+        names = match[1].split(/,/)
+
+        names.each {|name|
+            if !server.clients[name]
+                thing.send :numeric, ERR_NOSUCHNICK, name
+                next
+            end
+
+
+        }
     end
 
     def privmsg (thing, string)
