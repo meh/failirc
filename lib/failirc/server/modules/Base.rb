@@ -32,6 +32,16 @@ module IRC
 module Modules
 
 class Base < Module
+    @@version = '0.0.1'
+
+    def self.version
+        return @@version
+    end
+
+    def to_s
+        "Base-#{Base.version}"
+    end
+
     def initialize (server)
         @pingedOut = ThreadSafeHash.new
         @toPing    = ThreadSafeHash.new
@@ -81,6 +91,7 @@ class Base < Module
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
                 :NAMES => /^NAMES( |$)/i,
                 :WHO   => /^WHO( |$)/i,
+                :WHOIS => /^WHOIS( |$)/i,
 
                 :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
                 :NOTICE  => /^NOTICE( |$)/i,
@@ -1008,6 +1019,10 @@ class Base < Module
         thing.send :numeric, RPL_ENDOFWHO, name
     end
 
+    def whois (thing, string)
+
+    end
+
     def privmsg (thing, string)
         match = string.match(/PRIVMSG\s+(.*?)(\s+:(.*))?$/i)
 
@@ -1104,6 +1119,8 @@ class Base < Module
     end
 
     def version (thing, string)
+        comments = eval(@messages[:version].inspect.gsub(/\\#/, '#'))
+
         thing.send :numeric, RPL_VERSION
     end
 

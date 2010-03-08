@@ -75,8 +75,7 @@ class Client
         text = @server.dispatcher.dispatch :output, self, text
 
         begin
-            @server.dispatcher.output.push @socket, text
-            @server.dispatcher.output.flush @socket
+            @server.dispatcher.connection.output[@socket].push text
         rescue IOError, Errno::EPIPE, Errno::EBADFD
              @server.kill(self, 'Client exited.')
         end

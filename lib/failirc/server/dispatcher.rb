@@ -17,329 +17,107 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'thread'
-require 'failirc/extensions'
-require 'failirc/utils'
-require 'failirc/server/event'
+require 'failirc/server/dispatcher/connectiondispatcher'
+require 'failirc/server/dispatcher/eventdispatcher'
 
 module IRC
 
 class Dispatcher
     include Utils
 
-    class Input < ThreadSafeHash
-        attr_reader :server
-
-        def initialize (server)
-            @server = server
-
-            super()
-        end
-
-        def start (chain, deep, socket)
-            if !deep && chain == :input
-                self[socket] = true
-            end
-        end
-
-        def stop (chain, deep, socket)
-            if !deep && chain == :input
-                self[socket] = false
-            end
-        end
-
-        def handling? (socket)
-            self[socket]
-        end
-    end
-
-    class Output < Hash
-        attr_reader :server
-
-        def initialize (server)
-            @server = server
-
-            @handling = ThreadSafeHash.new
-
-            super()
-        end
-
-        alias __get []
-
-        def [] (socket)
-            if !__get(socket)
-                self[socket] = Queue.new
-            end
-
-            return __get(socket)
-        end
-
-        def push (socket, text)
-            self[socket].push(text)
-        end
-
-        def pop (socket)
-            self[socket].pop(true) rescue nil
-        end
-
-        def flush (socket)
-            if @handling[socket]
-                return
-            end
-
-            @handling[socket] = true
-            
-            begin
-                while out = pop(socket)
-                    socket.puts out
-                end
-            rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                server.kill server.connections[:things][socket], 'Client exited.'
-            rescue Errno::ECONNRESET
-                server.kill server.connections[:things][socket], 'Connection reset by peer.'
-            rescue Exception => e
-                debug e
-            end
-
-            @handling[socket] = false
-        end
-    end
-
-    attr_reader :server, :output, :handling, :aliases, :events
+    attr_reader :server, :connection, :event, :aliases, :events
 
     def initialize (server)
         @server = server
 
-        @input  = Input.new(server)
-        @output = Output.new(server)
-
-        @aliases = {
-            :input  => {},
-            :output => {},
-        }
-
-        @events = {
-            :pre     => [],
-            :post    => [],
-            :default => [],
-
-            :custom => {},
-
-            :input  => {},
-            :output => {},
-        }
+        @connection = ConnectionDispatcher.new(self)
+        @event      = EventDispatcher.new(self)
     end
 
-    def loop
-        while !server.stopping?
-            if server.connections.empty?
-                sleep 2
-                next
-            end
+    def start
+        @started = true
 
-            begin
-                reading, = IO::select server.connections[:sockets], nil, nil, 2
-
-                if reading
-                    reading.each {|socket|
-                        thing = server.connections[:things][socket]
-
-                        if @input.handling?(socket)
-                            next
-                        end
-
-                        Thread.new {
-                            begin
-                                string = socket.gets
-
-                                if !string || string.empty?
-                                    raise Errno::EPIPE
-                                else
-                                    string.strip!
-
-                                    if !string.empty?
-                                        dispatch :input, thing, string
-                                    end
-                                end
-                            rescue IOError
-                                server.kill thing, 'Input/output error.'
-                            rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                                server.kill thing, 'Client exited.'
-                            rescue Errno::ECONNRESET
-                                server.kill thing, 'Connection reset by peer.'
-                            rescue Errno::ETIMEDOUT
-                                server.kill thing, 'Ping timeout.'
-                            rescue Errno::EHOSTUNREACH
-                                server.kill thing, 'No route to host.'
-                            rescue Exception => e
-                                debug e
-                            end
-                        }
-                    }
+        @listening = Fiber.new {
+            while true
+                if @connection.connections.empty?
+                    timeout = 2
+                else
+                    timeout = 0
                 end
-            rescue Exception => e
-                self.debug e
+
+                @connection.accept timeout
+
+                Fiber.yield
             end
-        end
+        }
+
+        @reading = Fiber.new {
+            while true
+                @connection.read
+
+                Fiber.yield
+            end
+        }
+
+        @handling = Fiber.new {
+            while true
+                @connection.handle
+
+                Fiber.yield
+            end
+        }
+
+        @writing = Fiber.new {
+            while true
+                @connection.write
+
+                Fiber.yield
+            end
+        }
+        
+        self.loop
     end
 
-    def dispatch (chain, thing, string, deep=false)
-        if !thing
+    def stop
+        if !@started
             return
         end
 
-        @input.start(chain, deep, thing.socket)
+        @started  = false
+        @stopping = true
 
-        event  = Event.new(self, chain, thing, string)
-        result = string
+        @event.finalize
+        @connection.finalize
 
-        @events[:pre].each {|callback|
-            event.special = :pre
+        @stopping = false
+    end
 
-            if callback.call(event, thing, string) == false
-                @input.stop(chain, deep, thing.socket)
-                return false
-            end
-
-            if event.type && !event.same?(string)
-                result = dispatch(chain, thing, string, true)
-
-                @input.stop(chain, deep, thing.socket)
-
-                return result
-            end
-        }
-
-        if event.type
-            event.special = nil
-
-            event.callbacks.each {|callback|
+    def loop
+        while true
+            [@listening, @reading, @handling, @writing].each {|fiber|
                 begin
-                    if callback.call(thing, string) == false
-                        @input.stop(chain, deep, thing.socket)
-                        return false
-                    end
+                    fiber.resume
                 rescue Exception => e
                     self.debug e
                 end
-    
-                if !event.same?(string)
-                    result = dispatch(chain, thing, string, true)
-
-                    @input.stop(chain, deep, thing.socket)
-
-                    return result
-                end
-            }
-        elsif chain == :input
-            @events[:default].each {|callback|
-                event.special = :default
-    
-                if callback.call(event, thing, string) == false
-                    @input.stop(chain, deep, thing.socket)
-                    return false
-                end
-    
-                if event.type && !event.same?(string)
-                    result = dispatch(chain, thing, string, true)
-
-                    if !deep && chain == :input
-                        @handling[thing.socket] = false
-                    end
-
-                    return result
-                end
-            }
-        end
-
-        @events[:post].each {|callback|
-            event.special = :post
-
-            if callback.call(event, thing, string) == false
-                @input.stop(chain, deep, thing.socket)
-                return false
-            end
-
-            if event.type && !event.same?(string)
-                result = dispatch(chain, thing, string, true)
-
-                @input.stop(chain, deep, thing.socket)
-
-                return result
-            end
-        }
-
-        @input.stop(chain, deep, thing.socket)
-
-        return result
-    end
-
-    def execute (event, *args)
-        if @events[:custom][event]
-            @events[:custom][event].each {|callback|
-                begin
-                    if callback.method.call(*args) == false
-                        return false
-                    end
-                rescue Exception => e
-                    self.debug(e)
-                end
             }
         end
     end
 
-    def alias (chain, symbol, regex)
-        if !regex
-            @aliases[chain].delete(symbol)
-        elsif !regex.class == Regexp
-            raise 'You have to alias to a Regexp.'
-        else
-            @aliases[chain][symbol] = regex
-        end
+    def alias (*args)
+        @event.alias(*args)
     end
 
-    def register (chain, type, callback, priority=0)
-        if !type
-            events = @events[chain]
+    def register (*args)
+        @event.register(*args)
+    end
 
-            if !events
-                events = @events[chain] = []
-            end
-        else
-            if @aliases[chain]
-                if @aliases[chain][type]
-                    type = @aliases[chain][type]
-                end
-            end
+    def dispatch (*args)
+        @event.dispatch(*args)
+    end
 
-            if !@events[chain]
-                @events[chain] = {}
-            end
-
-            events = @events[chain][type]
-
-            if !events
-                events = @events[chain][type] = []
-            end
-        end
-
-        if !callback
-            events.clear
-        elsif callback.is_a?(Array)
-            callback.each {|callback|
-                register(chain, type, callback)
-            }
-        else
-            if callback.is_a?(Event::Callback)
-                events.push(callback)
-            else
-                events.push(Event::Callback.new(callback, priority))
-            end
-        end
-
-        events.sort! {|a, b|
-            a.priority <=> b.priority
-        }
+    def execute (*args)
+        @event.execute(*args)
     end
 end
 
