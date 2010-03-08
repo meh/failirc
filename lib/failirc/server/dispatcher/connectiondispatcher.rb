@@ -223,15 +223,15 @@ class ConnectionDispatcher
                             end
                         end
                     rescue IOError
-                        server.kill thing, 'Input/output error.'
+                        server.kill @connections.things[socket], 'Input/output error.'
                     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill thing, 'Client exited.'
+                        server.kill @connections.things[socket], 'Client exited.'
                     rescue Errno::ECONNRESET
-                        server.kill thing, 'Connection reset by peer.'
+                        server.kill @connections.things[socket], 'Connection reset by peer.'
                     rescue Errno::ETIMEDOUT
-                        server.kill thing, 'Ping timeout.'
+                        server.kill @connections.things[socket], 'Ping timeout.'
                     rescue Errno::EHOSTUNREACH
-                        server.kill thing, 'No route to host.'
+                        server.kill @connections.things[socket], 'No route to host.'
                     rescue Exception => e
                         self.debug e
                     end
@@ -266,7 +266,12 @@ class ConnectionDispatcher
                 writing.each {|socket|
                     begin
                         while !@output[socket].empty?
-                            socket.write_nonblock "#{@output[socket].first}\n"
+                            if socket.is_a?(OpenSSL::SSL::SSLSocket)
+                                socket.write "#{@output[socket].first}\n"
+                            else
+                                socket.write_nonblock "#{@output[socket].first}\n"
+                            end
+
                             @output[socket].shift
                         end
                     rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
