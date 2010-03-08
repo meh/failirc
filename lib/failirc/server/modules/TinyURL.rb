@@ -59,7 +59,7 @@ class TinyURL < Module
 
     def tinyurlify (url)
         content = Net::HTTP.post_form(URI.parse('http://tinyurl.com/create.php'), { 'url' => url }).body
-        match   = content.match(%Q{<blockquote><b>(http://tinyurl.com/\w+)</b>})
+        match   = content.match('<blockquote><b>(http://tinyurl.com/\w+)</b>')
 
         if match
             return match[1]

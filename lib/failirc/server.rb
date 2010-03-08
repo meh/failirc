@@ -35,7 +35,7 @@ module IRC
 class Server
     include Utils
 
-    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :connections, :config
+    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :connections, :config, :data
 
     def initialize (conf, verbose)
         @version   = IRC::VERSION
@@ -45,6 +45,8 @@ class Server
         @dispatcher = Dispatcher.new(self)
 
         @modules = {}
+
+        @data = ThreadSafeHash.new
 
         @channels = Channels.new(self)
 

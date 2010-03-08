@@ -36,7 +36,7 @@ class Netlog < Module
 
     def netlog (sender, receiver, message)
         URI.extract(message).each {|uri|
-            match = uri.match(%Q{http://(\w+?)\.netlog.com.*?photo.*?(\d+)});
+            match = uri.match('http://(\w+?)\.netlog.com.*?photo.*?(\d+)');
 
             if match
                 country = match[1]

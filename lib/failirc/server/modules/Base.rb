@@ -45,6 +45,8 @@ class Base < Module
     end
 
     def initialize (server)
+        server.data[:nicks] = {}
+
         @pingedOut = ThreadSafeHash.new
         @toPing    = ThreadSafeHash.new
 
@@ -269,12 +271,10 @@ class Base < Module
             end
         end
 
-        @nicks = ThreadSafeHash.new
-
         def self.registration (thing)
             if !thing.modes[:registered]
                 if thing.nick
-                    if (@nicks[thing.nick] && @nicks[thing.nick] != thing) || thing.server.clients[thing.nick]
+                    if (thing.server.data[:nicks][thing.nick] && thing.server.data[:nicks][thing.nick] != thing) || thing.server.clients[thing.nick]
                         if thing.modes[:__warned] != thing.nick
                             thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
                             thing.modes[:__warned] = thing.nick
@@ -283,7 +283,7 @@ class Base < Module
                         return
                     end
 
-                    @nicks[thing.nick] = thing
+                    thing.server.data[:nicks][thing.nick] = thing
                 end
 
                 # if the client isn't registered but has all the needed attributes, register it
@@ -298,7 +298,7 @@ class Base < Module
                     thing.server.clients.delete(thing.socket)
                     thing.server.clients[thing.nick] = thing
 
-                    @nicks.delete(thing.nick)
+                    thing.server.data[:nicks].delete(thing.nick)
                     thing.modes.delete(:__warned)
     
                     thing.server.dispatcher.execute(:registration, thing)
@@ -370,22 +370,22 @@ class Base < Module
         }
 
         def self.setFlags (thing, type, value)
-            if thing.is_a?(IRC::Channel)
-                main = @@modes[:channel]
-            elsif thing.is_a?(IRC::User)
-                main = @@modes[:user]
-            elsif thing.is_a?(IRC::Client)
-                main = @@modes[:client]
+            if @@modes[:groups][type]
+                main = @@modes[:groups]
             else
-                raise 'What sould I do?'
+                if thing.is_a?(IRC::Channel)
+                    main = @@modes[:channel]
+                elsif thing.is_a?(IRC::User)
+                    main = @@modes[:user]
+                elsif thing.is_a?(IRC::Client)
+                    main = @@modes[:client]
+                else
+                    raise 'What sould I do?'
+                end
             end
 
             modes             = main[type]
             thing.modes[type] = value
-
-            if !modes
-                modes = @@modes[:groups][type]
-            end
 
             if !modes
                 return
@@ -393,14 +393,18 @@ class Base < Module
 
             if modes.is_a?(Array)
                 modes.each {|mode|
-                    if main.has_key?(mode) && !thing.modes.has_key?(mode)
+                    if (main[mode] || @@modes[:groups][mode]) && !thing.modes[mode]
                         self.setFlags(thing, mode, value)
                     else
                         thing.modes[mode] = value
                     end
                 }
             else
-                thing.modes[modes] = value
+                if main[modes] && !thing.modes[modes]
+                    self.setFlags(thing, modes, value)
+                else
+                    thing.modes[modes] = value
+                end
             end
         end
 
@@ -514,13 +518,23 @@ class Base < Module
                                     next
                                 end
 
+                                ok = false
+
                                 if type == '+'
+                                    if user.modes[:o]
+                                        next
+                                    end
+
                                     self.setFlags(user, :o, true)
 
                                     if !user.modes[:q] && !user.modes[:a]
                                         user.modes[:level] = '@'
                                     end
                                 else
+                                    if !user.modes[:o]
+                                        next
+                                    end
+                                    
                                     self.setFlags(user, :o, false)
                                 end
 
@@ -1006,7 +1020,7 @@ class Base < Module
             if match[2]
                 topic = match[3].to_s
 
-                if thing.channels[channel].modes[:t] && !Util::checkFlag(thing.channels[channel].user(thing), :can_change_topic)
+                if thing.channels[channel].modes[:t] && !Utils::checkFlag(thing.channels[channel].user(thing), :can_change_topic)
                     thing.send :numeric, ERR_CHANOPRIVSNEEDED, thing.server.channels[channel]
                 else
                     thing.channels[channel].topic = [thing, topic]
@@ -1202,7 +1216,7 @@ class Base < Module
     end
 
     def oper (thing, string)
-        match = string.match(/OPER\s+(.*?)(\s+(.*?))?$/)
+        match = string.match(/OPER\s+(.*?)(\s+(.*?))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'OPER'
@@ -1266,6 +1280,8 @@ class Base < Module
     end
 
     def send_quit (thing, message)
+        thing.server.data[:nicks].delete(thing.nick)
+
         thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
     end 
 end

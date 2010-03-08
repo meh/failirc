@@ -103,7 +103,6 @@ class ConnectionDispatcher
 
         def initialize (server)
             @server   = server
-            @handling = ThreadSafeHash.new
 
             super()
         end
@@ -116,14 +115,6 @@ class ConnectionDispatcher
             end
 
             return __get(socket)
-        end
-
-        def push (socket, text)
-            self[socket].push(text)
-        end
-
-        def pop (socket)
-            self[socket].pop(true) rescue nil
         end
     end
 
@@ -251,7 +242,11 @@ class ConnectionDispatcher
 
             Thread.new {
                 begin
-                    dispatcher.dispatch(:input, @connections.things[socket], queue.shift)
+                    string = queue.shift
+
+                    if string
+                        dispatcher.dispatch(:input, @connections.things[socket], string)
+                    end
                 rescue Exception => e
                     self.debug e
                 end

@@ -344,7 +344,7 @@ RPL_CHANCREATEDON = {
 
 RPL_TOPICSETON = {
     :code => 333,
-    :text => '"#{value.channel.name} #{value.setBy.client} #{value.setOn.tv_sec}"'
+    :text => '"#{value.channel.name} #{value.setBy} #{value.setOn.tv_sec}"'
 }
 
 end
