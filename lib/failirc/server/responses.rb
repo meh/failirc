@@ -158,7 +158,7 @@ RPL_SUMMONING = {
 # The "comments" field may contain any comments about the version or further version details.
 RPL_VERSION = {
     :code => 351,
-    :text => '"failirc-#{server.version}. #{server.host} :#{comments}"'
+    :text => '"failirc-#{server.version}. #{server.host} :#{value}"'
 }
 
 RPL_WHOREPLY = {

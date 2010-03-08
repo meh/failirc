@@ -219,7 +219,7 @@ class ConnectionDispatcher
                             string.strip!
                             string.force_encoding('UTF-8')
 
-                            if string && !string.empty?
+                            if !string.empty?
                                 @input[socket].push(string)
                             end
                         end

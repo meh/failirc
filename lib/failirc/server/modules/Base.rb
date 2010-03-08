@@ -1023,7 +1023,7 @@ class Base < Module
     end
 
     def send_topic (channel)
-        channel.send :raw, ":#{channel.topic.setBy.mask} TOPIC #{channel} :#{channel.topic}"
+        channel.send :raw, ":#{channel.topic.setBy} TOPIC #{channel} :#{channel.topic}"
     end
 
     def names (thing, string)
