@@ -332,6 +332,11 @@ RPL_SERVCREATEDON = {
     :text => '":This server was created #{server.createdOn}"'
 }
 
+RPL_SERVINFO = {
+    :code => 4,
+    :text => '"#{server.host} failirc-#{server.version} #{server.comments}"'
+}
+
 RPL_CHANCREATEDON = {
     :code => 329,
     :text => '"#{value.name} #{value.createdOn.tv_sec}"'

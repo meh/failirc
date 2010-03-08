@@ -27,8 +27,8 @@ module IRC
 
 class Channel
     class Topic
-        attr_reader :server, :channel, :text
-        attr_accessor :setBy, :setOn
+        attr_reader :server, :channel, :text, :setBy
+        attr_accessor :setOn
 
         def initialize (channel)
             @server  = channel.server
@@ -44,6 +44,10 @@ class Channel
             }
 
             @server.dispatcher.execute(:topic_change, @channel)
+        end
+
+        def setBy= (value)
+            @setBy = value.mask.clone
         end
 
         def to_s
@@ -62,12 +66,9 @@ class Channel
         @name   = name
 
         @createdOn = Time.now
-
-        @users = Users.new(self)
-
-        @modes = Modes.new
-
-        @topic = Topic.new(self)
+        @users     = Users.new(self)
+        @modes     = Modes.new
+        @topic     = Topic.new(self)
 
         @semaphore = Mutex.new
     end
@@ -77,7 +78,7 @@ class Channel
             if data.is_a?(Topic)
                 @topic = data
             elsif data.is_a?(Array)
-                @topic.setBy = user(data[0])
+                @topic.setBy = data[0]
                 @topic.text  = data[1]
             end
         }

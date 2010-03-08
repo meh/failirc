@@ -217,6 +217,7 @@ class ConnectionDispatcher
                             raise Errno::EPIPE
                         else
                             string.strip!
+                            string.force_encoding('UTF-8')
 
                             if !string.empty?
                                 @input[socket].push(string)

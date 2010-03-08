@@ -82,6 +82,19 @@ class Server
         end
     end
 
+    def comments
+        result = ''
+
+        modules.each_value {|mod|
+            begin
+                result << mod.description
+            rescue
+            end
+        }
+
+        return result
+    end
+
     def host
         @config.elements['config/server/host'].text
     end
@@ -211,15 +224,6 @@ class Server
                 element.attributes['ssl'] = 'disabled'
             end
         }
-
-        if !@config.elements['config/messages']
-            @config.elements['config'].add(Element.new('messages'))
-        end
-
-        if !@config.elements['config/messages/quit']
-            @config.elements['config/messages'].add(Element.new('quit'))
-            @config.elements['config/messages/quit'].text = 'Quit: '
-        end
 
         if !@config.elements['config/modules']
             @config.elements['config'].add(Element.new('modules'))

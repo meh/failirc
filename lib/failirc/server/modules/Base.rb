@@ -32,13 +32,15 @@ module IRC
 module Modules
 
 class Base < Module
+    attr_reader :messages
+
     @@version = '0.0.1'
 
     def self.version
         return @@version
     end
 
-    def to_s
+    def description
         "Base-#{Base.version}"
     end
 
@@ -117,6 +119,7 @@ class Base < Module
                 :kick => self.method(:send_kick),
 
                 :message => self.method(:send_message),
+                :ctcp    => self.method(:send_ctcp),
                 :notice  => self.method(:send_notice),
 
                 :topic_change => self.method(:send_topic),
@@ -173,6 +176,12 @@ class Base < Module
             @messages[:kill] = tmp.text
         else
             @messages[:kill] = 'Kill: #{message} (#{sender.nick})'
+        end
+
+        if tmp = server.config.elements['config/modules/modules[@name="Base"]/messages/version']
+            @messages[:version] = tmp.text
+        else
+            @messages[:version] = 'THE GAME'
         end
     end
 
@@ -297,6 +306,7 @@ class Base < Module
                     thing.send :numeric, RPL_WELCOME, thing
                     thing.send :numeric, RPL_HOSTEDBY, thing
                     thing.send :numeric, RPL_SERVCREATEDON
+                    thing.send :numeric, RPL_SERVINFO
     
                     motd(thing)
                 end
@@ -327,6 +337,12 @@ class Base < Module
         end
 
         @@modes = {
+            :groups => {
+                :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode],
+                :can_change_user_modes => [:can_give_channel_operator, :can_change_extended_user_modes],
+                :can_change_client_modes => [:can_change_extended_client_modes],
+            },
+
             :channel => {
                 :a => :anonymous,
                 :i => :inviteOnly,
@@ -338,17 +354,15 @@ class Base < Module
             },
 
             :user => {
-                :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode],
-
                 :a => [:o, :admin],
-                :o => [:h, :operator, :can_kick, :can_change_topic, :can_give_channel_operator, :can_change_channel_modes, :can_change_user_modes],
+                :o => [:h, :operator, :can_kick, :can_change_topic, :can_change_channel_modes, :can_change_user_modes],
                 :h => [:v, :halfoperator, :can_kick],
                 :v => [:voice, :can_talk],
             },
 
             :client => {
                 :netadmin => [:N, :operator],
-                :operator => [:o, :can_kill, :can_kick, :can_change_topic, :can_give_channel_operator],
+                :operator => [:o, :can_kill, :can_kick, :can_change_topic, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
 
                 :N => [:netadmin],
                 :o => [:operator],
@@ -363,11 +377,19 @@ class Base < Module
             elsif thing.is_a?(IRC::Client)
                 main = @@modes[:client]
             else
-                raise 'I don\'t know what to do'
+                raise 'What sould I do?'
             end
 
             modes             = main[type]
             thing.modes[type] = value
+
+            if !modes
+                modes = @@modes[:groups][type]
+            end
+
+            if !modes
+                return
+            end
 
             if modes.is_a?(Array)
                 modes.each {|mode|
@@ -528,6 +550,14 @@ class Base < Module
                         thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{type}#{outputModes.join('')} #{outputValues.join(' ')}"
                     end
                 }
+            end
+        end
+
+        def self.dispatchMessage (from, to, message)
+            if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
+                from.server.dispatcher.execute(:ctcp, from, to, match[1], match[3] || '')
+            else
+                from.server.dispatcher.execute(:message, from, to, message)
             end
         end
     end
@@ -1088,12 +1118,12 @@ class Base < Module
                     end
 
                     if user
-                        thing.server.dispatcher.execute(:message, thing, channel, message)
+                        Utils::dispatchMessage(thing, channel, message)
                     else
                         if thing.server.channels[receiver].modes[:n]
                             thing.send :numeric, ERR_ERR_NOEXTERNALMESSAGES, channel.name
                         else
-                            thing.server.dispatcher.execute(:message, thing, channel, message)
+                            Utils::dispatchMessage(thing, channel, message)
                         end
                     end
                 else
@@ -1105,22 +1135,35 @@ class Base < Module
                 if !client
                     thing.send :numeric, ERR_NOSUCHNICK, receiver
                 else
-                    thing.server.dispatcher.execute(:message, thing, client, message)
+                    Utils::dispatchMessage(thing, client, message)
                 end
             end
         end
     end
 
-    def send_message (from, to, text)
+    def send_message (from, to, message)
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.mask != from.mask
-                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :#{text}"
+                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :#{message}"
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :#{text}"
+            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :#{message}"
         end
+    end
+
+    def send_ctcp (from, to, type, message)
+        if to.is_a?(Channel)
+            to.users.each_value {|user|
+                if user.mask != from.mask
+                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :\x01#{type} #{message}\x01"
+                end
+            }
+        elsif to.is_a?(Client) || to.is_a?(User)
+            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :\x01#{type} #{message}\x01"
+        end
+
     end
 
     def notice (thing, string)

@@ -19,7 +19,7 @@
 
 class String
     def assign! (string)
-        self.sub!(/^.*$/ms, string)
+        self.sub!(/^.*$/m, string)
 
         self
     end
