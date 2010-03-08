@@ -104,6 +104,10 @@ class Dispatcher
         end
     end
 
+    def connections
+        @connection.connections
+    end
+
     def alias (*args)
         @event.alias(*args)
     end

@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'thread'
 require 'socket'
 require 'openssl'
 
@@ -72,10 +73,14 @@ class ConnectionDispatcher
         end
     
         def exists? (socket)
-            sockets[socket] ? true : false
+            things[socket] ? true : false
         end
     
         def delete (socket)
+            if !exists?(socket)
+                return
+            end
+
             thing = @data[:things][socket]
     
             if thing.is_a?(Client)
@@ -107,7 +112,7 @@ class ConnectionDispatcher
 
         def [] (socket)
             if !__get(socket)
-                self[socket] = Queue.new
+                self[socket] = []
             end
 
             return __get(socket)
@@ -158,8 +163,6 @@ class ConnectionDispatcher
     end
 
     def accept (timeout=0)
-        puts '+accept'
-
         begin
             listening, = IO::select @connections.listening[:sockets], nil, nil, timeout
 
@@ -179,8 +182,6 @@ class ConnectionDispatcher
             end
         rescue 
         end
-
-        puts '-accept'
     end
 
     # Executed with each incoming connection
@@ -204,8 +205,6 @@ class ConnectionDispatcher
     end
 
     def read (timeout=0.1)
-        puts '+read'
-
         begin
             reading, = IO::select @connections.sockets, nil, nil, timeout
 
@@ -241,13 +240,9 @@ class ConnectionDispatcher
         rescue Exception => e
             self.debug e
         end
-        
-        puts '-read'
     end
 
     def handle
-        puts '+handle'
-
         @input.each {|socket, queue|
             if dispatcher.event.handling[socket] || queue.empty?
                 next
@@ -255,29 +250,24 @@ class ConnectionDispatcher
 
             Thread.new {
                 begin
-                    dispatcher.dispatch(:input, @connections.things[socket], queue.pop)
+                    dispatcher.dispatch(:input, @connections.things[socket], queue.shift)
                 rescue Exception => e
                     self.debug e
                 end
             }
         }
-
-        puts '-handle'
     end
 
     def write (timeout=0.1)
-        puts '+write'
-
         begin
             none, writing = IO::select nil, @connections.sockets.map {|item| if !@output[item].empty? then item end}.compact, nil, timeout
 
             if writing
                 writing.each {|socket|
                     begin
-                        while out = @output[socket].pop
-                            if !out.empty?
-                                socket.write_nonblock "#{out}\n"
-                            end
+                        while !@output[socket].empty?
+                            socket.write_nonblock "#{@output[socket].first}\n"
+                            @output[socket].shift
                         end
                     rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
                         server.kill @connections.things[socket], 'Client exited.'
@@ -296,8 +286,6 @@ class ConnectionDispatcher
         rescue Exception => e
             self.debug e
         end
-
-        puts '-write'
     end
 
     def finalize
