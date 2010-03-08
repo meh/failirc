@@ -1,3 +1,7 @@
 Fail IRC server.
 
 Library like, modular, etc.
+
+To install it:
+$ gem build *.gemspec
+# gem install *.gem

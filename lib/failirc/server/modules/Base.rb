@@ -261,7 +261,11 @@ class Base < Module
             if !thing.modes[:registered]
                 if thing.nick
                     if (@nicks[thing.nick] && @nicks[thing.nick] != thing) || thing.server.clients[thing.nick]
-                        thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
+                        if thing.modes[:__warned] != thing.nick
+                            thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
+                            thing.modes[:__warned] = thing.nick
+                        end
+
                         return
                     end
 
@@ -281,6 +285,7 @@ class Base < Module
                     thing.server.clients[thing.nick] = thing
 
                     @nicks.delete(thing.nick)
+                    thing.modes.delete(:__warned)
     
                     thing.server.dispatcher.execute(:registration, thing)
     
@@ -729,6 +734,7 @@ class Base < Module
             # kill it with fire.
             if thing.server.clients[nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
+                thing.modes[:__warned] = nick
             else
                 thing.nick = nick
 
