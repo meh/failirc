@@ -75,7 +75,7 @@ class WordFilter < Module
                 position = 0
             end
 
-            result << WordFilter.color(pattern[position, 1]) << char << WordFilter.color(nil)
+            result << WordFilter.color(pattern[position, 1]) << char
             position += 1
         }
 
@@ -83,6 +83,10 @@ class WordFilter < Module
     end
 
     def self.color (char)
+        if !char
+            return ''
+        end
+
         color = @@colors[char.to_sym]
 
         if color

@@ -8,6 +8,7 @@ Gem::Specification.new {|s|
     s.description       = 'A fail IRC server library, and IRCd.'
     s.summary           = 'A fail IRC server library.'
     s.files             = Dir.glob('lib/**/*.rb')
+    s.require_path      = 'lib'
     s.executables       = 'ircd'
     s.test_files        = []
     s.has_rdoc          = true
