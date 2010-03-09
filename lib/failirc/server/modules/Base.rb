@@ -735,12 +735,12 @@ class Base < Module
     end
 
     def pass (thing, string)
-        match = string.match(/PASS\s+(.+)$/i)
+        match = string.match(/PASS\s+(:)?(.+)$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'PASS'
         else
-            thing.password = match[1]
+            thing.password = match[2]
 
             if thing.listen.attributes['password']
                 if thing.password != thing.listen.attributes['password']
@@ -760,7 +760,7 @@ class Base < Module
             return
         end
 
-        match = string.match(/NICK\s+(.+)$/i)
+        match = string.match(/NICK\s+(:)?(.+)$/i)
 
         # no nickname was passed, so tell the user is a faggot
         if !match
@@ -768,7 +768,7 @@ class Base < Module
             return
         end
 
-        nick = match[1]
+        nick = match[2]
 
         thing.server.dispatcher.execute(:user_nick_change, thing, nick)
 
@@ -793,15 +793,17 @@ class Base < Module
         else
             # if the user has already registered and the choosen nick is already used,
             # just tell him that he's a faggot.
-            if thing.server.clients[nick]
+            if thing.server.clients[nick] || thing.server.data[:nicks][nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
-                thing.server.clients.delete(thing.nick)
-
-                mask       = thing.mask.to_s
+                mask       = thing.mask.clone
                 thing.nick = nick
 
-                thing.server.clients[thing.nick] = thing
+                thing.server.clients[thing.nick] = thing.server.clients.delete(mask.nick)
+
+                thing.channels.each_value {|channel|
+                    channel.users.add(channel.users.delete(mask.nick))
+                }
 
                 if thing.channels.empty?
                     thing.send :raw, ":#{mask} NICK :#{nick}"
@@ -937,7 +939,7 @@ class Base < Module
             elsif !thing.channels[name]
                 thing.send :numeric, ERR_NOTONCHANNEL, name
             else
-                if server.dispatcher.execute(:part, thing.channels[name].user(thing), message) != false
+                if server.dispatcher.execute(:part, channel.user(thing), message) != false
                     channel.delete(thing)
                     thing.channels.delete(name)
                 end
@@ -947,7 +949,7 @@ class Base < Module
 
     def send_part (user, message)
         if user.client.modes[:quitting]
-            return
+            return false
         end
 
         user.channel.send :raw, ":#{user.mask} PART #{user.channel} :#{message}"
@@ -1066,9 +1068,11 @@ class Base < Module
             op = match[2]
 
             if Utils::Channel::isValid(name) && thing.server.channels[name]
-                thing.server.channels[name].users.each_value {|user|
+                channel = thing.server.channels[name]
+
+                channel.users.each_value {|user|
                     thing.send :numeric, RPL_WHOREPLY, {
-                        :channel => thing.server.channels[name],
+                        :channel => channel,
                         :user    => user,
                         :hops    => 0,
                     }
@@ -1224,6 +1228,7 @@ class Base < Module
         end
 
         password = match[3] || match[1]
+        name     = (match[3]) ? match[1] : nil
 
         server.config.elements['config/operators'].elements.each('operator') {|element|
             if thing.mask.match(element.attributes['mask']) && password == element.attributes['password']

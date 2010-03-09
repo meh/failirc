@@ -73,14 +73,18 @@ class Users < ThreadSafeHash
                 server.channels.delete(channel)
             end
         end
+
+        return user
     end
 
     def add (user)
-        if !user.is_a?(Client)
-            raise 'You can only add Client.'
+        if user.is_a?(Client)
+            self[user.nick] = User.new(user, @channel)
+        elsif user.is_a?(User)
+            self[user.nick] = user
+        else
+            raise 'You can only add Client or User.'
         end
-
-        self[user.nick] = User.new(user, @channel)
     end
 
     def send (*args)

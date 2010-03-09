@@ -170,7 +170,7 @@ class Server
             thing.modes[:quitting] = true
 
             if thing.modes[:registered]
-                @channels.each_value {|channel|
+                thing.channels.each_value {|channel|
                     channel.users.delete(thing.nick)
                 }
             end
@@ -224,6 +224,10 @@ class Server
 
             if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enabled' && element.attributes['ssl'] != 'disabled')
                 element.attributes['ssl'] = 'disabled'
+            end
+
+            if element.attributes['password'] && element.attributes['password'].match(/:/)
+                raise 'Password CANNOT contain :'
             end
         }
 

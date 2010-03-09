@@ -182,12 +182,18 @@ class ConnectionDispatcher
         Thread.new {
             begin
                 if listen.attributes['ssl'] == 'enabled'
-                    socket = OpenSSL::SSL::SSLSocket.new socket, context
-                    socket.accept
+                    ssl = OpenSSL::SSL::SSLSocket.new socket, context
+                    ssl.accept
+
+                    socket = ssl
                 end
 
                 @connections.sockets.push(socket)
                 @connections.things[socket]  = @connections.clients[socket] = IRC::Client.new(server, socket, listen)
+            rescue OpenSSL::SSL::SSLError
+                socket.write_nonblock "This is a SSL connection, faggot.\n" rescue nil
+                self.debug "#{socket.peeraddr.inspect} tried to connect to a SSL connection and failed the accept."
+                socket.close
             rescue Exception => e
                 socket.close
                 self.debug(e)
@@ -208,7 +214,12 @@ class ConnectionDispatcher
                             raise Errno::EPIPE
                         else
                             string.strip!
-                            string.force_encoding('UTF-8')
+
+                            begin
+                                string.force_encoding('UTF-8')
+                            rescue
+                                @output[socket].push('ERROR :Please, use UTF-8, every time you avoid Unicode a kitten dies :(')
+                            end
 
                             if !string.empty?
                                 @input[socket].push(string)
