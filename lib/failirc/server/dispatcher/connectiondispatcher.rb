@@ -207,6 +207,8 @@ class ConnectionDispatcher
 
             if reading
                 reading.each {|socket|
+                    thing = @connections.things[socket]
+
                     begin
                         input = String.new
 
@@ -222,29 +224,49 @@ class ConnectionDispatcher
                             raise Errno::EPIPE
                         end
 
+                        begin
+                            if thing.modes[:encoding]
+                                input.force_encoding(thing.modes[:encoding])
+                                input.encode!('UTF-8')
+                            else
+                                input.force_encoding('UTF-8')
+
+                                if !input.valid_encoding?
+                                    raise Encoding::InvalidByteSequenceError
+                                end
+                            end
+                        rescue
+                            if thing.modes[:encoding]
+                                dispatcher.execute(:error, thing, 'The encoding you choose seems to not be the one you are using.')
+                            else
+                                dispatcher.execute(:error, thing, 'Please specify the encoding you are using with ENCODING <encoding>')
+                            end
+
+                            input.force_encoding('ASCII-8BIT')
+
+                            input.encode!('UTF-8',
+                                :invalid => :replace,
+                                :undef   => :replace
+                            )
+                        end
+
                         input.split(/[\r\n]+/).each {|string|
                             string.lstrip!
-
-                            begin
-                                string.force_encoding('UTF-8')
-                            rescue
-                                @output[socket].push('ERROR :Please, use UTF-8, every time you avoid Unicode a kitten dies :(')
-                            end
 
                             if !string.empty?
                                 @input[socket].push(string)
                             end
                         }
                     rescue IOError
-                        server.kill @connections.things[socket], 'Input/output error.'
+                        server.kill thing, 'Input/output error.'
                     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill @connections.things[socket], 'Client exited.'
+                        server.kill thing, 'Client exited.'
                     rescue Errno::ECONNRESET
-                        server.kill @connections.things[socket], 'Connection reset by peer.'
+                        server.kill thing, 'Connection reset by peer.'
                     rescue Errno::ETIMEDOUT
-                        server.kill @connections.things[socket], 'Ping timeout.'
+                        server.kill thing, 'Ping timeout.'
                     rescue Errno::EHOSTUNREACH
-                        server.kill @connections.things[socket], 'No route to host.'
+                        server.kill thing, 'No route to host.'
                     rescue Errno::EAGAIN
                     rescue Exception => e
                         self.debug e
@@ -282,20 +304,28 @@ class ConnectionDispatcher
 
             if writing
                 writing.each {|socket|
+                    thing = @connections.things[socket]
+
                     begin
                         while !@output[socket].empty?
-                            socket.write_nonblock "#{@output[socket].first}\r\n"
+                            output = @output[socket].first
+
+                            if thing.modes[:encoding]
+                                output.encode!(thing.modes[:encoding])
+                            end
+
+                            socket.write_nonblock "#{output}\r\n"
 
                             @output[socket].shift
                         end
                     rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill @connections.things[socket], 'Client exited.'
+                        server.kill thing, 'Client exited.'
                     rescue Errno::ECONNRESET
-                        server.kill @connections.things[socket], 'Connection reset by peer.'
+                        server.kill thing, 'Connection reset by peer.'
                     rescue Errno::ETIMEDOUT
-                        server.kill @connections.things[socket], 'Ping timeout.'
+                        server.kill thing, 'Ping timeout.'
                     rescue Errno::EHOSTUNREACH
-                        server.kill @connections.things[socket], 'No route to host.'
+                        server.kill thing, 'No route to host.'
                     rescue Errno::EAGAIN, IO::WaitWriteable
                     rescue Exception => e
                         self.debug e
