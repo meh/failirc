@@ -460,14 +460,14 @@ class Base < Module
                         else
                             type = '+'
                         end
-
-                        if !mode.match(/^[+\-]\w+/)
-                            from.server.dispatcher.execute :error, from, "#{mode} is not a valid extended mode."
-                            next
-                        end
     
                         if mode.match(/^[+\-]/)
                             mode = mode[1, mode.length]
+                        end
+
+                        if !mode.match(/^\w+$/)
+                            from.server.dispatcher.execute :error, from, "#{mode} is not a valid extended mode."
+                            next
                         end
     
                         mode = mode.split(/=/)

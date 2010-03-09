@@ -225,7 +225,7 @@ class ConnectionDispatcher
                         end
 
                         begin
-                            if thing.modes[:encoding]
+                            if thing && thing.modes[:encoding]
                                 input.force_encoding(thing.modes[:encoding])
                                 input.encode!('UTF-8')
                             else
@@ -236,10 +236,12 @@ class ConnectionDispatcher
                                 end
                             end
                         rescue
-                            if thing.modes[:encoding]
-                                dispatcher.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
-                            else
-                                dispatcher.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
+                            if thing
+                                if thing.modes[:encoding]
+                                    dispatcher.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
+                                else
+                                    dispatcher.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
+                                end
                             end
 
                             input.force_encoding('ASCII-8BIT')
@@ -306,6 +308,10 @@ class ConnectionDispatcher
                 writing.each {|socket|
                     thing = @connections.things[socket]
 
+                    if !thing
+                        next
+                    end
+
                     begin
                         while !@output[socket].empty?
                             output = @output[socket].first
@@ -326,7 +332,7 @@ class ConnectionDispatcher
                         server.kill thing, 'Ping timeout.'
                     rescue Errno::EHOSTUNREACH
                         server.kill thing, 'No route to host.'
-                    rescue Errno::EAGAIN, IO::WaitWriteable
+                    rescue Errno::EAGAIN, IO::WaitWritable
                     rescue Exception => e
                         self.debug e
                     end
