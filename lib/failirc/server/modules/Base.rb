@@ -1172,14 +1172,20 @@ class Base < Module
     end
 
     def send_ctcp (from, to, type, message)
+        if message && !message.empty?
+            text = "#{type} #{message}"
+        else
+            text = type
+        end
+
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.mask != from.mask
-                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :\x01#{type} #{message}\x01"
+                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :\x01#{text}\x01"
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :\x01#{type} #{message}\x01"
+            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :\x01#{text}\x01"
         end
 
     end
@@ -1259,10 +1265,10 @@ class Base < Module
         end
 
         nick    = match[1]
-        user    = thing.server.clients[nick]
+        client  = thing.server.clients[nick]
         message = match[4]
 
-        if !user
+        if !client
             thing.send :numeric, ERR_NOSUCHNICK, nick
             return
         end
@@ -1271,7 +1277,7 @@ class Base < Module
 
         text = eval(@messages[:kill].inspect.gsub(/\\#/, '#'))
 
-        thing.server.kill user, text
+        thing.server.kill client, text
     end
 
     def quit (thing, string)

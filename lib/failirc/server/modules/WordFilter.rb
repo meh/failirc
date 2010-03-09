@@ -56,10 +56,20 @@ class WordFilter < Module
     end
 
     def filter (sender, receiver, message)
-        channel = (receiver.is_a?(Channel)) ? receiver.modes : Modes.new
-        client  = sender.modes
+        if receiver.is_a?(Channel)
+            channel = receiver.modes
 
-        if channel[:extended][:gay] || client[:extended][:gay]
+            if user = receiver.user(sender)
+                user = user.modes
+            end
+        else
+            channel = Modes.new
+            user    = Modes.new
+        end
+
+        client = sender.modes
+
+        if channel[:extended][:gay] || client[:extended][:gay] || user[:extended][:gay]
             rainbow(message, 'rrRRyyYYGGggccCCBBppPP')
         end
     end

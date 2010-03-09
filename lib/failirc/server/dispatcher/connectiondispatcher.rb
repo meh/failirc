@@ -208,11 +208,22 @@ class ConnectionDispatcher
             if reading
                 reading.each {|socket|
                     begin
-                        string = socket.gets
+                        input = String.new
 
-                        if !string || string.empty?
+                        begin
+                            if socket.is_a?(OpenSSL::SSL::SSLSocket)
+                                socket.read 2048, input
+                            else
+                                socket.read_nonblock 2048, input
+                            end
+                        rescue
+                        end
+
+                        if !input || input.empty?
                             raise Errno::EPIPE
-                        else
+                        end
+
+                        input.split(/\n/).each {|string|
                             string.strip!
 
                             begin
@@ -224,7 +235,7 @@ class ConnectionDispatcher
                             if !string.empty?
                                 @input[socket].push(string)
                             end
-                        end
+                        }
                     rescue IOError
                         server.kill @connections.things[socket], 'Input/output error.'
                     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
