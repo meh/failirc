@@ -210,7 +210,13 @@ class ConnectionDispatcher
                     begin
                         input = String.new
 
-                        socket.read_nonblock 2048, input rescue nil
+                        begin
+                            socket.read_nonblock 2048, input rescue nil
+                        rescue Errno::EAGAIN, IO::WaitReadable
+                            if !input || input.empty?
+                                raise Errno::EAGAIN
+                            end
+                        end
 
                         if !input || input.empty?
                             raise Errno::EPIPE
@@ -239,6 +245,7 @@ class ConnectionDispatcher
                         server.kill @connections.things[socket], 'Ping timeout.'
                     rescue Errno::EHOSTUNREACH
                         server.kill @connections.things[socket], 'No route to host.'
+                    rescue Errno::EAGAIN
                     rescue Exception => e
                         self.debug e
                     end
@@ -289,7 +296,7 @@ class ConnectionDispatcher
                         server.kill @connections.things[socket], 'Ping timeout.'
                     rescue Errno::EHOSTUNREACH
                         server.kill @connections.things[socket], 'No route to host.'
-                    rescue ThreadError, Errno::EAGAIN
+                    rescue Errno::EAGAIN, IO::WaitWriteable
                     rescue Exception => e
                         self.debug e
                     end
