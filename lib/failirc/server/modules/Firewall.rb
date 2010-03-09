@@ -23,13 +23,24 @@ module IRC
 
 module Modules
 
-class Logger < Module
+class Firewall < Module
+    @@version = '0.0.1'
+
+    def self.version
+        return @@version
+    end
+
+    def description
+        "Firewall-#{Firewall.version}"
+    end
+
     def initialize (server)
         @events = {
-            :pre  => Event::Callback.new(self.method(:log), -9001),
-            :post => Event::Callback.new(self.method(:log), -9001),
+            :pre  => Event::Callback.new(self.method(:dispatch), -9001),
+            :post => Event::Callback.new(self.method(:dispatch), -9001),
 
             :custom => {
+                :log  => self.method(:log),
                 :kill => Event::Callback.new(self.method(:logKill), -9001),
             },
         }
@@ -42,7 +53,7 @@ class Logger < Module
             @log.close
         end
 
-        file = @server.config.elements['config/modules/module[@name="TinyURL"]/file']
+        file = @server.config.elements['config/modules/module[@name="Firewall"]/file']
 
         if file
             @log = File.open(file.text)
@@ -57,16 +68,20 @@ class Logger < Module
         end
     end
 
-    def log (event, thing, string)
+    def dispatch (event, thing, string)
         if (event.chain == :input && event.special == :pre) || (event.chain == :output && event.special == :post)
             @log.puts "[#{Time.now}] #{target(thing)} #{(event.chain == :input) ? '>' : '<'} #{string.inspect}"
             @log.flush
         end
     end
 
-    def logKill (thing, message)
-        @log.puts "[#{Time.now}] #{target(thing)} KILL :#{message}"
+    def log (string)
+        @log.puts "[#{Time.now}] #{string}"
         @log.flush
+    end
+
+    def logKill (thing, message)
+        log "#{target(thing)} KILL :#{message}"
     end
 
     def target (thing)

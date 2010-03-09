@@ -189,10 +189,10 @@ class ConnectionDispatcher
                 end
 
                 @connections.sockets.push(socket)
-                @connections.things[socket]  = @connections.clients[socket] = IRC::Client.new(server, socket, listen)
+                @connections.things[socket] = @connections.clients[socket] = IRC::Client.new(server, socket, listen)
             rescue OpenSSL::SSL::SSLError
-                socket.write_nonblock "This is a SSL connection, faggot.\n" rescue nil
-                self.debug "#{socket.peeraddr.inspect} tried to connect to a SSL connection and failed the accept."
+                socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
+                self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the accept."
                 socket.close
             rescue Exception => e
                 socket.close
@@ -274,9 +274,9 @@ class ConnectionDispatcher
                     begin
                         while !@output[socket].empty?
                             if socket.is_a?(OpenSSL::SSL::SSLSocket)
-                                socket.write "#{@output[socket].first}\n"
+                                socket.write "#{@output[socket].first}\r\n"
                             else
-                                socket.write_nonblock "#{@output[socket].first}\n"
+                                socket.write_nonblock "#{@output[socket].first}\r\n"
                             end
 
                             @output[socket].shift

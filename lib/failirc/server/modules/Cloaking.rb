@@ -27,17 +27,54 @@ class Cloaking < Module
     def initialize (server)
         @aliases = {
             :output => {
-                :NAMES => /:.*? 353 ([^ ]+) = (.*?) :(.*)$/i,
+                :NAMES => /:.*? 353 /,
             }
         }
 
         @events = {
             :output => {
-                :NAMES => Event::Callback.new(self.method(:tinyurl), -9001),
+                :NAMES => Event::Callback.new(self.method(:hide), -9001),
             }
         }
 
         super(server)
+    end
+
+    def hide (thing, string)
+        match = string.match(/:.*? (\d+)/)
+
+        if !match
+            return
+        end
+
+        self.method("_#{match[1]}".to_sym).call(string) rescue nil
+    end
+
+    def _353 (string)
+        match = string.match(/353 .*?:(.*)$/)
+
+        names = match[1].split(/\s+/)
+        list  = ''
+
+        names.each {|original|
+            if original.match(/^[+%@&@]/)
+                name = original[1, original.length]
+            else
+                name = original
+            end
+
+            if !server.clients[name]
+                next
+            end
+
+            client = server.clients[name]
+
+            if !(client.modes[:operator] && client.modes[:extended][:hide])
+                list << " #{original}"
+            end
+        }
+
+        string.sub!(/ :(.*)$/, " :#{list[1, list.length]}")
     end
 end
 

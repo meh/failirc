@@ -89,12 +89,12 @@ class Server
 
         modules.each_value {|mod|
             begin
-                result << mod.description
+                result << " #{mod.description}"
             rescue
             end
         }
 
-        return result
+        return result[1, result.length]
     end
 
     def host
