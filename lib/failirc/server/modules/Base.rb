@@ -463,6 +463,8 @@ class Base < Module
 
                         if !mode.match(/^[+\-]\w+/)
                             from.server.dispatcher.execute :error, from, "#{mode} is not a valid extended mode."
+                            next
+                        end
     
                         if mode.match(/^[+\-]/)
                             mode = mode[1, mode.length]
