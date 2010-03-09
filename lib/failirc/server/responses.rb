@@ -42,7 +42,7 @@ RPL_ISON = {
 
 RPL_AWWAY = {
     :code => 301,
-    :text => '"#{value.nick} :#{value.away}"'
+    :text => '"#{value.nick} :#{value.modes[:away]}"'
 }
 
 RPL_UNAWAY = {
@@ -66,17 +66,17 @@ RPL_WHOISUSER = {
 
 RPL_WHOISSERVER = {
     :code => 312,
-    :text => '"#{value.nick} #{value.server.host} :#{value.server.info}"'
+    :text => '"#{value.nick} #{value.server.host} :#{value.server.name}"'
 }
 
 RPL_WHOISOPERATOR = {
     :code => 313,
-    :text => '"#{value.nick} :is an IRC operator"'
+    :text => '"#{value.nick} :#{value.modes[:message]}"'
 }
 
 RPL_WHOISIDLE = {
     :code => 317,
-    :text => '"#{value.nick} #{value.idle} :seconds idle"'
+    :text => '"#{value.nick} #{Time.now.tv_sec - value.modes[:last_action].on.tv_sec} #{value.connectedOn.tv_sec} :seconds idle, signon time"'
 }
 
 RPL_ENDOFWHOIS = {
@@ -92,7 +92,7 @@ RPL_ENDOFWHOIS = {
 # The RPL_ENDOFWHOIS reply is used to mark the end of processing a WHOIS message.
 RPL_WHOISCHANNELS = {
     :code => 319,
-    :text => '"#{value.nick} :#{value.channels.inspect(result)}"'
+    :text => '"#{value.nick} :#{value.channels.to_s(value)}"'
 }
 
 RPL_WHOWASUSER = {
@@ -345,6 +345,11 @@ RPL_CHANCREATEDON = {
 RPL_TOPICSETON = {
     :code => 333,
     :text => '"#{value.channel.name} #{value.setBy} #{value.setOn.tv_sec}"'
+}
+
+RPL_USINGSSL = {
+    :code => 671,
+    :text => '"#{value.nick} :is using a Secure Connection"'
 }
 
 end

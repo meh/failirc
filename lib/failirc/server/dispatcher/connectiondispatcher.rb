@@ -192,7 +192,7 @@ class ConnectionDispatcher
                 @connections.things[socket] = @connections.clients[socket] = IRC::Client.new(server, socket, listen)
             rescue OpenSSL::SSL::SSLError
                 socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
-                self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the accept."
+                self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the handshake."
                 socket.close
             rescue Exception => e
                 socket.close
@@ -222,8 +222,8 @@ class ConnectionDispatcher
                             raise Errno::EPIPE
                         end
 
-                        input.split(/\n/).each {|string|
-                            string.strip!
+                        input.split(/[\r\n]+/).each {|string|
+                            string.lstrip!
 
                             begin
                                 string.force_encoding('UTF-8')

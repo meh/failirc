@@ -47,10 +47,14 @@ class Cloaking < Module
             return
         end
 
-        self.method("_#{match[1]}".to_sym).call(string) rescue nil
+        self.method("_#{match[1]}".to_sym).call(thing, string) rescue nil
     end
 
-    def _353 (string)
+    def _353 (thing, string)
+        if thing.modes[:operator]
+            return
+        end
+
         match = string.match(/353 .*?:(.*)$/)
 
         names = match[1].split(/\s+/)

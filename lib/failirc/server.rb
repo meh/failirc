@@ -61,29 +61,6 @@ class Server
         dispatcher.connection.links
     end
 
-    def loadModule (name, path=nil)
-        begin 
-            if path[0] == '/'
-                $LOAD_PATH.push path
-                require name
-                $LOAD_PATH.pop
-            else
-                require "#{path}/#{name}"
-            end
-
-            klass = eval("Modules::#{name}") rescue nil
-
-            if klass
-                @modules[name] = klass.new(self)
-                self.debug "Loaded `#{name}`.", nil
-            else
-                self.debug "Failed to load `#{name}`.", nil
-            end
-        rescue Exception => e
-            self.debug(e)
-        end
-    end
-
     def comments
         result = ''
 
@@ -106,6 +83,33 @@ class Server
             return Resolv.getaddress(@config.elements['config/server/host'].text)
         rescue
             return Resolv.getaddress('localhost')
+        end
+    end
+
+    def name
+        @config.elements['config/server/name'].text
+    end
+
+    def loadModule (name, path=nil)
+        begin 
+            if path[0] == '/'
+                $LOAD_PATH.push path
+                require name
+                $LOAD_PATH.pop
+            else
+                require "#{path}/#{name}"
+            end
+
+            klass = eval("Modules::#{name}") rescue nil
+
+            if klass
+                @modules[name] = klass.new(self)
+                self.debug "Loaded `#{name}`.", nil
+            else
+                self.debug "Failed to load `#{name}`.", nil
+            end
+        rescue Exception => e
+            self.debug(e)
         end
     end
 
@@ -196,7 +200,7 @@ class Server
 
         if !@config.elements['config/server/name']
             @config.elements['config/server'].add(Element.new('name'))
-            @config.elements['config/server/name'].text = "Fail IRC"
+            @config.elements['config/server/name'].text = 'Fail IRC'
         end
 
         if !@config.elements['config/server/host']

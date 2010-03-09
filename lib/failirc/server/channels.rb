@@ -59,12 +59,19 @@ class Channels < ThreadSafeHash
         return result
     end
 
-    def inspect
-        result = ""
+    def to_s (thing=nil)
+        result = ''
 
-        each_value {|channel|
-            result << " ##{channel.name}"
-        }
+
+        if thing.is_a?(Client) || thing.is_a?(User)
+            each_value {|channel|
+                result << " #{channel.user(thing).modes[:level]}#{channel.name}"
+            }
+        else
+            each_value {|channel|
+                result << " #{channel.name}"
+            }       
+        end
 
         return result[1, result.length]
     end

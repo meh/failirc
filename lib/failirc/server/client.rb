@@ -27,9 +27,9 @@ module IRC
 class Client
     include Utils
 
-    attr_reader   :server, :socket, :listen, :channels, :modes, :mask, :nick, :user, :host
+    attr_reader   :server, :socket, :listen, :channels, :modes, :mask, :nick, :user, :host, :connectedOn
     attr_writer   :quitting
-    attr_accessor :password, :ip, :realName, :lastAction
+    attr_accessor :password, :ip, :realName
 
     def initialize (server, socket, listen)
         @server = server
@@ -49,6 +49,8 @@ class Client
         end
 
         @mask = Mask.new
+
+        @connectedOn = Time.now
     end
 
     def nick= (value)

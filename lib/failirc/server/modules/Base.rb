@@ -94,8 +94,10 @@ class Base < Module
 
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
                 :NAMES => /^NAMES( |$)/i,
-                :WHO   => /^WHO( |$)/i,
-                :WHOIS => /^WHOIS( |$)/i,
+
+                :WHO    => /^WHO( |$)/i,
+                :WHOIS  => /^WHOIS( |$)/i,
+                :WHOWAS => /^WHOWAS( |$)/i,
 
                 :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
                 :NOTICE  => /^NOTICE( |$)/i,
@@ -119,6 +121,8 @@ class Base < Module
                 :join => self.method(:send_join),
                 :part => self.method(:send_part),
                 :kick => self.method(:send_kick),
+
+                :whois => self.method(:send_whois),
 
                 :message => self.method(:send_message),
                 :ctcp    => self.method(:send_ctcp),
@@ -146,8 +150,10 @@ class Base < Module
 
                 :TOPIC => self.method(:topic),
                 :NAMES => self.method(:names),
-                :WHO   => self.method(:who),
-                :WHOIS => self.method(:whois),
+
+                :WHO    => self.method(:who),
+                :WHOIS  => self.method(:whois),
+                :WHOWAS => self.method(:whowas),
 
                 :PRIVMSG => self.method(:privmsg),
                 :NOTICE  => self.method(:notice),
@@ -584,7 +590,9 @@ class Base < Module
         @toPing.delete(thing.socket)
         @pingedOut.delete(thing.socket)
 
-        thing.modes[:last_action] = Utils::Client::Action.new(thing, event, string)
+        if event.alias != :PING && event.alias != :PONG && event.alias != :WHO && event.alias != :MODE
+            thing.modes[:last_action] = Utils::Client::Action.new(thing, event, string)
+        end
 
         stop = false
 
@@ -1086,23 +1094,55 @@ class Base < Module
     end
 
     def whois (thing, string)
-        match = string.match(/WHOIS\s+(.+)$/i)
+        match = string.match(/WHOIS\s+(.+?)(\s+(.+?))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'WHOIS'
             return
         end
 
-        names = match[1].split(/,/)
+        names  = (match[3] || match[1]).split(/,/)
+        server = match[3] ? match[1] : nil
 
         names.each {|name|
-            if !server.clients[name]
-                thing.send :numeric, ERR_NOSUCHNICK, name
-                next
-            end
-
-
+            thing.server.dispatcher.execute(:whois, thing, name)
         }
+    end
+
+    def send_whois (thing, name)
+        if !server.clients[name]
+            thing.send :numeric, ERR_NOSUCHNICK, name
+            return
+        end
+
+        client = server.clients[name]
+
+        thing.send :numeric, RPL_WHOISUSER, client
+
+        if !client.channels.empty?
+            thing.send :numeric, RPL_WHOISCHANNELS, client
+        end
+
+        thing.send :numeric, RPL_WHOISSERVER, client
+
+        if client.modes[:ssl]
+            thing.send :numeric, RPL_USINGSSL, client
+        end
+
+        if client.modes[:away]
+            thing.send :numeric, RPL_AWWAY, client
+        end
+
+        if client.modes[:message]
+            thing.send :numeric, RPL_WHOISOPERATOR, client
+        end
+
+        thing.send :numeric, RPL_WHOISIDLE, client
+        thing.send :numeric, RPL_ENDOFWHOIS, client
+    end
+
+    def whowas (thing, string)
+
     end
 
     def privmsg (thing, string)
@@ -1241,6 +1281,8 @@ class Base < Module
                 element.attributes['flags'].split(/,/).each {|flag|
                     Utils::setFlags(thing, flag.to_sym, true)
                 }
+
+                thing.modes[:message] = 'is an IRC operator'
 
                 thing.send :numeric, RPL_YOUREOPER
                 thing.send :raw, ":#{thing.server} MODE #{thing.nick} #{thing.modes}"
