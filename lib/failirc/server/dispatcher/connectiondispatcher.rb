@@ -237,9 +237,9 @@ class ConnectionDispatcher
                             end
                         rescue
                             if thing.modes[:encoding]
-                                dispatcher.execute(:error, thing, 'The encoding you choose seems to not be the one you are using.')
+                                dispatcher.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
                             else
-                                dispatcher.execute(:error, thing, 'Please specify the encoding you are using with ENCODING <encoding>')
+                                dispatcher.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
                             end
 
                             input.force_encoding('ASCII-8BIT')

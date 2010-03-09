@@ -341,8 +341,8 @@ class Base < Module
         @@modes = {
             :groups => {
                 :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode],
-                :can_change_user_modes => [:can_give_channel_operator, :can_change_extended_user_modes],
-                :can_change_client_modes => [:can_change_extended_client_modes],
+                :can_change_user_modes => [:can_give_channel_operator, :can_change_user_extended_modes],
+                :can_change_client_modes => [:can_change_client_extended_modes],
             },
 
             :channel => {
@@ -428,6 +428,17 @@ class Base < Module
             if match = request.match(/^=(.*)$/)
                 value = match[1].strip
 
+                if thing.is_a?(IRC::Channel) && !self.checkFlag(from, :can_change_channel_extended_modes)
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    return
+                elsif thing.is_a?(IRC::User) && !self.checkFlag(from, :can_change_user_extended_modes)
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
+                    return
+                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !self.checkFlag(from, :can_change_client_extended_modes) && !self.checkFlag(from, :frozen)
+                    from.send :numeric, ERR_NOPRIVILEGES
+                    return
+                end
+
                 if value == '?'
                     if thing.is_a?(IRC::Channel)
                         name = thing.name
@@ -440,42 +451,32 @@ class Base < Module
                     thing.modes[:extended].each {|key, value|
                         from.server.dispatcher.execute :notice, from.server, from, "#{name} #{key} = #{value}"
                     }
+                else
+                    modes = value.split(/,/)
+    
+                    modes.each {|mode|
+                        if mode[0, 1] == '-'
+                            type = '-'
+                        else
+                            type = '+'
+                        end
 
-                    return
+                        if !mode.match(/^[+\-]\w+/)
+                            from.server.dispatcher.execute :error, from, "#{mode} is not a valid extended mode."
+    
+                        if mode.match(/^[+\-]/)
+                            mode = mode[1, mode.length]
+                        end
+    
+                        mode = mode.split(/=/)
+    
+                        if type == '+'
+                            thing.modes[:extended][mode[0].to_sym] = mode[1] || true
+                        else
+                            thing.modes[:extended].delete(mode[0].to_sym)
+                        end
+                    }
                 end
-
-                if thing.is_a?(IRC::Channel) && !self.checkFlag(from, :can_change_channel_extended_modes)
-                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                    return
-                elsif thing.is_a?(IRC::User) && !self.checkFlag(from, :can_change_user_extended_modes)
-                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
-                    return
-                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !self.checkFlag(from, :can_change_client_extended_modes)
-                    from.send :numeric, ERR_NOPRIVILEGES
-                    return
-                end
-
-                modes = value.split(/,/)
-
-                modes.each {|mode|
-                    if mode[0, 1] == '-'
-                        type = '-'
-                    else
-                        type = '+'
-                    end
-
-                    if mode.match(/^[+\-]/)
-                        mode = mode[1, mode.length]
-                    end
-
-                    mode = mode.split(/=/)
-
-                    if type == '+'
-                        thing.modes[:extended][mode[0].to_sym] = mode[1] || true
-                    else
-                        thing.modes[:extended].delete(mode[0].to_sym)
-                    end
-                }
             else
                 match = request.match(/^\s*([+\-])?\s*([^ ]+)(\s+(.+))?$/)
 
