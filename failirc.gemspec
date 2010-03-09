@@ -15,4 +15,5 @@ Gem::Specification.new {|s|
     s.extra_rdoc_files  = ['README']
 
     s.add_dependency('getopt')
+    s.add_dependency('openssl-nonblock')
 }

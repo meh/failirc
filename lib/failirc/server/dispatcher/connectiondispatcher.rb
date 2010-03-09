@@ -19,7 +19,7 @@
 
 require 'thread'
 require 'socket'
-require 'openssl'
+require 'openssl/nonblock'
 
 require 'failirc/utils'
 require 'failirc/server/dispatcher/sslutils'
@@ -210,14 +210,7 @@ class ConnectionDispatcher
                     begin
                         input = String.new
 
-                        begin
-                            if socket.is_a?(OpenSSL::SSL::SSLSocket)
-                                socket.read 2048, input
-                            else
-                                socket.read_nonblock 2048, input
-                            end
-                        rescue
-                        end
+                        socket.read_nonblock 2048, input rescue nil
 
                         if !input || input.empty?
                             raise Errno::EPIPE
@@ -284,11 +277,7 @@ class ConnectionDispatcher
                 writing.each {|socket|
                     begin
                         while !@output[socket].empty?
-                            if socket.is_a?(OpenSSL::SSL::SSLSocket)
-                                socket.write "#{@output[socket].first}\r\n"
-                            else
-                                socket.write_nonblock "#{@output[socket].first}\r\n"
-                            end
+                            socket.write_nonblock "#{@output[socket].first}\r\n"
 
                             @output[socket].shift
                         end
