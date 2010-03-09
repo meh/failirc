@@ -23,7 +23,7 @@ module IRC
 
 module Utils
 
-def debug (argument, separator="")
+def debug (argument, separator="\n")
     begin
         output = ''
 
