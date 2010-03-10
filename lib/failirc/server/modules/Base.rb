@@ -340,8 +340,8 @@ class Base < Module
 
         @@modes = {
             :groups => {
-                :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode],
-                :can_change_user_modes => [:can_give_channel_operator, :can_change_user_extended_modes],
+                :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode, :can_change_secret_mode, :can_change_ssl_mode, :can_change_moderated_mode],
+                :can_change_user_modes => [:can_give_channel_operator, :can_give_voice, :can_change_user_extended_modes],
                 :can_change_client_modes => [:can_change_client_extended_modes],
             },
 
@@ -464,13 +464,13 @@ class Base < Module
                         if mode.match(/^[+\-]/)
                             mode = mode[1, mode.length]
                         end
-
-                        if !mode.match(/^\w+$/)
-                            from.server.dispatcher.execute :error, from, "#{mode} is not a valid extended mode."
-                            next
-                        end
     
                         mode = mode.split(/=/)
+
+                        if !mode[0].match(/^\w+$/)
+                            from.server.dispatcher.execute :error, from, "#{mode[0]} is not a valid extended mode."
+                            next
+                        end
     
                         if type == '+'
                             thing.modes[:extended][mode[0].to_sym] = mode[1] || true
@@ -511,7 +511,28 @@ class Base < Module
 
                         when 'n'
                             if self.checkFlag(from, :can_change_no_external_messages_mode)
+                                if self.checkFlag(thing, :n) == (type == '+')
+                                    next
+                                end
 
+                                self.setFlags(thing, :n, type == '+')
+
+                                outputModes.push('n')
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                            end
+
+                        when 'm'
+                            if self.checkFlag(from, :can_change_moderated_mode)
+                                if self.checkFlag(thing, :m) == (type == '+')
+                                    next
+                                end
+
+                                self.setFlags(thing, :m, type == '+')
+
+                                outputModes.push('m')
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
 
                         when 'o'
@@ -522,8 +543,6 @@ class Base < Module
                                     from.send :numeric, ERR_NOSUCHNICK, value
                                     next
                                 end
-
-                                ok = false
 
                                 if type == '+'
                                     if user.modes[:o]
@@ -549,11 +568,93 @@ class Base < Module
                                 from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
 
+                        when 's'
+                            if self.checkFlag(from, :can_change_secret_mode)
+                                if self.checkFlag(thing, :s) == (type == '+')
+                                    next
+                                end
+
+                                self.setFlags(thing, :s, type == '+')
+
+                                outputModes.push('s')
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                            end
+
                         when 't'
                             if self.checkFlag(from, :can_change_topic_mode)
+                                if self.checkFlag(thing, :t) == (type == '+')
+                                    next
+                                end
+
                                 self.setFlags(thing, :t, type == '+')
 
                                 outputModes.push('t')
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                            end
+
+                        when 'v'
+                            if self.checkFlag(from, :can_give_voice)
+                                value = values.shift
+
+                                if !(user = thing.users[value])
+                                    from.send :numeric, ERR_NOSUCHNICK, value
+                                    next
+                                end
+
+                                if type == '+'
+                                    if user.modes[:v]
+                                        next
+                                    end
+
+                                    self.setFlags(user, :v, true)
+
+                                    if !user.modes[:q] && !user.modes[:a] && !user.modes[:o] && !user.modes[:h]
+                                        user.modes[:level] = '+'
+                                    end
+                                else
+                                    if !user.modes[:v]
+                                        next
+                                    end
+                                    
+                                    self.setFlags(user, :v, false)
+                                end
+
+                                outputModes.push('v')
+                                outputValues.push(value)
+                               
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                            end
+
+                        when 'z'
+                            if self.checkFlag(from, :can_change_ssl_mode)
+                                if self.checkFlag(thing, :z) == (type == '+')
+                                    next
+                                end
+
+                                if type == '+'
+                                    ok = true
+
+                                    thing.users.each_value {|user|
+                                        if !self.checkFlag(user, :ssl)
+                                            ok = false
+                                            break
+                                        end
+                                    }
+
+                                    if ok
+                                        self.setFlags(thing, :z, true)
+                                    else
+                                        from.send :numeric, ERR_ALLMUSTUSESSL
+                                        next
+                                    end
+                                else
+                                    self.setFlags(thing, :z, false)
+                                end
+
+                                outputModes.push('z')
                             else
                                 from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
@@ -900,6 +1001,11 @@ class Base < Module
                 password = ''
             end
 
+            if channel.modes[:z] && !thing.modes[:ssl]
+                thing.send :numeric, ERR_SSLREQUIRED, channel.name
+                return
+            end
+
             if channel.modes[:k] && password != channel.modes[:password]
                 thing.send :numeric, ERR_BADCHANNELKEY, channel
                 return 
@@ -1085,7 +1191,33 @@ class Base < Module
     end
 
     def list (thing, string)
+        match = string.match(/LIST(\s+(.*))$/)
 
+        channels = (match[2] || '').split(/,/)
+
+        thing.send :numeric, RPL_LISTSTART
+
+        if channels.empty?
+            channels = server.channels
+        else
+            tmp = Channels.new(thing.server)
+
+            channels.each {|channel|
+                if channel = server.channels[channel]
+                    tmp.add(channel)
+                end
+            }
+
+            channels = tmp
+        end
+
+        channels.each_value {|channel|
+            if !channel.modes[:secret] || thing.channels[channel.name]
+                thing.send :numeric, RPL_LIST, channel
+            end
+        }
+
+        thing.send :numeric, RPL_LISTEND
     end
 
     def who (thing, string)
@@ -1141,7 +1273,20 @@ class Base < Module
         thing.send :numeric, RPL_WHOISUSER, client
 
         if !client.channels.empty?
-            thing.send :numeric, RPL_WHOISCHANNELS, client
+            channels = ''
+
+            client.channels.each_value {|channel|
+                if !channel.modes[:secret] || thing.channels[channel.name]
+                    channels << " #{channel.users(client).modes[:level]}#{channel.name}"
+                end
+            }
+
+            channels = channels[1, channels.length]
+
+            thing.send :numeric, RPL_WHOISCHANNELS, {
+                :nick     => client.nick,
+                :channels => channels,
+            }
         end
 
         thing.send :numeric, RPL_WHOISSERVER, client
@@ -1200,7 +1345,7 @@ class Base < Module
                         Utils::dispatchMessage(thing, channel, message)
                     else
                         if server.channels[receiver].modes[:n]
-                            thing.send :numeric, ERR_ERR_NOEXTERNALMESSAGES, channel.name
+                            thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
                         else
                             Utils::dispatchMessage(thing, channel, message)
                         end
@@ -1258,10 +1403,12 @@ class Base < Module
             name    = match[1]
             message = match[2]
 
-            if server.clients[name]
-                server.dispatcher.execute(:notice, thing, server.clients[name], message)
-            elsif server.channels[name]
-                server.dispatcher.execute(:notice, thing, server.channels[name], message)
+            if client =server.clients[name]
+                server.dispatcher.execute(:notice, thing, client, message)
+            elsif channel = server.channels[name]
+                if !channel.modes[:n] || channel.user(thing)
+                    server.dispatcher.execute(:notice, thing, channel, message)
+                end
             else
                 # unrealircd sends an error if it can't find nick/channel, what should I do?
             end
@@ -1273,7 +1420,13 @@ class Base < Module
             sender = sender.client
         end
 
-        receiver.send :raw, ":#{sender} NOTICE #{receiver.nick} :#{message}"
+        if receiver.is_a?(Channel)
+            name = receiver.name
+        elsif receiver.is_a?(Client) || receiver.is_a?(User)
+            name = receiver.nick
+        end
+
+        receiver.send :raw, ":#{sender} NOTICE #{name} :#{message}"
     end
 
     def send_error (thing, message, type=nil)

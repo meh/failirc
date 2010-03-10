@@ -295,4 +295,14 @@ ERR_BADCHANMASK = {
     :text => '"#{value} :Bad channel name"'
 }
 
+ERR_ALLMUSTUSESSL = {
+    :code => 974,
+    :text => '"z :all members must be connected via SSL"'
+}
+
+ERR_SSLREQUIRED = {
+    :code => 489,
+    :text => '"#{value} :Cannot join channel (SSL is required)"'
+}
+
 end

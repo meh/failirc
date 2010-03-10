@@ -92,7 +92,7 @@ RPL_ENDOFWHOIS = {
 # The RPL_ENDOFWHOIS reply is used to mark the end of processing a WHOIS message.
 RPL_WHOISCHANNELS = {
     :code => 319,
-    :text => '"#{value.nick} :#{value.channels.to_s(value)}"'
+    :text => '"#{value[:nick]} :#{value[:channels]}"'
 }
 
 RPL_WHOWASUSER = {
@@ -114,7 +114,7 @@ RPL_LISTSTART = {
 
 RPL_LIST = {
     :code => 322,
-    :text => '"#{value.name} #{value.users.length} :#{value.topic}"'
+    :text => '"#{value.name} #{value.users.length} #{value.modes.to_s != "+" ? "[#{value.modes.to_s}]" : ""} :#{value.topic.text}"'
 }
 
 # Replies RPL_LISTSTART, RPL_LIST, RPL_LISTEND mark the start, actual replies with data and end of the server's response to a LIST command.

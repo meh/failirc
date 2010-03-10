@@ -192,7 +192,7 @@ class ConnectionDispatcher
                 @connections.things[socket] = @connections.clients[socket] = IRC::Client.new(server, socket, listen)
             rescue OpenSSL::SSL::SSLError
                 socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
-                self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the handshake."
+                self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the handshake.", ''
                 socket.close
             rescue Exception => e
                 socket.close
