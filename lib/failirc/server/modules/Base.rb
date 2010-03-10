@@ -52,6 +52,7 @@ class Base < Module
 
         @pingThread = Thread.new {
             while true
+                # time to ping non active users
                 @toPing.each_value {|client|
                     @pingedOut[client.socket] = client
 
@@ -60,11 +61,13 @@ class Base < Module
                     end
                 }
 
+                # clear and refil the hash of clients to ping with all the connected clients
                 @toPing.clear
                 @toPing.merge!(::Hash[server.clients.values.collect {|client| [client.socket, client]}])
 
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
+                # people who didn't answer with a PONG has to YIFF IN HELL.
                 @pingedOut.each_value {|client|
                     if !client.socket.closed?
                         server.dispatcher.execute(:error, client, 'Ping timeout', :close)
@@ -282,8 +285,11 @@ class Base < Module
             end
         end
 
+        # This method does some checks trying to register the connection, various checks
+        # for nick collisions and such.
         def self.registration (thing)
             if !thing.modes[:registered]
+                # additional check for nick collisions
                 if thing.nick
                     if (thing.server.data[:nicks][thing.nick] && thing.server.data[:nicks][thing.nick] != thing) || thing.server.clients[thing.nick]
                         if thing.modes[:__warned] != thing.nick
@@ -324,6 +330,7 @@ class Base < Module
             end
         end
 
+        # This method sends the MOTD 80 chars per line.
         def self.motd (user)
             user.send :numeric, RPL_MOTDSTART
     
@@ -341,7 +348,7 @@ class Base < Module
         @@modes = {
             :groups => {
                 :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode, :can_change_secret_mode, :can_change_ssl_mode, :can_change_moderated_mode],
-                :can_change_user_modes => [:can_give_channel_operator, :can_give_voice, :can_change_user_extended_modes],
+                :can_change_user_modes => [:can_give_channel_operator, :can_give_channel_half_operator, :can_give_voice, :can_change_user_extended_modes],
                 :can_change_client_modes => [:can_change_client_extended_modes],
             },
 
@@ -371,6 +378,7 @@ class Base < Module
             },
         }
 
+        # This method assigns flags recursively using groups of flags
         def self.setFlags (thing, type, value)
             if @@modes[:groups][type]
                 main = @@modes[:groups]
@@ -411,6 +419,7 @@ class Base < Module
         end
 
         def self.checkFlag (thing, type)
+            # servers can do everything
             if thing.is_a?(IRC::Server)
                 return true
             end
@@ -452,7 +461,7 @@ class Base < Module
                         from.server.dispatcher.execute :notice, from.server, from, "#{name} #{key} = #{value}"
                     }
                 else
-                    modes = value.split(/,/)
+                    modes = value.split(/[^\\],/)
     
                     modes.each {|mode|
                         if mode[0, 1] == '-'
@@ -461,9 +470,7 @@ class Base < Module
                             type = '+'
                         end
     
-                        if mode.match(/^[+\-]/)
-                            mode = mode[1, mode.length]
-                        end
+                        mode.sub!(/^[+\-]/, '')
     
                         mode = mode.split(/=/)
 
@@ -507,6 +514,39 @@ class Base < Module
                                     from.send :numeric, RPL_ENDOFBANLIST, thing.name
                                 else
                                 end
+                            end
+
+                        when 'h'
+                            if self.checkFlag(from, :can_give_channel_half_operator)
+                                value = values.shift
+
+                                if !(user = thing.users[value])
+                                    from.send :numeric, ERR_NOSUCHNICK, value
+                                    next
+                                end
+
+                                if type == '+'
+                                    if user.modes[:h]
+                                        next
+                                    end
+
+                                    self.setFlags(user, :h, true)
+
+                                    if !user.modes[:q] && !user.modes[:a] && !user.modes[:h]
+                                        user.modes[:level] = '%'
+                                    end
+                                else
+                                    if !user.modes[:h]
+                                        next
+                                    end
+                                    
+                                    self.setFlags(user, :h, false)
+                                end
+
+                                outputModes.push('h')
+                                outputValues.push(value)
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
 
                         when 'n'
@@ -907,10 +947,14 @@ class Base < Module
         if !thing.modes[:registered]
             # if the user hasn't registered yet and the choosen nick is already used,
             # kill it with fire.
-            if server.clients[nick]
+            if server.clients[nick] || server.data[:nicks][nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
                 thing.modes[:__warned] = nick
             else
+                if thing.nick
+                    server.data[:nicks].delete(thing.nick)
+                end
+
                 thing.nick = nick
 
                 # try to register it
@@ -922,6 +966,8 @@ class Base < Module
             if server.clients[nick] || server.data[:nicks][nick]
                 thing.send :numeric, ERR_NICKNAMEINUSE, nick
             else
+                server.data[:nicks].delete(nick)
+
                 mask       = thing.mask.clone
                 thing.nick = nick
 
@@ -1130,6 +1176,8 @@ class Base < Module
                 channel.delete(user)
                 user.client.channels.delete(channel)
             end
+        else
+            thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
     end
 
@@ -1258,7 +1306,7 @@ class Base < Module
         server = match[3] ? match[1] : nil
 
         names.each {|name|
-            server.dispatcher.execute(:whois, thing, name)
+            thing.server.dispatcher.execute(:whois, thing, name)
         }
     end
 
@@ -1277,7 +1325,7 @@ class Base < Module
 
             client.channels.each_value {|channel|
                 if !channel.modes[:secret] || thing.channels[channel.name]
-                    channels << " #{channel.users(client).modes[:level]}#{channel.name}"
+                    channels << " #{channel.user(client).modes[:level]}#{channel.name}"
                 end
             }
 

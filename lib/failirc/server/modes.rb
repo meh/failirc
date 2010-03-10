@@ -38,10 +38,12 @@ class Modes < ThreadSafeHash
         result = '+'
 
         each_key {|mode|
-            mode = mode.to_s
+            if mode
+                mode = mode.to_s
 
-            if mode.length == 1
-                result << mode
+                if mode.length == 1
+                    result << mode
+                end
             end
         }
 
