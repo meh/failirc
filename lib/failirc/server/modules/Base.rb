@@ -1048,7 +1048,7 @@ class Base < Module
 
     def client_nick_change (thing, nick)
         # check if the nickname is valid
-        if !nick.match(/^[\w\-^\/]{1,23}$/)
+        if nick.match(/^[~&@%+]/) || nick.match(/[\s:,]/)
             thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
             return false
         end

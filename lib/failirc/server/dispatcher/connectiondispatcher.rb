@@ -194,6 +194,8 @@ class ConnectionDispatcher
                 socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
                 self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the handshake.", ''
                 socket.close
+            rescue Errno::ECONNRESET
+                socket.close
             rescue Exception => e
                 socket.close
                 self.debug(e)
@@ -213,7 +215,7 @@ class ConnectionDispatcher
                         input = String.new
 
                         begin
-                            socket.read_nonblock 2048, input rescue nil
+                            socket.read_nonblock 2048, input
                         rescue Errno::EAGAIN, IO::WaitReadable
                             if !input || input.empty?
                                 raise Errno::EAGAIN

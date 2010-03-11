@@ -21,7 +21,7 @@
 require 'failirc/server'
 require 'getopt/std'
 
-options = Getopt::Std.getopts("f:Vv")
+options = Getopt::Std.getopts('f:Vv')
 
 if options['v']
     puts "Fail IRCd #{IRC::VERSION}"

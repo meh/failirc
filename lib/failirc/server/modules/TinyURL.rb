@@ -48,7 +48,7 @@ class TinyURL < Module
     def tinyurl (sender, receiver, message)
         URI.extract(message).each {|uri|
             if uri.length > @length
-                tiny = tinyurlify(uri)
+                tiny = tinyurlify(uri) rescue nil
 
                 if tiny
                     message.gsub!(/#{Regexp.escape(uri)}/, tiny)
