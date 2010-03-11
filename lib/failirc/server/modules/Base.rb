@@ -121,10 +121,12 @@ class Base < Module
             :pre => self.method(:check),
 
             :custom => {
+                :client_nick_change => self.method(:client_nick_change),
+
                 :kill => self.method(:send_quit),
 
-                :join => self.method(:send_join),
-                :part => self.method(:send_part),
+                :join => self.method(:user_join),
+                :part => self.method(:user_part),
                 :kick => self.method(:send_kick),
 
                 :whois => self.method(:send_whois),
@@ -261,7 +263,7 @@ class Base < Module
             end
     
             def self.invited? (channel, client)
-                if !channel.modes[:i]
+                if !channel.modes[:invite_only]
                     return true
                 end
 
@@ -282,6 +284,44 @@ class Base < Module
                 }
 
                 return false
+            end
+        end
+
+        module User
+            @@levels = {
+                :q => '~',
+                :a => '&',
+                :o => '@',
+                :h => '%',
+                :v => '+',
+            }
+
+            def self.getHighestLevel (user)
+                if user.modes[:q]
+                    return :q
+                elsif user.modes[:a]
+                    return :a
+                elsif user.modes[:o]
+                    return :o
+                elsif user.modes[:h]
+                    return :h
+                elsif user.modes[:v]
+                    return :v
+                end
+            end
+
+            def self.setLevel (user, level, value)
+                if @@levels[level]
+                    Utils::setFlags(user, level, value)
+
+                    if value
+                        user.modes[:level] = @@levels[level]
+                    else
+                        self.setLevel(user, self.getHighestLevel(user), true)
+                    end
+                else
+                    user.modes[:level] = ''
+                end
             end
         end
 
@@ -347,14 +387,26 @@ class Base < Module
 
         @@modes = {
             :groups => {
-                :can_change_channel_modes => [:can_change_channel_extended_modes, :can_change_topic_mode, :can_change_no_external_messages_mode, :can_change_secret_mode, :can_change_ssl_mode, :can_change_moderated_mode],
-                :can_change_user_modes => [:can_give_channel_operator, :can_give_channel_half_operator, :can_give_voice, :can_change_user_extended_modes],
-                :can_change_client_modes => [:can_change_client_extended_modes],
+                :can_change_channel_modes => [
+                    :can_change_channel_extended_modes, :can_change_topic_mode,
+                    :can_change_no_external_messages_mode, :can_change_secret_mode,
+                    :can_change_ssl_mode, :can_change_moderated_mode,
+                    :can_change_invite_only_mode
+                ],
+
+                :can_change_user_modes => [
+                    :can_give_channel_operator, :can_give_channel_half_operator,
+                    :can_give_voice, :can_change_user_extended_modes
+                ],
+
+                :can_change_client_modes => [
+                    :can_change_client_extended_modes
+                ],
             },
 
             :channel => {
                 :a => :anonymous,
-                :i => :inviteOnly,
+                :i => :invite_only,
                 :m => :moderated,
                 :n => :no_external_messages,
                 :s => :secret,
@@ -364,7 +416,7 @@ class Base < Module
 
             :user => {
                 :a => [:o, :admin],
-                :o => [:h, :operator, :can_kick, :can_change_topic, :can_change_channel_modes, :can_change_user_modes],
+                :o => [:h, :operator, :can_change_topic, :can_change_channel_modes, :can_change_user_modes],
                 :h => [:v, :halfoperator, :can_kick],
                 :v => [:voice, :can_talk],
             },
@@ -394,28 +446,33 @@ class Base < Module
                 end
             end
 
-            modes             = main[type]
-            thing.modes[type] = value
+            if value == false
+                thing.modes.delete(type)
+            else
+                thing.modes[type] = value
+            end
 
-            if !modes
+            if !(modes = main[type])
                 return
             end
 
-            if modes.is_a?(Array)
-                modes.each {|mode|
-                    if (main[mode] || @@modes[:groups][mode]) && !thing.modes[mode]
-                        self.setFlags(thing, mode, value)
+            if !modes.is_a?(Array)
+                modes = [modes]
+            end
+
+            modes.each {|mode|
+                if (main[mode] || @@modes[:groups][mode]) && !thing.modes.has_key?(mode)
+                    self.setFlags(thing, mode, value)
+                else
+                    if value == false
+                        if !main.has_key?(mode)
+                            thing.modes.delete(mode)
+                        end
                     else
                         thing.modes[mode] = value
                     end
-                }
-            else
-                if main[modes] && !thing.modes[modes]
-                    self.setFlags(thing, modes, value)
-                else
-                    thing.modes[modes] = value
                 end
-            end
+            }
         end
 
         def self.checkFlag (thing, type)
@@ -530,21 +587,41 @@ class Base < Module
                                         next
                                     end
 
-                                    self.setFlags(user, :h, true)
-
-                                    if !user.modes[:q] && !user.modes[:a] && !user.modes[:h]
-                                        user.modes[:level] = '%'
-                                    end
+                                    User::setLevel(user, :h, true)
                                 else
                                     if !user.modes[:h]
                                         next
                                     end
                                     
-                                    self.setFlags(user, :h, false)
+                                    User::setLevel(user, :h, false)
                                 end
 
                                 outputModes.push('h')
                                 outputValues.push(value)
+                            else
+                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                            end
+
+                        when 'i'
+                            if self.checkFlag(from, :can_change_invite_only_mode)
+                                if self.checkFlag(thing, :i) == (type == '+')
+                                    next
+                                end
+
+                                self.setFlags(thing, :i, type == '+')
+
+                                outputModes.push('i')
+                            end
+
+                        when 'm'
+                            if self.checkFlag(from, :can_change_moderated_mode)
+                                if self.checkFlag(thing, :m) == (type == '+')
+                                    next
+                                end
+
+                                self.setFlags(thing, :m, type == '+')
+
+                                outputModes.push('m')
                             else
                                 from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
@@ -558,19 +635,6 @@ class Base < Module
                                 self.setFlags(thing, :n, type == '+')
 
                                 outputModes.push('n')
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 'm'
-                            if self.checkFlag(from, :can_change_moderated_mode)
-                                if self.checkFlag(thing, :m) == (type == '+')
-                                    next
-                                end
-
-                                self.setFlags(thing, :m, type == '+')
-
-                                outputModes.push('m')
                             else
                                 from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                             end
@@ -702,8 +766,8 @@ class Base < Module
                     elsif thing.is_a?(IRC::Client)
                     end
 
-                    if from.is_a?(User)
-                        from = from.client
+                    if from.is_a?(IRC::Client) || from.is_a?(IRC::User)
+                        from = from.mask
                     end
 
                     if !noAnswer && (!outputModes.empty? || !outputValues.empty?)
@@ -936,11 +1000,7 @@ class Base < Module
 
         nick = match[2]
 
-        server.dispatcher.execute(:user_nick_change, thing, nick)
-
-        # check if the nickname is valid
-        if !nick.match(/^[\w\-^\/]{1,23}$/)
-            thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
+        if server.dispatcher.execute(:client_nick_change, thing, nick) == false
             return
         end
 
@@ -986,6 +1046,14 @@ class Base < Module
         end
     end
 
+    def client_nick_change (thing, nick)
+        # check if the nickname is valid
+        if !nick.match(/^[\w\-^\/]{1,23}$/)
+            thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
+            return false
+        end
+    end
+
     def user (thing, string)
         if thing.is_a?(Client)
             match = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.+)$/i)
@@ -1012,6 +1080,14 @@ class Base < Module
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'JOIN'
+            return
+        end
+
+        if match[1] == '0'
+            thing.channels.each_value {|channel|
+                server.dispatcher.execute :part, channel[thing.nick], 'Left all channels'
+            }
+
             return
         end
 
@@ -1047,17 +1123,17 @@ class Base < Module
                 password = ''
             end
 
-            if channel.modes[:z] && !thing.modes[:ssl]
+            if channel.modes[:ssl_only] && !thing.modes[:ssl]
                 thing.send :numeric, ERR_SSLREQUIRED, channel.name
                 return
             end
 
-            if channel.modes[:k] && password != channel.modes[:password]
+            if channel.modes[:password] && password != channel.modes[:password]
                 thing.send :numeric, ERR_BADCHANNELKEY, channel
                 return 
             end
 
-            if channel.modes[:i] && !Utils::Channel::invited?(channel, thing)
+            if channel.modes[:invite_only] && !Utils::Channel::invited?(channel, thing)
                 thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
                 return
             end
@@ -1076,21 +1152,21 @@ class Base < Module
 
             thing.channels.add(channel)
 
-            if server.dispatcher.execute(:join, user) != false
-                if !channel.topic.nil?
-                    topic thing, "TOPIC #{channel}"
-                end
-
-                names thing, "NAMES #{channel}"
-            else
+            if server.dispatcher.execute(:join, user) == false
                 user.channel.delete(user)
                 thing.channels.delete(channel)
             end
         }
     end
 
-    def send_join (user)
+    def user_join (user)
         user.channel.send :raw, ":#{user.mask} JOIN :#{user.channel}"
+
+        if !user.channel.topic.nil?
+            topic user.client, "TOPIC #{user.channel}"
+        end
+
+        names user.client, "NAMES #{user.channel}"
     end
 
     def part (thing, string)
@@ -1116,20 +1192,20 @@ class Base < Module
             elsif !thing.channels[name]
                 thing.send :numeric, ERR_NOTONCHANNEL, name
             else
-                if server.dispatcher.execute(:part, channel.user(thing), message) != false
-                    channel.delete(thing)
-                    thing.channels.delete(name)
-                end
+                server.dispatcher.execute(:part, channel.user(thing), message)
             end
         }
     end
 
-    def send_part (user, message)
+    def user_part (user, message)
         if user.client.modes[:quitting]
             return false
         end
 
         user.channel.send :raw, ":#{user.mask} PART #{user.channel} :#{message}"
+
+        user.channel.delete(user)
+        user.client.channels.delete(user.channel.name)
     end
 
     def kick (thing, string)
@@ -1172,10 +1248,7 @@ class Base < Module
         end
 
         if thing.modes[:can_kick]
-            if server.dispatcher.execute(:kick, thing, user, message) != false
-                channel.delete(user)
-                user.client.channels.delete(channel)
-            end
+            server.dispatcher.execute(:kick, thing, user, message)
         else
             thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
@@ -1183,6 +1256,9 @@ class Base < Module
 
     def send_kick (kicker, kicked, message)
         kicked.channel.send :raw, ":#{kicker.mask} KICK #{kicked.channel} #{kicked.nick} :#{message}"
+
+        kicked.channel.delete(kicked)
+        kicked.client.channels.delete(kicked.channel)
     end
 
     def topic (thing, string)
@@ -1232,7 +1308,26 @@ class Base < Module
         channel = match[1]
 
         if thing.channels[channel]
-            thing.send :numeric, RPL_NAMREPLY, thing.channels[channel]
+            users = String.new
+
+            if thing.channels[channel].modes[:auditorium]
+                thing.channels[channel].users.each_value {|user|
+                    if user.modes[:level]
+                        users << " #{user}"
+                    end
+                }
+            else
+                thing.channels[channel].users.each_value {|user|
+                    users << " #{user}"
+                }
+            end
+
+            users = users[1, users.length]
+
+            thing.send :numeric, RPL_NAMREPLY, {
+                :channel => channel,
+                :users   => users,
+            }
         end
 
         thing.send :numeric, RPL_ENDOFNAMES, channel
@@ -1379,7 +1474,7 @@ class Base < Module
                 if channel
                     user = channel.user(thing)
 
-                    if channel.modes[:m] && !Utils::checkFlag(user, :can_talk)
+                    if channel.modes[:moderated] && !Utils::checkFlag(user, :can_talk)
                         thing.send :numeric, ERR_YOUNEEDVOICE, channel.name
                         return
                     end
@@ -1392,7 +1487,7 @@ class Base < Module
                     if user
                         Utils::dispatchMessage(thing, channel, message)
                     else
-                        if server.channels[receiver].modes[:n]
+                        if server.channels[receiver].modes[:no_external_messages]
                             thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
                         else
                             Utils::dispatchMessage(thing, channel, message)
@@ -1454,7 +1549,7 @@ class Base < Module
             if client =server.clients[name]
                 server.dispatcher.execute(:notice, thing, client, message)
             elsif channel = server.channels[name]
-                if !channel.modes[:n] || channel.user(thing)
+                if !channel.modes[:no_external_messages] || channel.user(thing)
                     server.dispatcher.execute(:notice, thing, channel, message)
                 end
             else

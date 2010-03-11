@@ -92,22 +92,6 @@ class Users < ThreadSafeHash
             user.send(*args)
         }
     end
-
-    def inspect (channel=false)
-        result = ""
-
-        if channel
-            each_value {|user|
-                result << " #{user}"
-            }
-        else
-            each_value {|user|
-                result << " #{user.client.inspect}"
-            }
-        end
-
-        return result[1, result.length]
-    end
 end
 
 end

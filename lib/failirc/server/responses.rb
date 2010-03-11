@@ -176,7 +176,7 @@ RPL_ENDOFWHO = {
 
 RPL_NAMREPLY = {
     :code => 353,
-    :text => '"= #{value.name} :#{value.users.inspect(true)}"'
+    :text => '"= #{value[:channel]} :#{value[:users]}"'
 }
 
 # To reply to a NAMES message, a reply pair consisting of RPL_NAMREPLY and RPL_ENDOFNAMES is sent by the server back to the client.

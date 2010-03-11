@@ -35,15 +35,15 @@ class Mask
 
         matches = {}
 
-        if !nick || !mask.nick || /#{Regexp.escape(nick).gsub(/\*/, '.*?')}/.match(mask.nick)
+        if !nick || !mask.nick || Mask.toRegexp(nick).match(mask.nick)
             matches[:nick] = true
         end
 
-        if !user || !mask.user || /#{Regexp.escape(user).gsub(/\*/, '.*?')}/.match(mask.user)
+        if !user || !mask.user || Mask.toRegexp(user).match(mask.user)
             matches[:user] = true
         end
 
-        if !host || !mask.host || /#{Regexp.escape(host).gsub(/\*/, '.*?')}/.match(mask.host)
+        if !host || !mask.host || Mask.toRegexp(host).match(mask.host)
             matches[:host] = true
         end
 
@@ -52,6 +52,10 @@ class Mask
 
     def to_s
         return "#{nick || '*'}!#{user || '*'}@#{host || '*'}"
+    end
+
+    def self.toRegexp (string)
+        return Regexp.new(Regexp.escape(string).gsub(/\\\*/, '.*?').gsub(/\\\?/, '.'))
     end
 
     def self.parse (string)

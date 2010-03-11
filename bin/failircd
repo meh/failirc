@@ -24,7 +24,7 @@ require 'getopt/std'
 options = Getopt::Std.getopts("f:Vv")
 
 if options['v']
-    puts "Fail IRC #{IRC::VERSION}"
+    puts "Fail IRCd #{IRC::VERSION}"
     exit 0
 end
 
