@@ -55,11 +55,11 @@ class WordFilter < Module
         end
     end
 
-    def filter (sender, receiver, message)
-        if receiver.is_a?(Channel)
-            channel = receiver.modes
+    def filter (from, to, message, level)
+        if to.is_a?(Channel)
+            channel = to.modes
 
-            if user = receiver.user(sender)
+            if user = to.user(from)
                 user = user.modes
             end
         else
@@ -67,7 +67,7 @@ class WordFilter < Module
             user    = Modes.new
         end
 
-        client = sender.modes
+        client = from.modes
 
         if channel[:extended][:gay] || client[:extended][:gay] || user[:extended][:gay]
             rainbow(message, 'rrRRyyYYGGggccCCBBppPP')

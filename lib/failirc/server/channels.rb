@@ -26,10 +26,10 @@ module IRC
 class Channels < ThreadSafeHash
     attr_reader :server
 
-    def initialize (server)
+    def initialize (server, *args)
         @server = server
 
-        super()
+        super(*args)
     end
 
     alias __delete delete

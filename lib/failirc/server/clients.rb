@@ -25,10 +25,10 @@ module IRC
 class Clients < Hash
     attr_reader :server
 
-    def initialize (server)
+    def initialize (server, *args)
         @server = server
 
-        super()
+        super(*args)
     end
 
     def send (*args)

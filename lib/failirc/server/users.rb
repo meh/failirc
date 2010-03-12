@@ -23,12 +23,13 @@ require 'failirc/server/user'
 module IRC
 
 class Users < ThreadSafeHash
-    attr_reader :channel
+    attr_reader :server, :channel
 
-    def initialize (channel)
+    def initialize (channel, *args)
+        @server  = channel.server
         @channel = channel
 
-        super()
+        super(*args)
     end
 
     def server

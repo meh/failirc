@@ -39,10 +39,10 @@ class Dispatcher
 
         @listening = Fiber.new {
             while true
-                if @connection.connections.empty?
-                    timeout = 2
-                else
+                if !@connection.connections.empty?
                     timeout = 0
+                else
+                    timeout = 2
                 end
 
                 @connection.accept timeout
@@ -53,13 +53,7 @@ class Dispatcher
 
         @reading = Fiber.new {
             while true
-                if output.empty?
-                    timeout = 0.1
-                else
-                    timeout = 0
-                end
-
-                @connection.read timeout
+                @connection.read
 
                 Fiber.yield
             end

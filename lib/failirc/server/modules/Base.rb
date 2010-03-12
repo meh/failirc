@@ -103,6 +103,7 @@ class Base < Module
                 :WHO    => /^WHO( |$)/i,
                 :WHOIS  => /^WHOIS( |$)/i,
                 :WHOWAS => /^WHOWAS( |$)/i,
+                :ISON   => /^ISON( |$)/i,
 
                 :PRIVMSG => /^(:[^ ] )?PRIVMSG( |$)/i,
                 :NOTICE  => /^NOTICE( |$)/i,
@@ -164,6 +165,7 @@ class Base < Module
                 :WHO    => self.method(:who),
                 :WHOIS  => self.method(:whois),
                 :WHOWAS => self.method(:whowas),
+                :ISON   => self.method(:ison),
 
                 :PRIVMSG => self.method(:privmsg),
                 :NOTICE  => self.method(:notice),
@@ -307,6 +309,20 @@ class Base < Module
                 :h => '%',
                 :v => '+',
             }
+
+            @@levelsOrder = [:q, :a, :o, :h, :v]
+
+            def self.isLevel (char)
+                @@levels.has_value?(char) ? char : false
+            end
+
+            def self.isLevelEnough (user, level)
+                if !level
+                    return true
+                end
+
+                (@@levelsOrder.index(self.getHighestLevel(user)) || 9001) < (@@levelsOrder.index(level) || 9000)
+            end
 
             def self.getHighestLevel (user)
                 if user.modes[:q]
@@ -777,23 +793,29 @@ class Base < Module
                         end
                     elsif thing.is_a?(IRC::Client)
                     end
-
-                    if from.is_a?(IRC::Client) || from.is_a?(IRC::User)
-                        from = from.mask
-                    end
-
-                    if !noAnswer && (!outputModes.empty? || !outputValues.empty?)
-                        thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{type}#{outputModes.join('')} #{outputValues.join(' ')}"
-                    end
                 }
+
+                if from.is_a?(IRC::Client) || from.is_a?(IRC::User)
+                    from = from.mask
+                end
+
+                if !noAnswer && (!outputModes.empty? || !outputValues.empty?)
+                    output = "#{type}#{outputModes.join('')}"
+                    
+                    if !outputValues.empty?
+                        output << " #{outputValues.join(' ')}"
+                    end
+
+                    thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{output}"
+                end
             end
         end
 
-        def self.dispatchMessage (from, to, message)
+        def self.dispatchMessage (from, to, message, level=nil)
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-                from.server.dispatcher.execute(:ctcp, from, to, match[1], match[2] ? match[3] : nil)
+                from.server.dispatcher.execute(:ctcp, from, to, match[1], match[2] ? match[3] : nil, level)
             else
-                from.server.dispatcher.execute(:message, from, to, message)
+                from.server.dispatcher.execute(:message, from, to, message, level)
             end
         end
 
@@ -1473,6 +1495,27 @@ class Base < Module
         thing.send :raw, 'PHONE'
     end
 
+    def ison (thing, string)
+        match = /ISON\s+(.+)$/i
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'ISON'
+            return
+        end
+
+        result = String.new
+
+        match.split(/\s+/).each {|nick|
+            if server.clients[nick]
+                result << " #{nick}"
+            end
+        }
+
+        result = result[1, result.length]
+
+        thing.send :numeric, RPL_ISON, result
+    end
+
     def privmsg (thing, string)
         match = string.match(/PRIVMSG\s+(.*?)(\s+:(.*))?$/i)
 
@@ -1483,55 +1526,63 @@ class Base < Module
 
         if !match[3]
             thing.send :numeric, ERR_NOTEXTTOSEND
-        else
-            receiver = match[1]
-            message  = match[3]
+            return
+        end
 
-            if Utils::Channel::isValid(receiver)
-                channel = thing.channels[receiver] || server.channels[receiver]
+        receiver = match[1]
+        message  = match[3]
 
-                if channel
-                    user = channel.user(thing)
-
-                    if channel.modes[:moderated] && !Utils::checkFlag(user, :can_talk)
-                        thing.send :numeric, ERR_YOUNEEDVOICE, channel.name
-                        return
-                    end
-
-                    if Utils::Channel::banned?(channel, thing)
-                        thing.send :numeric, ERR_YOUAREBANNED, channel.name
-                        return
-                    end
-
-                    if user
-                        Utils::dispatchMessage(thing, channel, message)
-                    else
-                        if server.channels[receiver].modes[:no_external_messages]
-                            thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
-                        else
-                            Utils::dispatchMessage(thing, channel, message)
-                        end
-                    end
-                else
-                    thing.send :numeric, ERR_NOSUCHNICK, receiver
-                end
+        if Utils::Channel::isValid(receiver) || Utils::Channel::isValid(receiver[1, receiver.length])
+            if Utils::User::isLevel(level = receiver[0, 1])
+                receiver = receiver[1, receiver.length]
             else
-                client = server.clients[receiver]
+                level = nil
+            end
 
-                if !client
-                    thing.send :numeric, ERR_NOSUCHNICK, receiver
+            channel = server.channels[receiver]
+
+            if !channel
+                thing.send :numeric, ERR_NOSUCHNICK, receiver
+                return
+            end
+
+            thing = channel.user(thing) || thing
+
+            if channel.modes[:moderated] && !Utils::checkFlag(thing, :can_talk)
+                thing.send :numeric, ERR_YOUNEEDVOICE, channel.name
+                return
+            end
+
+            if Utils::Channel::banned?(channel, thing)
+                thing.send :numeric, ERR_YOUAREBANNED, channel.name
+                return
+            end
+
+            if thing.is_a?(IRC::User)
+                Utils::dispatchMessage(thing, channel, message, level)
+            else
+                if server.channels[receiver].modes[:no_external_messages]
+                    thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
                 else
-                    Utils::dispatchMessage(thing, client, message)
+                    Utils::dispatchMessage(thing, channel, message, level)
                 end
+            end
+        else
+            client = server.clients[receiver]
+
+            if !client
+                thing.send :numeric, ERR_NOSUCHNICK, receiver
+            else
+                Utils::dispatchMessage(thing, client, message)
             end
         end
     end
 
-    def send_message (from, to, message)
+    def send_message (from, to, message, level)
         if to.is_a?(Channel)
             to.users.each_value {|user|
-                if user.mask != from.mask
-                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :#{message}"
+                if user.mask != from.mask && Utils::User::isLevelEnough(user, level)
+                    user.send :raw, ":#{from.mask} PRIVMSG #{level}#{to.name} :#{message}"
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
@@ -1539,7 +1590,7 @@ class Base < Module
         end
     end
 
-    def send_ctcp (from, to, type, message)
+    def send_ctcp (from, to, type, message, level)
         if message
             text = "#{type} #{message}"
         else
@@ -1548,8 +1599,8 @@ class Base < Module
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
-                if user.mask != from.mask
-                    user.send :raw, ":#{from.mask} PRIVMSG #{to.name} :\x01#{text}\x01"
+                if user.mask != from.mask && Utils::User::isLevelEnough(user, level)
+                    user.send :raw, ":#{from.mask} PRIVMSG #{level}#{to.name} :\x01#{text}\x01"
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
@@ -1561,34 +1612,46 @@ class Base < Module
     def notice (thing, string)
         match = string.match(/NOTICE\s+(.*?)\s+:(.*)$/i)
 
-        if match
-            name    = match[1]
-            message = match[2]
+        if !match
+            return
+        end
 
-            if client =server.clients[name]
-                server.dispatcher.execute(:notice, thing, client, message)
-            elsif channel = server.channels[name]
-                if !channel.modes[:no_external_messages] || channel.user(thing)
-                    server.dispatcher.execute(:notice, thing, channel, message)
-                end
+        name    = match[1]
+        message = match[2]
+
+        if client = server.clients[name]
+            server.dispatcher.execute(:notice, thing, client, message)
+        else
+            if Utils::User::isLevel(level = name[0, 1])
+                channel = name[1, name.length]
             else
+                channel = name
+                level   = nil
+            end
+
+            if !server.channels[channel]
                 # unrealircd sends an error if it can't find nick/channel, what should I do?
+                return
+            end
+
+            if !channel.modes[:no_external_messages] || channel.user(thing)
+                server.dispatcher.execute(:notice, thing, channel, message, level)
             end
         end
     end
 
-    def send_notice (sender, receiver, message)
-        if sender.is_a?(User)
-            sender = sender.client
-        end
+    def send_notice (from, to, message, level=nil)
+        from = from.client
 
-        if receiver.is_a?(Channel)
-            name = receiver.name
-        elsif receiver.is_a?(Client) || receiver.is_a?(User)
-            name = receiver.nick
+        if to.is_a?(Channel)
+            to.users.each_value {|user|
+                if Utils::User::isLevelEnough(user, level)
+                    user.send :raw, ":#{from.mask} NOTICE #{level}#{to.name} :#{message}"
+                end
+            }
+        elsif to.is_a?(Client) || to.is_a?(User)
+            to.send :raw, ":#{from.mask} NOTICE #{to.nick} :#{message}"
         end
-
-        receiver.send :raw, ":#{sender} NOTICE #{name} :#{message}"
     end
 
     def send_error (thing, message, type=nil)

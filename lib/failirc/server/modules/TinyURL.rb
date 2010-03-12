@@ -45,7 +45,7 @@ class TinyURL < Module
         end
     end
 
-    def tinyurl (sender, receiver, message)
+    def tinyurl (from, to, message, level)
         URI.extract(message).each {|uri|
             if uri.length > @length
                 tiny = tinyurlify(uri) rescue nil

@@ -34,7 +34,7 @@ class Netlog < Module
         super(server)
     end
 
-    def netlog (sender, receiver, message)
+    def netlog (from, to, message, level)
         URI.extract(message).each {|uri|
             match = uri.match('http://(beta\.)?(\w+?)\.netlog.com.*?photo.*?(\d+)');
 

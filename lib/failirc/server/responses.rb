@@ -37,7 +37,7 @@ RPL_USERHOST = {
 # Reply format used by ISON to list replies to the query list.
 RPL_ISON = {
     :code => 303,
-    :text => '":#{(result) ? result.nick : ''}"'
+    :text => '":#{result}"'
 }
 
 RPL_AWWAY = {

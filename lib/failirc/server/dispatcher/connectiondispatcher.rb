@@ -102,9 +102,8 @@ class ConnectionDispatcher
         attr_reader :server
 
         def initialize (server)
-            @server   = server
-            @data     = ThreadSafeHash.new
-            @handling = ThreadSafeHash.new
+            @server = server
+            @data   = ThreadSafeHash.new
         end
 
         def push (socket, string)
@@ -121,12 +120,8 @@ class ConnectionDispatcher
             end
 
             if (string && !string.empty?) || @data[socket].first == :EOC
-                result = @data[socket].push(string)
-
-                @handling[socket] = true
+                @data[socket].push(string)
             end
-
-            return result
         end
 
         def pop (socket)
@@ -138,13 +133,7 @@ class ConnectionDispatcher
                 @data[socket] = []
             end
 
-            result = @data[socket].shift
-
-            if @data[socket].empty?
-                @handling.delete(socket)
-            end
-
-            return result
+            @data[socket].shift
         end
 
         def delete (socket)
@@ -152,9 +141,7 @@ class ConnectionDispatcher
                 socket = socket.socket
             end
 
-            @handling.delete(socket)
-
-            return @data.delete(socket)
+            @data.delete(socket)
         end
 
         def first (socket)
@@ -181,7 +168,7 @@ class ConnectionDispatcher
                     return true
                 end
             else
-                return @handling.empty?
+                return @data.empty?
             end
         end
 
@@ -406,6 +393,8 @@ class ConnectionDispatcher
                             
                                 @output.delete(socket)
                                 connections.delete(thing.socket)
+
+                                self.debug "#{thing.mask[thing.ip]} disconnected."
         
                                 socket.close
                             else
