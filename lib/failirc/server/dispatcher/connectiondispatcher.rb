@@ -121,10 +121,12 @@ class ConnectionDispatcher
             end
 
             if (string && !string.empty?) || @data[socket].first == :EOC
-                @data[socket].push(string)
+                result = @data[socket].push(string)
+
+                @handling[socket] = true
             end
 
-            @handling[socket] = true
+            return result
         end
 
         def pop (socket)
@@ -141,6 +143,8 @@ class ConnectionDispatcher
             if @data[socket].empty?
                 @handling.delete(socket)
             end
+
+            return result
         end
 
         def delete (socket)
