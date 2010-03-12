@@ -111,10 +111,6 @@ class ConnectionDispatcher
                 socket = socket.socket
             end
 
-            if !server.dispatcher.connections.things.has_key?(socket)
-                raise NameError.new 'The passed socket could not be found.'
-            end
-
             if !@data.has_key?(socket)
                 @data[socket] = []
             end
@@ -133,10 +129,6 @@ class ConnectionDispatcher
                 socket = socket.socket
             end
 
-            if !server.dispatcher.connections.things.has_key?(socket)
-                raise NameError.new 'The passed socket could not be found.'
-            end
-
             if !@data.has_key?(socket)
                 @data[socket] = []
             end
@@ -149,20 +141,12 @@ class ConnectionDispatcher
                 socket = socket.socket
             end
 
-            if !server.dispatcher.connections.things.has_key?(socket)
-                raise NameError.new 'The passed socket could not be found.'
-            end
-
             return @data.delete(socket)
         end
 
         def first (socket)
             if socket.is_a?(Client) || socket.is_a?(User)
                 socket = socket.socket
-            end
-
-            if !server.dispatcher.connections.things.has_key?(socket)
-                raise NameError.new 'The passed socket could not be found.'
             end
 
             if !@data.has_key?(socket)
@@ -184,7 +168,13 @@ class ConnectionDispatcher
                     return true
                 end
             else
-                return @data.empty?
+                @data.each_value {|queue|
+                    if !queue.empty?
+                        return false
+                    end
+                }
+
+                return true
             end
         end
 
