@@ -98,23 +98,98 @@ class ConnectionDispatcher
         end
     end
 
-    class Data < ThreadSafeHash
+    class Data
         attr_reader :server
 
         def initialize (server)
-            @server   = server
-
-            super()
+            @server = server
+            @data   = ThreadSafeHash.new
         end
 
-        alias __get []
-
-        def [] (socket)
-            if !__get(socket)
-                self[socket] = []
+        def push (socket, string)
+            if socket.is_a?(Client) || socket.is_a?(User)
+                socket = socket.socket
             end
 
-            return __get(socket)
+            if !server.dispatcher.connections.things.has_key?(socket)
+                raise NameError.new 'The passed socket could not be found.'
+            end
+
+            if !@data.has_key?(socket)
+                @data[socket] = []
+            end
+
+            if string.is_a?(String)
+                string.lstrip!
+            end
+
+            if (string && !string.empty?) || @data[socket].first == :EOC
+                @data[socket].push(string)
+            end
+        end
+
+        def pop (socket)
+            if socket.is_a?(Client) || socket.is_a?(User)
+                socket = socket.socket
+            end
+
+            if !server.dispatcher.connections.things.has_key?(socket)
+                raise NameError.new 'The passed socket could not be found.'
+            end
+
+            if !@data.has_key?(socket)
+                @data[socket] = []
+            end
+
+            return @data[socket].shift
+        end
+
+        def delete (socket)
+            if socket.is_a?(Client) || socket.is_a?(User)
+                socket = socket.socket
+            end
+
+            if !server.dispatcher.connections.things.has_key?(socket)
+                raise NameError.new 'The passed socket could not be found.'
+            end
+
+            return @data.delete(socket)
+        end
+
+        def first (socket)
+            if socket.is_a?(Client) || socket.is_a?(User)
+                socket = socket.socket
+            end
+
+            if !server.dispatcher.connections.things.has_key?(socket)
+                raise NameError.new 'The passed socket could not be found.'
+            end
+
+            if !@data.has_key?(socket)
+                @data[socket] = []
+            end
+           
+            return @data[socket].first
+        end
+
+        def empty? (socket=nil)
+            if socket.is_a?(Client) || socket.is_a?(User)
+                socket = socket.socket
+            end
+
+            if socket
+                if @data.has_key?(socket)
+                   return @data[socket].empty?
+                else
+                    return true
+                end
+            else
+                return @data.empty?
+            end
+        end
+
+        def each (&block)
+            @data.each_key &block
         end
     end
 
@@ -255,22 +330,18 @@ class ConnectionDispatcher
                         end
 
                         input.split(/[\r\n]+/).each {|string|
-                            string.lstrip!
-
-                            if !string.empty?
-                                @input[socket].push(string)
-                            end
+                            @input.push(socket, string)
                         }
                     rescue IOError
-                        server.kill thing, 'Input/output error.'
+                        server.kill thing, 'Input/output error'
                     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill thing, 'Client exited.'
+                        server.kill thing, 'Client exited'
                     rescue Errno::ECONNRESET
-                        server.kill thing, 'Connection reset by peer.'
+                        server.kill thing, 'Connection reset by peer'
                     rescue Errno::ETIMEDOUT
-                        server.kill thing, 'Ping timeout.'
+                        server.kill thing, 'Ping timeout'
                     rescue Errno::EHOSTUNREACH
-                        server.kill thing, 'No route to host.'
+                        server.kill thing, 'No route to host'
                     rescue Errno::EAGAIN
                     rescue Exception => e
                         self.debug e
@@ -283,14 +354,14 @@ class ConnectionDispatcher
     end
 
     def handle
-        @input.each {|socket, queue|
-            if dispatcher.event.handling[socket] || queue.empty?
+        @input.each {|socket|
+            if dispatcher.event.handling[socket] || @input.empty?(socket)
                 next
             end
 
             Thread.new {
                 begin
-                    string = queue.shift
+                    string = @input.pop(socket)
 
                     if string
                         dispatcher.dispatch(:input, @connections.things[socket], string)
@@ -302,9 +373,9 @@ class ConnectionDispatcher
         }
     end
 
-    def write (timeout=0.1)
+    def write (timeout=0)
         begin
-            none, writing = IO::select nil, @connections.sockets.map {|item| if !@output[item].empty? then item end}.compact, nil, timeout
+            none, writing = IO::select nil, @connections.sockets.map {|item| if !@output.empty?(item) then item end}.compact, nil, timeout
 
             if writing
                 writing.each {|socket|
@@ -315,25 +386,49 @@ class ConnectionDispatcher
                     end
 
                     begin
-                        while !@output[socket].empty?
-                            output = @output[socket].first
+                        while !@output.empty?(socket)
+                            output = @output.first(socket)
 
-                            if thing.modes[:encoding]
-                                output.encode!(thing.modes[:encoding])
+                            if output == :EOC
+                                @output.pop(socket)
+                                message = @output.pop(socket)
+
+                                @dispatcher.execute(:kill, thing, message)
+        
+                                if thing.is_a?(Client)
+                                    thing.modes[:quitting] = true
+        
+                                    if thing.modes[:registered]
+                                        thing.channels.each_value {|channel|
+                                            channel.users.delete(thing.nick)
+                                        }
+                                    end
+                                elsif thing.is_a?(Link)
+                                    # wat
+                                end
+                            
+                                @output.delete(socket)
+                                connections.delete(thing.socket)
+        
+                                socket.close
+                            else
+                                if thing.modes[:encoding]
+                                    output.encode!(thing.modes[:encoding])
+                                end
+
+                                socket.write_nonblock "#{output}\r\n"
+
+                                @output.pop(socket)
                             end
-
-                            socket.write_nonblock "#{output}\r\n"
-
-                            @output[socket].shift
                         end
                     rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill thing, 'Client exited.'
+                        server.kill thing, 'Client exited'
                     rescue Errno::ECONNRESET
-                        server.kill thing, 'Connection reset by peer.'
+                        server.kill thing, 'Connection reset by peer'
                     rescue Errno::ETIMEDOUT
-                        server.kill thing, 'Ping timeout.'
+                        server.kill thing, 'Ping timeout'
                     rescue Errno::EHOSTUNREACH
-                        server.kill thing, 'No route to host.'
+                        server.kill thing, 'No route to host'
                     rescue Errno::EAGAIN, IO::WaitWritable
                     rescue Exception => e
                         self.debug e

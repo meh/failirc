@@ -123,7 +123,7 @@ class Base < Module
             :custom => {
                 :client_nick_change => self.method(:client_nick_change),
 
-                :kill => self.method(:send_quit),
+                :kill => self.method(:client_quit),
 
                 :join => self.method(:user_join),
                 :part => self.method(:user_part),
@@ -182,21 +182,33 @@ class Base < Module
     end
 
     def rehash
+        if tmp = server.config.elements['config/modules/module[@name="Base"]/misc/nickAllowed']
+            @nickAllowed = tmp.text
+        else
+            @nickAllowed = 'nick.match(/^[\w^`-]{1,23}$/)'
+        end
+
         @messages = {}
 
-        if tmp = server.config.elements['config/modules/modules[@name="Base"]/messages/quit']
+        if tmp = server.config.elements['config/modules/module[@name="Base"]/messages/part']
+            @messages[:part] = tmp.text
+        else
+            @messages[:part] = '#{message}'
+        end
+
+        if tmp = server.config.elements['config/modules/module[@name="Base"]/messages/quit']
             @messages[:quit] = tmp.text
         else
             @messages[:quit] = 'Quit: #{message}'
         end
 
-        if tmp = server.config.elements['config/modules/modules[@name="Base"]/messages/kill']
+        if tmp = server.config.elements['config/modules/module[@name="Base"]/messages/kill']
             @messages[:kill] = tmp.text
         else
-            @messages[:kill] = 'Kill: #{message} (#{sender.nick})'
+            @messages[:kill] = 'Kill: #{(message && !message.empty?) ? message : \'No reason\'} (#{sender.nick})'
         end
 
-        if tmp = server.config.elements['config/modules/modules[@name="Base"]/messages/version']
+        if tmp = server.config.elements['config/modules/module[@name="Base"]/messages/version']
             @messages[:version] = tmp.text
         else
             @messages[:version] = 'THE GAME'
@@ -779,10 +791,14 @@ class Base < Module
 
         def self.dispatchMessage (from, to, message)
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-                from.server.dispatcher.execute(:ctcp, from, to, match[1], match[3] || '')
+                from.server.dispatcher.execute(:ctcp, from, to, match[1], match[2] ? match[3] : nil)
             else
                 from.server.dispatcher.execute(:message, from, to, message)
             end
+        end
+
+        def self.escapeMessage (string)
+            string.inspect.gsub(/\\#/, '#').gsub(/\\'/, "'")
         end
     end
 
@@ -998,7 +1014,7 @@ class Base < Module
             return
         end
 
-        nick = match[2]
+        nick = match[2].strip
 
         if server.dispatcher.execute(:client_nick_change, thing, nick) == false
             return
@@ -1047,8 +1063,9 @@ class Base < Module
     end
 
     def client_nick_change (thing, nick)
-        # check if the nickname is valid
-        if nick.match(/^[~&@%+]/) || nick.match(/[\s:,]/)
+        allowed = eval(@nickAllowed) rescue false
+
+        if !allowed
             thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
             return false
         end
@@ -1202,7 +1219,9 @@ class Base < Module
             return false
         end
 
-        user.channel.send :raw, ":#{user.mask} PART #{user.channel} :#{message}"
+        text = eval(Utils::escapeMessage(@messages[:part]))
+
+        user.channel.send :raw, ":#{user.mask} PART #{user.channel} :#{text}"
 
         user.channel.delete(user)
         user.client.channels.delete(user.channel.name)
@@ -1269,7 +1288,7 @@ class Base < Module
             return
         end
 
-        channel = match[1]
+        channel = match[1].strip
 
         if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel]
             thing.send :numeric, ERR_NOTONCHANNEL, server.channels[channel]
@@ -1305,7 +1324,7 @@ class Base < Module
             return
         end
 
-        channel = match[1]
+        channel = match[1].strip
 
         if thing.channels[channel]
             users = String.new
@@ -1334,9 +1353,9 @@ class Base < Module
     end
 
     def list (thing, string)
-        match = string.match(/LIST(\s+(.*))$/)
+        match = string.match(/LIST(\s+(.*))?$/)
 
-        channels = (match[2] || '').split(/,/)
+        channels = (match[2].strip || '').split(/,/)
 
         thing.send :numeric, RPL_LISTSTART
 
@@ -1366,7 +1385,7 @@ class Base < Module
     def who (thing, string)
         match = string.match(/WHO\s+(.*?)(\s+o)?$/i)
 
-        name = match[1] || '*'
+        name = match[1].strip || '*'
 
         if match
             op = match[2]
@@ -1397,8 +1416,8 @@ class Base < Module
             return
         end
 
-        names  = (match[3] || match[1]).split(/,/)
-        server = match[3] ? match[1] : nil
+        names  = (match[3] || match[1]).strip.split(/,/)
+        server = match[3] ? match[1].strip : nil
 
         names.each {|name|
             thing.server.dispatcher.execute(:whois, thing, name)
@@ -1521,7 +1540,7 @@ class Base < Module
     end
 
     def send_ctcp (from, to, type, message)
-        if message && !message.empty?
+        if message
             text = "#{type} #{message}"
         else
             text = type
@@ -1586,7 +1605,7 @@ class Base < Module
     end
 
     def version (thing, string)
-        comments = eval(@messages[:version].inspect.gsub(/\\#/, '#'))
+        comments = eval(Utils::escapeMessage(@messages[:version]))
 
         thing.send :numeric, RPL_VERSION
     end
@@ -1634,7 +1653,7 @@ class Base < Module
 
         nick    = match[1]
         client  = server.clients[nick]
-        message = match[4] || 'No reason'
+        message = match[4]
 
         if !client
             thing.send :numeric, ERR_NOSUCHNICK, nick
@@ -1643,7 +1662,9 @@ class Base < Module
 
         sender = thing
 
-        text = eval(@messages[:kill].inspect.gsub(/\\#/, '#'))
+        text = eval(Utils::escapeMessage(@messages[:kill]))
+
+        client.send :raw, ":#{client.mask} QUIT :#{text}"
 
         server.kill client, text
     end
@@ -1653,12 +1674,12 @@ class Base < Module
 
         user    = thing
         message = match[4] || user.nick
-        text    = eval(@messages[:quit].inspect.gsub(/\\#/, '#'))
+        text    = eval(Utils::escapeMessage(@messages[:quit]))
 
         server.kill(thing, text)
     end
 
-    def send_quit (thing, message)
+    def client_quit (thing, message)
         server.data[:nicks].delete(thing.nick)
 
         thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"

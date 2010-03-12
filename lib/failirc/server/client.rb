@@ -74,13 +74,9 @@ class Client
     end
 
     def raw (text)
-        text = @server.dispatcher.dispatch :output, self, text
+        @server.dispatcher.dispatch :output, self, text
 
-        begin
-            @server.dispatcher.connection.output[@socket].push text
-        rescue IOError, Errno::EPIPE, Errno::EBADFD
-             @server.kill(self, 'Client exited.')
-        end
+        @server.dispatcher.connection.output.push @socket, text
     end
 
     def numeric (response, value=nil)

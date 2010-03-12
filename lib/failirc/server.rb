@@ -168,21 +168,8 @@ class Server
 
         thing.modes[:killing] = true
 
-        @dispatcher.execute(:kill, thing, message)
-
-        if thing.is_a?(Client)
-            thing.modes[:quitting] = true
-
-            if thing.modes[:registered]
-                thing.channels.each_value {|channel|
-                    channel.users.delete(thing.nick)
-                }
-            end
-        elsif thing.is_a?(Link)
-            # wat
-        end
-
-        @dispatcher.connections.delete(thing.socket)
+        @dispatcher.output.push(thing, :EOC)
+        @dispatcher.output.push(thing, message)
     end
 
     # reload the config and modules' configurations

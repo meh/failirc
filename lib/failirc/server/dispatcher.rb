@@ -108,6 +108,14 @@ class Dispatcher
         @connection.connections
     end
 
+    def input
+        @connection.input
+    end
+
+    def output
+        @connection.output
+    end
+
     def alias (*args)
         @event.alias(*args)
     end

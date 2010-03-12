@@ -39,8 +39,8 @@ class Netlog < Module
             match = uri.match('http://(beta\.)?(\w+?)\.netlog.com.*?photo.*?(\d+)');
 
             if match
-                country = match[1]
-                url     = match[2]
+                country = match[2]
+                url     = match[3]
                 code    = "000000000#{url}".match(/(\d{3})(\d{3})\d{3}$/)
 
                 message.gsub!(/#{Regexp.escape(uri)}/, "http://#{country}.netlogstatic.com/p/oo/#{code[1]}/#{code[2]}/#{url}.jpg")
