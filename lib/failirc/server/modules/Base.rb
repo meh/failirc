@@ -1654,7 +1654,7 @@ class Base < Module
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
-                if user != from && Utils::User::isLevelEnough(user, level)
+                if user.client != from && Utils::User::isLevelEnough(user, level)
                     user.send :raw, ":#{from} PRIVMSG #{to.name} :#{if level then "#{level}} " end}#{message}"
                 end
             }
@@ -1724,7 +1724,7 @@ class Base < Module
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
-                if Utils::User::isLevelEnough(user, level)
+                if user.client != from && Utils::User::isLevelEnough(user, level)
                     user.send :raw, ":#{from} NOTICE #{to.name} :#{message}"
                 end
             }
