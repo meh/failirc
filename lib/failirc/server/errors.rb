@@ -166,7 +166,7 @@ ERR_NOTONCHANNEL = {
 # Returned when a client tries to invite a user to a channel they are already on.
 ERR_USERONCHANNEL = {
     :code => 443,
-    :text => '"#{user} #{channel.name} :is already on channel"'
+    :text => '"#{value[:nick]} #{value[:channel]} :is already on channel"'
 }
 
 # Returned by the summon after a SUMMON command for a user was unable to be performed since they were not logged in.

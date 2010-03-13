@@ -394,7 +394,7 @@ class ConnectionDispatcher
                                 @output.delete(socket)
                                 connections.delete(thing.socket)
 
-                                self.debug "#{thing.mask[thing.ip]} disconnected."
+                                self.debug "#{thing.mask}[#{thing.ip}] disconnected."
         
                                 socket.close
                             else

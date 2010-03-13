@@ -81,6 +81,10 @@ class Base < Module
 
         @aliases = {
             :input => {
+                :PASS => /^PASS( |$)/i,
+                :NICK => /^(:[^ ] )?NICK( |$)/i,
+                :USER => /^(:[^ ] )?USER( |$)/i,
+
                 :PING => /^PING( |$)/i,
                 :PONG => /^PONG( |$)/i,
 
@@ -88,13 +92,10 @@ class Base < Module
                 :MODE     => /^MODE( |$)/i,
                 :ENCODING => /^ENCODING( |$)/i,
 
-                :PASS => /^PASS( |$)/i,
-                :NICK => /^(:[^ ] )?NICK( |$)/i,
-                :USER => /^(:[^ ] )?USER( |$)/i,
-
-                :JOIN => /^(:[^ ] )?JOIN( |$)/i,
-                :PART => /^(:[^ ] )?PART( |$)/i,
-                :KICK => /^(:[^ ] )?KICK( |$)/i,
+                :JOIN   => /^(:[^ ] )?JOIN( |$)/i,
+                :PART   => /^(:[^ ] )?PART( |$)/i,
+                :KICK   => /^(:[^ ] )?KICK( |$)/i,
+                :INVITE => /^INVITE( |$)/i,
 
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
                 :NAMES => /^NAMES( |$)/i,
@@ -126,9 +127,10 @@ class Base < Module
 
                 :kill => self.method(:client_quit),
 
-                :join => self.method(:user_join),
-                :part => self.method(:user_part),
-                :kick => self.method(:send_kick),
+                :join   => self.method(:client_join),
+                :part   => self.method(:user_part),
+                :kick   => self.method(:send_kick),
+                :invite => self.method(:client_invite),
 
                 :whois => self.method(:send_whois),
 
@@ -154,9 +156,10 @@ class Base < Module
                 :NICK => self.method(:nick),
                 :USER => self.method(:user),
 
-                :JOIN => self.method(:join),
-                :PART => self.method(:part),
-                :KICK => self.method(:kick),
+                :JOIN   => self.method(:join),
+                :PART   => self.method(:part),
+                :KICK   => self.method(:kick),
+                :INVITE => self.method(:invite),
 
                 :TOPIC => self.method(:topic),
                 :NAMES => self.method(:names),
@@ -276,8 +279,12 @@ class Base < Module
                 string.match(/^[&#+!][^ ,:\a]{0,50}$/) ? true : false
             end
     
-            def self.invited? (channel, client)
-                if !channel.modes[:invite_only]
+            def self.invited? (channel, client, shallow)
+                if shallow && !channel.modes[:invite_only]
+                    return true
+                end
+
+                if channel.modes[:invited].has_value?(client.nick)
                     return true
                 end
 
@@ -444,7 +451,7 @@ class Base < Module
 
             :user => {
                 :a => [:o, :admin],
-                :o => [:h, :operator, :can_change_topic, :can_change_channel_modes, :can_change_user_modes],
+                :o => [:h, :operator, :can_change_topic, :can_invite, :can_change_channel_modes, :can_change_user_modes],
                 :h => [:v, :halfoperator, :can_kick],
                 :v => [:voice, :can_talk],
             },
@@ -859,6 +866,118 @@ class Base < Module
         end
     end
 
+    def pass (thing, string)
+        match = string.match(/PASS\s+(:)?(.+)$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'PASS'
+        else
+            thing.password = match[2]
+
+            if thing.listen.attributes['password']
+                if thing.password != thing.listen.attributes['password']
+                    server.dispatcher.execute(:error, thing, :close, 'Password mismatch')
+                    server.kill thing, 'Password mismatch'
+                    return
+                end
+            end
+
+            # try to register it
+            Utils::registration(thing)
+        end
+    end
+
+    def nick (thing, string)
+        if !thing.is_a?(Client)
+            return
+        end
+
+        match = string.match(/NICK\s+(:)?(.+)$/i)
+
+        # no nickname was passed, so tell the user is a faggot
+        if !match
+            thing.send :numeric, ERR_NONICKNAMEGIVEN
+            return
+        end
+
+        nick = match[2].strip
+
+        if server.dispatcher.execute(:client_nick_change, thing, nick) == false
+            return
+        end
+
+        if !thing.modes[:registered]
+            # if the user hasn't registered yet and the choosen nick is already used,
+            # kill it with fire.
+            if server.clients[nick] || server.data[:nicks][nick]
+                thing.send :numeric, ERR_NICKNAMEINUSE, nick
+                thing.modes[:__warned] = nick
+            else
+                if thing.nick
+                    server.data[:nicks].delete(thing.nick)
+                end
+
+                thing.nick = nick
+
+                # try to register it
+                Utils::registration(thing)
+            end
+        else
+            # if the user has already registered and the choosen nick is already used,
+            # just tell him that he's a faggot.
+            if server.clients[nick] || server.data[:nicks][nick]
+                thing.send :numeric, ERR_NICKNAMEINUSE, nick
+            else
+                server.data[:nicks].delete(nick)
+
+                mask       = thing.mask.clone
+                thing.nick = nick
+
+                server.clients[thing.nick] = server.clients.delete(mask.nick)
+
+                thing.channels.each_value {|channel|
+                    channel.users.add(channel.users.delete(mask.nick))
+                }
+
+                if thing.channels.empty?
+                    thing.send :raw, ":#{mask} NICK :#{nick}"
+                else
+                    thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
+                end
+            end
+        end
+    end
+
+    def client_nick_change (thing, nick)
+        allowed = eval(@nickAllowed) rescue false
+
+        if !allowed
+            thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
+            return false
+        end
+    end
+
+    def user (thing, string)
+        if thing.is_a?(Client)
+            match = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.+)$/i)
+
+            if !match
+                thing.send :numeric, ERR_NEEDMOREPARAMS, 'USER'
+            else
+                thing.user     = match[1]
+                thing.realName = match[2]
+
+                thing.host = thing.socket.peeraddr[2]
+                thing.ip   = thing.socket.peeraddr[3]
+
+                # try to register it
+                Utils::registration(thing)
+            end
+        elsif thing.is_a?(Link)
+
+        end
+    end
+
     def ping (thing, string)
         match = string.match(/PING\s+(.*)$/i)
 
@@ -1002,118 +1121,6 @@ class Base < Module
         end
     end
 
-    def pass (thing, string)
-        match = string.match(/PASS\s+(:)?(.+)$/i)
-
-        if !match
-            thing.send :numeric, ERR_NEEDMOREPARAMS, 'PASS'
-        else
-            thing.password = match[2]
-
-            if thing.listen.attributes['password']
-                if thing.password != thing.listen.attributes['password']
-                    server.dispatcher.execute(:error, thing, :close, 'Password mismatch')
-                    server.kill thing, 'Password mismatch'
-                    return
-                end
-            end
-
-            # try to register it
-            Utils::registration(thing)
-        end
-    end
-
-    def nick (thing, string)
-        if !thing.is_a?(Client)
-            return
-        end
-
-        match = string.match(/NICK\s+(:)?(.+)$/i)
-
-        # no nickname was passed, so tell the user is a faggot
-        if !match
-            thing.send :numeric, ERR_NONICKNAMEGIVEN
-            return
-        end
-
-        nick = match[2].strip
-
-        if server.dispatcher.execute(:client_nick_change, thing, nick) == false
-            return
-        end
-
-        if !thing.modes[:registered]
-            # if the user hasn't registered yet and the choosen nick is already used,
-            # kill it with fire.
-            if server.clients[nick] || server.data[:nicks][nick]
-                thing.send :numeric, ERR_NICKNAMEINUSE, nick
-                thing.modes[:__warned] = nick
-            else
-                if thing.nick
-                    server.data[:nicks].delete(thing.nick)
-                end
-
-                thing.nick = nick
-
-                # try to register it
-                Utils::registration(thing)
-            end
-        else
-            # if the user has already registered and the choosen nick is already used,
-            # just tell him that he's a faggot.
-            if server.clients[nick] || server.data[:nicks][nick]
-                thing.send :numeric, ERR_NICKNAMEINUSE, nick
-            else
-                server.data[:nicks].delete(nick)
-
-                mask       = thing.mask.clone
-                thing.nick = nick
-
-                server.clients[thing.nick] = server.clients.delete(mask.nick)
-
-                thing.channels.each_value {|channel|
-                    channel.users.add(channel.users.delete(mask.nick))
-                }
-
-                if thing.channels.empty?
-                    thing.send :raw, ":#{mask} NICK :#{nick}"
-                else
-                    thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
-                end
-            end
-        end
-    end
-
-    def client_nick_change (thing, nick)
-        allowed = eval(@nickAllowed) rescue false
-
-        if !allowed
-            thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
-            return false
-        end
-    end
-
-    def user (thing, string)
-        if thing.is_a?(Client)
-            match = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.+)$/i)
-
-            if !match
-                thing.send :numeric, ERR_NEEDMOREPARAMS, 'USER'
-            else
-                thing.user     = match[1]
-                thing.realName = match[2]
-
-                thing.host = thing.socket.peeraddr[2]
-                thing.ip   = thing.socket.peeraddr[3]
-
-                # try to register it
-                Utils::registration(thing)
-            end
-        elsif thing.is_a?(Link)
-
-        end
-    end
-
     def join (thing, string)
         match = string.match(/JOIN\s+(.+?)(\s+(.+))?$/i)
 
@@ -1152,6 +1159,7 @@ class Base < Module
                 channel.modes[:type]    = channel.name[0, 1]
                 channel.modes[:bans]    = []
                 channel.modes[:invites] = []
+                channel.modes[:invited] = ThreadSafeHash.new
             else
                 channel = server.channels[channel]
             end
@@ -1172,33 +1180,32 @@ class Base < Module
                 return 
             end
 
-            if channel.modes[:invite_only] && !Utils::Channel::invited?(channel, thing)
+            if channel.modes[:invite_only] && !Utils::Channel::invited?(channel, thing, true)
                 thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
                 return
             end
 
-            if Utils::Channel::banned?(channel, thing)
+            if Utils::Channel::banned?(channel, thing) && !Utils::Channel::invited?(channel, thing)
                 thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
                 return
             end
 
-            empty = channel.empty?
-            user  = channel.add(thing)
-
-            if empty
-                Utils::setMode @server, channel, "+o #{user.nick}", true
-            end
-
-            thing.channels.add(channel)
-
-            if server.dispatcher.execute(:join, user) == false
-                user.channel.delete(user)
-                thing.channels.delete(channel)
-            end
+            server.dispatcher.execute(:join, thing, channel)
         }
     end
 
-    def user_join (user)
+    def client_join (client, channel)
+        empty = channel.empty?
+        user  = channel.add(client)
+
+        if empty
+            Utils::setMode server, channel, "+o #{user.nick}", true
+        else
+            channel.modes[:invited].delete(client.nick)
+        end
+
+        user.client.channels.add(channel)
+
         user.channel.send :raw, ":#{user.mask} JOIN :#{user.channel}"
 
         if !user.channel.topic.nil?
@@ -1300,6 +1307,68 @@ class Base < Module
 
         kicked.channel.delete(kicked)
         kicked.client.channels.delete(kicked.channel)
+    end
+
+    def invite (thing, string)
+        match = string.match(/INVITE\s+(.+?)\s+(.+?)$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'INVITE'
+            return
+        end
+
+        nick    = match[1].strip
+        channel = match[2].strip
+
+        if !server.clients[nick]
+            thing.send :numeric, ERR_NOSUCHNICK, nick
+            return
+        end
+
+        if server.channels[channel]
+            requesting = server.channels[channel].user(thing) || thing
+
+            if !Utils::checkFlag(requesting, :can_invite) && !thing.channels[channel]
+                thing.send :numeric, ERR_NOTONCHANNEL, channel
+                return
+            end
+
+            if !Utils::checkFlag(requesting, :can_invite)
+                thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
+                return
+            end
+
+            if server.channels[channel].users[nick]
+                thing.send :numeric, ERR_USERONCHANNEL, {
+                    :nick    => nick,
+                    :channel => channel,
+                }
+
+                return
+            end
+        end
+
+        client = server.clients[nick]
+
+        if client.modes[:away]
+            thing.send :numeric, RPL_AWAY, client
+        end
+
+        server.dispatcher.execute :invite, thing, client, channel
+    end
+
+    def client_invite (from, to, channel)
+        from.send :numeric, RPL_INVITING, {
+            :nick    => to.nick,
+            :channel => channel,
+        }
+
+        if server.channels[channel]
+            server.channels[channel].modes[:invited][to.nick] = true
+            server.dispatcher.execute :notice, server, server.channels[channel], "#{from.nick} invited #{to.nick} into the channel.", '@'
+        end
+
+        to.send :raw, ":#{from.mask} INVITE #{to.nick} :#{channel}"
     end
 
     def topic (thing, string)
@@ -1579,18 +1648,26 @@ class Base < Module
     end
 
     def send_message (from, to, message, level)
+        if from.is_a?(IRC::User)
+            from = from.client
+        end
+
         if to.is_a?(Channel)
             to.users.each_value {|user|
-                if user.mask != from.mask && Utils::User::isLevelEnough(user, level)
-                    user.send :raw, ":#{from.mask} PRIVMSG #{level}#{to.name} :#{message}"
+                if user != from && Utils::User::isLevelEnough(user, level)
+                    user.send :raw, ":#{from} PRIVMSG #{to.name} :#{if level then "#{level}} " end}#{message}"
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :#{message}"
+            to.send :raw, ":#{from} PRIVMSG #{to.nick} :#{message}"
         end
     end
 
     def send_ctcp (from, to, type, message, level)
+        if from.is_a?(IRC::User)
+            from = from.client
+        end
+
         if message
             text = "#{type} #{message}"
         else
@@ -1599,12 +1676,12 @@ class Base < Module
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
-                if user.mask != from.mask && Utils::User::isLevelEnough(user, level)
-                    user.send :raw, ":#{from.mask} PRIVMSG #{level}#{to.name} :\x01#{text}\x01"
+                if user.client != from && Utils::User::isLevelEnough(user, level)
+                    user.send :raw, ":#{from} PRIVMSG #{to.name} :\x01#{text}\x01"
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from.mask} PRIVMSG #{to.nick} :\x01#{text}\x01"
+            to.send :raw, ":#{from} PRIVMSG #{to.nick} :\x01#{text}\x01"
         end
 
     end
@@ -1641,16 +1718,18 @@ class Base < Module
     end
 
     def send_notice (from, to, message, level=nil)
-        from = from.client
+        if from.is_a?(IRC::User)
+            from = from.client
+        end
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if Utils::User::isLevelEnough(user, level)
-                    user.send :raw, ":#{from.mask} NOTICE #{level}#{to.name} :#{message}"
+                    user.send :raw, ":#{from} NOTICE #{to.name} :#{message}"
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from.mask} NOTICE #{to.nick} :#{message}"
+            to.send :raw, ":#{from} NOTICE #{to.nick} :#{message}"
         end
     end
 

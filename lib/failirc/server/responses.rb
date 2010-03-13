@@ -40,7 +40,7 @@ RPL_ISON = {
     :text => '":#{result}"'
 }
 
-RPL_AWWAY = {
+RPL_AWAY = {
     :code => 301,
     :text => '"#{value.nick} :#{value.modes[:away]}"'
 }
@@ -144,7 +144,7 @@ RPL_TOPIC = {
 # Returned by the server to indicate that the attempted INVITE message was successful and is being passed onto the end client.
 RPL_INVITING = {
     :code => 341,
-    :text => '"#{target.channel} #{target.nick}"'
+    :text => '"#{value[:nick]} #{value[:channel]}"'
 }
 
 # Returned by a server answering a SUMMON message to indicate that it is summoning that user.
