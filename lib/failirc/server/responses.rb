@@ -334,7 +334,12 @@ RPL_SERVCREATEDON = {
 
 RPL_SERVINFO = {
     :code => 4,
-    :text => '"#{server.host} failirc-#{server.version} #{server.comments}"'
+    :text => '"#{server.host} failirc-#{server.version} #{value[:user]} #{value[:channel]}"'
+}
+
+RPL_SERVSUPPORTED = {
+    :code => 5,
+    :text => '"#{value} :are supported by this server"'
 }
 
 RPL_CHANCREATEDON = {

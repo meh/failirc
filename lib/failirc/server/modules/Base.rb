@@ -36,8 +36,23 @@ class Base < Module
 
     @@version = '0.0.1'
 
+    @@modes = {
+        :user    => [],
+        :channel => [],
+    }
+
+    @@support = {}
+
     def self.version
-        return @@version
+        @@version
+    end
+
+    def self.modes
+        @@modes
+    end
+
+    def self.support
+        @@support
     end
 
     def description
@@ -46,6 +61,14 @@ class Base < Module
 
     def initialize (server)
         server.data[:nicks] = {}
+
+        @@modes[:user].insert(-1, *('vhoaq'.split(//)))
+        @@modes[:channel].insert(-1, *('mnisz'.split(//)))
+
+        @@support.merge!({
+            'CHANTYPES' => '&#+!',
+            'PREFIX'    => '(qaohv)~&@%+',
+        })
 
         @pingedOut = ThreadSafeHash.new
         @toPing    = ThreadSafeHash.new
@@ -398,7 +421,20 @@ class Base < Module
                     thing.send :numeric, RPL_WELCOME, thing
                     thing.send :numeric, RPL_HOSTEDBY, thing
                     thing.send :numeric, RPL_SERVCREATEDON
-                    thing.send :numeric, RPL_SERVINFO
+                    thing.send :numeric, RPL_SERVINFO, {
+                        :user    => Base.modes[:user].join(''),
+                        :channel => Base.modes[:channel].join(''),
+                    }
+
+                    supported = String.new
+
+                    Base.support.each {|key, value|
+                        supported << " #{key}=#{value}"
+                    }
+
+                    supported = supported[1, supported.length]
+
+                    thing.send :numeric, RPL_SERVSUPPORTED, supported
     
                     motd(thing)
                 end
@@ -1295,7 +1331,7 @@ class Base < Module
             thing = thing.channels[channel.name].user(thing)
         end
 
-        if thing.modes[:can_kick]
+        if Utils::checkFlag(thing, :can_kick)
             server.dispatcher.execute(:kick, thing, user, message)
         else
             thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
@@ -1763,8 +1799,14 @@ class Base < Module
         password = match[3] || match[1]
         name     = (match[3]) ? match[1] : nil
 
+        mask = thing.mask.clone
+
+        if name
+            mask.nick = name
+        end
+
         server.config.elements['config/operators'].elements.each('operator') {|element|
-            if thing.mask.match(element.attributes['mask']) && password == element.attributes['password']
+            if mask.match(element.attributes['mask']) && password == element.attributes['password']
                 element.attributes['flags'].split(/,/).each {|flag|
                     Utils::setFlags(thing, flag.to_sym, true)
                 }
