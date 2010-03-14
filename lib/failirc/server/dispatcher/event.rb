@@ -34,7 +34,7 @@ class Event
         end
     end
 
-    attr_reader :type, :chain, :alias, :dispatcher, :thing, :string
+    attr_reader :types, :chain, :aliases, :dispatcher, :thing, :string
     attr_accessor :special
 
     def initialize (dispatcher, chain, thing, string)
@@ -42,9 +42,9 @@ class Event
         @chain      = chain
         @thing      = thing
         @string     = string
-        @type       = Event.type(dispatcher, chain, string)
-        @alias      = Event.alias(dispatcher, chain, type)
-        @callbacks  = Event.callbacks(dispatcher, chain, type)
+        @types      = Event.types(dispatcher, chain, string)
+        @aliases    = Event.aliases(dispatcher, chain, types)
+        @callbacks  = Event.callbacks(dispatcher, chain, types)
     end
 
     def callbacks
@@ -61,40 +61,42 @@ class Event
         end
     end
 
-    def same? (string)
-        if @type.class != Regexp
-            raise '@type is not a Regexp.'
-        end
+    def self.types (dispatcher, chain, string)
+        types = []
 
-        return (@type.match(string)) ? true : false
-    end
-
-    def self.type (dispatcher, chain, string)
         dispatcher.events[chain].each_key {|key|
             if key.class == Regexp && key.match(string)
-                return key
+                types.push key
             end
         }
 
-        return nil
+        return types
     end
 
-    def self.alias (dispatcher, chain, type)
+    def self.aliases (dispatcher, chain, types)
+        aliases = []
+
         dispatcher.aliases[chain].each {|key, value|
-            if type == value
-                return key
+            if types.include?(value)
+                aliases.push key
             end
         }
 
-        return nil
+        return aliases
     end
 
-    def self.callbacks (dispatcher, chain, type)
+    def self.callbacks (dispatcher, chain, types)
+        callbacks = []
+
         if chain == :pre || chain == :post || chain == :default
-            return dispatcher.events[chain]
+            callbacks.insert(-1, *dispatcher.events[chain])
         else
-            return dispatcher.events[chain][type]
+            types.each {|type|
+                callbacks.insert(-1, *dispatcher.events[chain][type])
+            }
         end
+
+        return callbacks
     end
 end
 

@@ -69,7 +69,7 @@ class Client
         begin
             self.method(symbol).call(*args)
         rescue Exception => e
-            self.debug(e)
+            self.debug e
         end
     end
 

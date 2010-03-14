@@ -104,12 +104,12 @@ class Server
 
             if klass
                 @modules[name] = klass.new(self)
-                self.debug "Loaded `#{name}`.", nil
+                self.debug "Loaded `#{name}`."
             else
-                self.debug "Failed to load `#{name}`.", nil
+                self.debug "Failed to load `#{name}`."
             end
         rescue Exception => e
-            self.debug(e)
+            self.debug e
         end
     end
 
@@ -157,7 +157,7 @@ class Server
     end
 
     # kill connection with harpoons on fire
-    def kill (thing, message=nil)
+    def kill (thing, message=nil, force=false)
         if !thing || thing.modes[:killing] || !@dispatcher.connections.exists?(thing.socket)
             return
         end
@@ -167,6 +167,10 @@ class Server
         end
 
         thing.modes[:killing] = true
+
+        if force
+            @dispatcher.output.clear(thing)
+        end
 
         @dispatcher.output.push(thing, :EOC)
         @dispatcher.output.push(thing, message)
@@ -230,7 +234,7 @@ class Server
             mod.rehash
         }
 
-        self.debug 'Loading modules.', nil
+        self.debug 'Loading modules.'
 
         @config.elements.each('config/modules/module') {|element|
             if !element.attributes['path']
@@ -242,7 +246,7 @@ class Server
             end
         }
 
-        self.debug 'Finished loading modules.'
+        self.debug 'Finished loading modules.', "\n"
     end
 
     alias to_s host

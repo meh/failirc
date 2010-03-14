@@ -23,7 +23,7 @@ module IRC
 
 module Utils
 
-def debug (argument, separator="\n")
+def debug (argument, separator='')
     output = ''
 
     if argument.is_a?(Exception)
@@ -31,7 +31,7 @@ def debug (argument, separator="\n")
         output << argument.backtrace.collect {|stack|
             "#{self.class}: #{stack}"
         }.join("\n")
-        output << "\n"
+        output << "\n\n"
     elsif argument.is_a?(String)
         output << "#{self.class}: #{argument}\n"
     else

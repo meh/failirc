@@ -37,6 +37,50 @@ class Base < Module
     @@version = '0.0.1'
 
     @@modes = {
+        :groups => {
+            :can_change_channel_modes => [
+                :can_change_channel_extended_modes, :can_change_topic_mode,
+                :can_change_no_external_messages_mode, :can_change_secret_mode,
+                :can_change_ssl_mode, :can_change_moderated_mode,
+                :can_change_invite_only_mode, :can_change_auditorium_mode
+            ],
+
+            :can_change_user_modes => [
+                :can_give_channel_operator, :can_give_channel_half_operator,
+                :can_give_voice, :can_change_user_extended_modes
+            ],
+
+            :can_change_client_modes => [
+                :can_change_client_extended_modes
+            ],
+        },
+
+        :channel => {
+            :a => :anonymous,
+            :i => :invite_only,
+            :m => :moderated,
+            :n => :no_external_messages,
+            :s => :secret,
+            :t => :topic_change_needs_privileges,
+            :u => :auditorium,
+            :z => :ssl_only,
+        },
+
+        :user => {
+            :q => [:a, :can_give_channel_admin],
+            :a => [:o, :admin],
+            :o => [:h, :operator, :can_change_topic, :can_invite, :can_change_channel_modes, :can_change_user_modes],
+            :h => [:v, :halfoperator, :can_kick],
+            :v => [:voice, :can_talk],
+        },
+
+        :client => {
+            :netadmin => [:N, :operator],
+            :operator => [:o, :can_kill, :can_kick, :can_give_channel_owner, :can_change_topic, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
+        },
+    }
+
+    @@supportedModes = {
         :user    => [],
         :channel => [],
     }
@@ -51,6 +95,10 @@ class Base < Module
         @@modes
     end
 
+    def self.supportedModes
+        @@supportedModes
+    end
+
     def self.support
         @@support
     end
@@ -62,8 +110,8 @@ class Base < Module
     def initialize (server)
         server.data[:nicks] = {}
 
-        @@modes[:user].insert(-1, *('vhoaq'.split(//)))
-        @@modes[:channel].insert(-1, *('mnisz'.split(//)))
+        @@supportedModes[:user].insert(-1, *('q'.split(//)))
+        @@supportedModes[:channel].insert(-1, *('mniszuvho'.split(//)))
 
         @@support.merge!({
             'CHANTYPES' => '&#+!',
@@ -143,7 +191,8 @@ class Base < Module
         }
 
         @events = {
-            :pre => self.method(:check),
+            :pre  => [Event::Callback.new(self.method(:input_encoding), -1234567890), self.method(:check)],
+            :post => [Event::Callback.new(self.method(:output_encoding), 1234567890)],
 
             :custom => {
                 :client_nick_change => self.method(:client_nick_change),
@@ -163,6 +212,8 @@ class Base < Module
                 :error   => self.method(:send_error),
 
                 :topic_change => self.method(:send_topic),
+
+                :mode => self.method(:do_mode),
             },
 
             :default => self.method(:unknown_command),
@@ -422,8 +473,8 @@ class Base < Module
                     thing.send :numeric, RPL_HOSTEDBY, thing
                     thing.send :numeric, RPL_SERVCREATEDON
                     thing.send :numeric, RPL_SERVINFO, {
-                        :user    => Base.modes[:user].join(''),
-                        :channel => Base.modes[:channel].join(''),
+                        :user    => Base.supportedModes[:user].join(''),
+                        :channel => Base.supportedModes[:channel].join(''),
                     }
 
                     supported = String.new
@@ -456,71 +507,28 @@ class Base < Module
             user.send :numeric, RPL_ENDOFMOTD
         end
 
-        @@modes = {
-            :groups => {
-                :can_change_channel_modes => [
-                    :can_change_channel_extended_modes, :can_change_topic_mode,
-                    :can_change_no_external_messages_mode, :can_change_secret_mode,
-                    :can_change_ssl_mode, :can_change_moderated_mode,
-                    :can_change_invite_only_mode
-                ],
-
-                :can_change_user_modes => [
-                    :can_give_channel_operator, :can_give_channel_half_operator,
-                    :can_give_voice, :can_change_user_extended_modes
-                ],
-
-                :can_change_client_modes => [
-                    :can_change_client_extended_modes
-                ],
-            },
-
-            :channel => {
-                :a => :anonymous,
-                :i => :invite_only,
-                :m => :moderated,
-                :n => :no_external_messages,
-                :s => :secret,
-                :t => :topic_change_needs_privileges,
-                :z => :ssl_only,
-            },
-
-            :user => {
-                :a => [:o, :admin],
-                :o => [:h, :operator, :can_change_topic, :can_invite, :can_change_channel_modes, :can_change_user_modes],
-                :h => [:v, :halfoperator, :can_kick],
-                :v => [:voice, :can_talk],
-            },
-
-            :client => {
-                :netadmin => [:N, :operator],
-                :operator => [:o, :can_kill, :can_kick, :can_change_topic, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
-
-                :N => [:netadmin],
-                :o => [:operator],
-            },
-        }
-
         # This method assigns flags recursively using groups of flags
-        def self.setFlags (thing, type, value)
-            if @@modes[:groups][type]
-                main = @@modes[:groups]
+        def self.setFlags (thing, type, value, inherited=false)
+            if Base.modes[:groups][type]
+                main = Base.modes[:groups]
             else
                 if thing.is_a?(IRC::Channel)
-                    main = @@modes[:channel]
+                    main = Base.modes[:channel]
                 elsif thing.is_a?(IRC::User)
-                    main = @@modes[:user]
+                    main = Base.modes[:user]
                 elsif thing.is_a?(IRC::Client)
-                    main = @@modes[:client]
+                    main = Base.modes[:client]
                 else
                     raise 'What sould I do?'
                 end
             end
 
-            if value == false
-                thing.modes.delete(type)
-            else
-                thing.modes[type] = value
+            if !inherited
+                if value == false
+                    thing.modes.delete(type)
+                else
+                    thing.modes[type] = value
+                end
             end
 
             if !(modes = main[type])
@@ -532,8 +540,8 @@ class Base < Module
             end
 
             modes.each {|mode|
-                if (main[mode] || @@modes[:groups][mode]) && !thing.modes.has_key?(mode)
-                    self.setFlags(thing, mode, value)
+                if (main[mode] || Base.modes[:groups][mode]) && !thing.modes.has_key?(mode)
+                    self.setFlags(thing, mode, value, true)
                 else
                     if value == false
                         if !main.has_key?(mode)
@@ -558,300 +566,11 @@ class Base < Module
                 result = thing.client.modes[type]
             end
 
-            return result
-        end
-
-        def self.setMode (from, thing, request, noAnswer=false)
-            if match = request.match(/^=(.*)$/)
-                value = match[1].strip
-
-                if thing.is_a?(IRC::Channel) && !self.checkFlag(from, :can_change_channel_extended_modes)
-                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                    return
-                elsif thing.is_a?(IRC::User) && !self.checkFlag(from, :can_change_user_extended_modes)
-                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
-                    return
-                elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !self.checkFlag(from, :can_change_client_extended_modes) && !self.checkFlag(from, :frozen)
-                    from.send :numeric, ERR_NOPRIVILEGES
-                    return
-                end
-
-                if value == '?'
-                    if thing.is_a?(IRC::Channel)
-                        name = thing.name
-                    elsif thing.is_a?(IRC::User)
-                        name = "#{thing.nick}@#{thing.channel.name}"
-                    elsif thing.is_a?(IRC::Client)
-                        name = thing.nick
-                    end
-
-                    thing.modes[:extended].each {|key, value|
-                        from.server.dispatcher.execute :notice, :output, server, from, "#{name} #{key} = #{value}"
-                    }
-                else
-                    modes = value.split(/[^\\],/)
-    
-                    modes.each {|mode|
-                        if mode[0, 1] == '-'
-                            type = '-'
-                        else
-                            type = '+'
-                        end
-    
-                        mode.sub!(/^[+\-]/, '')
-    
-                        mode = mode.split(/=/)
-
-                        if !mode[0].match(/^\w+$/)
-                            from.server.dispatcher.execute :error, from, "#{mode[0]} is not a valid extended mode."
-                            next
-                        end
-    
-                        if type == '+'
-                            thing.modes[:extended][mode[0].to_sym] = mode[1] || true
-                        else
-                            thing.modes[:extended].delete(mode[0].to_sym)
-                        end
-                    }
-                end
-            else
-                match = request.match(/^\s*([+\-])?\s*([^ ]+)(\s+(.+))?$/)
-
-                if !match
-                    return false
-                end
-
-                outputModes  = []
-                outputValues = []
-
-                type   = match[1] || '+'
-                modes  = match[2].split(//)
-                values = (match[4] || '').split(/ /)
-
-                modes.each {|mode|
-                    if thing.is_a?(IRC::Channel)
-                        case mode
-
-                        when 'b'
-                            if type == '+'
-                                if values.empty?
-                                    thing.modes[:bans].each {|ban|
-                                        from.send :numeric, RPL_BANLIST, ban
-                                    }
-
-                                    from.send :numeric, RPL_ENDOFBANLIST, thing.name
-                                else
-                                end
-                            end
-
-                        when 'h'
-                            if self.checkFlag(from, :can_give_channel_half_operator)
-                                value = values.shift
-
-                                if !(user = thing.users[value])
-                                    from.send :numeric, ERR_NOSUCHNICK, value
-                                    next
-                                end
-
-                                if type == '+'
-                                    if user.modes[:h]
-                                        next
-                                    end
-
-                                    User::setLevel(user, :h, true)
-                                else
-                                    if !user.modes[:h]
-                                        next
-                                    end
-                                    
-                                    User::setLevel(user, :h, false)
-                                end
-
-                                outputModes.push('h')
-                                outputValues.push(value)
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 'i'
-                            if self.checkFlag(from, :can_change_invite_only_mode)
-                                if self.checkFlag(thing, :i) == (type == '+')
-                                    next
-                                end
-
-                                self.setFlags(thing, :i, type == '+')
-
-                                outputModes.push('i')
-                            end
-
-                        when 'm'
-                            if self.checkFlag(from, :can_change_moderated_mode)
-                                if self.checkFlag(thing, :m) == (type == '+')
-                                    next
-                                end
-
-                                self.setFlags(thing, :m, type == '+')
-
-                                outputModes.push('m')
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 'n'
-                            if self.checkFlag(from, :can_change_no_external_messages_mode)
-                                if self.checkFlag(thing, :n) == (type == '+')
-                                    next
-                                end
-
-                                self.setFlags(thing, :n, type == '+')
-
-                                outputModes.push('n')
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 'o'
-                            if self.checkFlag(from, :can_give_channel_operator)
-                                value = values.shift
-
-                                if !(user = thing.users[value])
-                                    from.send :numeric, ERR_NOSUCHNICK, value
-                                    next
-                                end
-
-                                if type == '+'
-                                    if user.modes[:o]
-                                        next
-                                    end
-
-                                    self.setFlags(user, :o, true)
-
-                                    if !user.modes[:q] && !user.modes[:a]
-                                        user.modes[:level] = '@'
-                                    end
-                                else
-                                    if !user.modes[:o]
-                                        next
-                                    end
-                                    
-                                    self.setFlags(user, :o, false)
-                                end
-
-                                outputModes.push('o')
-                                outputValues.push(value)
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 's'
-                            if self.checkFlag(from, :can_change_secret_mode)
-                                if self.checkFlag(thing, :s) == (type == '+')
-                                    next
-                                end
-
-                                self.setFlags(thing, :s, type == '+')
-
-                                outputModes.push('s')
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 't'
-                            if self.checkFlag(from, :can_change_topic_mode)
-                                if self.checkFlag(thing, :t) == (type == '+')
-                                    next
-                                end
-
-                                self.setFlags(thing, :t, type == '+')
-
-                                outputModes.push('t')
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 'v'
-                            if self.checkFlag(from, :can_give_voice)
-                                value = values.shift
-
-                                if !(user = thing.users[value])
-                                    from.send :numeric, ERR_NOSUCHNICK, value
-                                    next
-                                end
-
-                                if type == '+'
-                                    if user.modes[:v]
-                                        next
-                                    end
-
-                                    self.setFlags(user, :v, true)
-
-                                    if !user.modes[:q] && !user.modes[:a] && !user.modes[:o] && !user.modes[:h]
-                                        user.modes[:level] = '+'
-                                    end
-                                else
-                                    if !user.modes[:v]
-                                        next
-                                    end
-                                    
-                                    self.setFlags(user, :v, false)
-                                end
-
-                                outputModes.push('v')
-                                outputValues.push(value)
-                               
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-
-                        when 'z'
-                            if self.checkFlag(from, :can_change_ssl_mode)
-                                if self.checkFlag(thing, :z) == (type == '+')
-                                    next
-                                end
-
-                                if type == '+'
-                                    ok = true
-
-                                    thing.users.each_value {|user|
-                                        if !self.checkFlag(user, :ssl)
-                                            ok = false
-                                            break
-                                        end
-                                    }
-
-                                    if ok
-                                        self.setFlags(thing, :z, true)
-                                    else
-                                        from.send :numeric, ERR_ALLMUSTUSESSL
-                                        next
-                                    end
-                                else
-                                    self.setFlags(thing, :z, false)
-                                end
-
-                                outputModes.push('z')
-                            else
-                                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                            end
-                        end
-                    elsif thing.is_a?(IRC::Client)
-                    end
-                }
-
-                if from.is_a?(IRC::Client) || from.is_a?(IRC::User)
-                    from = from.mask
-                end
-
-                if !noAnswer && (!outputModes.empty? || !outputValues.empty?)
-                    output = "#{type}#{outputModes.join('')}"
-                    
-                    if !outputValues.empty?
-                        output << " #{outputValues.join(' ')}"
-                    end
-
-                    thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{output}"
-                end
+            if result.nil?
+                result = false
             end
+
+            return result
         end
 
         def self.dispatchMessage (from, to, message, level=nil)
@@ -875,23 +594,65 @@ class Base < Module
         @toPing.delete(thing.socket)
         @pingedOut.delete(thing.socket)
 
-        if event.alias != :PING && event.alias != :PONG && event.alias != :WHO && event.alias != :MODE
+        if !event.aliases.include?(:PING) && !event.aliases.include?(:PONG) && !event.aliases.include?(:WHO) && !event.aliases.include?(:MODE)
             thing.modes[:last_action] = Utils::Client::Action.new(thing, event, string)
         end
 
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire
-        if event.alias != :PASS && event.alias != :NICK && event.alias != :USER && !thing.modes[:registered]
+        if !event.aliases.include?(:PASS) && !event.aliases.include?(:NICK) && !event.aliases.include?(:USER) && !thing.modes[:registered]
             thing.send :numeric, ERR_NOTREGISTERED
             stop = true
         # if the client tries to reregister, kill it with fire
-        elsif (event.alias == :PASS || event.alias == :USER) && thing.modes[:registered]
+        elsif (event.aliases.include?(:PASS) || event.aliases.include?(:USER)) && thing.modes[:registered]
             thing.send :numeric, ERR_ALREADYREGISTRED
             stop = true
         end
 
         return !stop
+    end
+
+    def input_encoding (event, thing, string)
+        if event.chain != :input
+            return
+        end
+
+        begin
+            if thing.modes[:encoding]
+                string.force_encoding(thing.modes[:encoding])
+                string.encode!('UTF-8')
+            else
+                string.force_encoding('UTF-8')
+
+                if !string.valid_encoding?
+                    raise Encoding::InvalidByteSequenceError
+                end
+            end
+        rescue
+            if thing.modes[:encoding]
+                server.dispatcher.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
+            else
+                server.dispatcher.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
+            end
+
+            string.force_encoding('ASCII-8BIT')
+
+            string.encode!('UTF-8',
+                :invalid => :replace,
+                :undef   => :replace
+            )
+        end
+    end
+
+    def output_encoding (event, thing, string)
+        if event.chain != :output
+            return
+        end
+
+        if thing.modes[:encoding]
+            string.encode!(thing.modes[:encoding])
+        end
     end
 
     def unknown_command (event, thing, string)
@@ -1073,7 +834,7 @@ class Base < Module
                 channel = server.channels[name]
 
                 if channel
-                    Utils::setMode(channel.user(thing) || thing, channel, value)
+                    handle_mode channel.user(thing) || thing, channel, value
                 else
                     thing.send :numeric, ERR_NOSUCHCHANNEL, name
                 end
@@ -1088,7 +849,7 @@ class Base < Module
                         if tmp = channel.user(tmp)
                             user = tmp
 
-                            Utils::setMode(thing, user, value)
+                            handle_mode thing, user, value
                         else
                             thing.send :numeric, ERR_USERNOTINCHANNEL, {
                                 :nick    => user,
@@ -1105,7 +866,7 @@ class Base < Module
                 if tmp = server.clients[name]
                     client = tmp
 
-                    Utils::setMode(thing, client, value)
+                    handle_mode thing, client, value
                 else
                     thing.send :numeric, ERR_NOSUCHNICK, name
                 end
@@ -1124,17 +885,347 @@ class Base < Module
                             thing = thing.channels[name].user(thing)
                         end
 
-                        Utils::setMode thing, channel, value
+                        handle_mode thing, channel, value
                     end
                 else
                     thing.send :numeric, ERR_NOSUCHCHANNEL, name
                 end
             else
                 if server.clients[name]
-                    Utils::setMode(thing, server.clients[name], value)
+                    handle_mode thing, server.clients[name], value
                 else
                     thing.send :numeric, ERR_NOSUCHNICK, name
                 end
+            end
+        end
+    end
+
+    def handle_mode (from, thing, request, noAnswer=false)
+        if match = request.match(/^=(.*)$/)
+            value = match[1].strip
+
+            if value == '?'
+                server.dispatcher.execute :mode, :extended, from, thing, '?', nil, nil
+            else
+                modes = value.split(/[^\\],/)
+    
+                modes.each {|mode|
+                    if mode[0, 1] == '-'
+                        type = '-'
+                    else
+                        type = '+'
+                    end
+    
+                    mode.sub!(/^[+\-]/, '')
+    
+                    mode = mode.split(/=/)
+    
+                    server.dispatcher.execute :mode, :extended, from, thing, type, *mode
+                }
+            end
+        else
+            output = {
+                :modes  => [],
+                :values => [],
+            }
+
+            match = request.match(/^\s*([+\-])?\s*([^ ]+)(\s+(.+))?$/)
+
+            if !match
+                return false
+            end
+
+            type   = match[1] || '+'
+            modes  = match[2].split(//)
+            values = (match[4] || '').split(/ /)
+
+            modes.each {|mode|
+                server.dispatcher.execute :mode, :normal, from, thing, type, mode, values, output
+            }
+
+            if from.is_a?(IRC::Client) || from.is_a?(IRC::User)
+                from = from.mask
+            end
+
+            if !noAnswer && (!output[:modes].empty? || !output[:values].empty?)
+                output = "#{type}#{output[:modes].join('')}"
+                
+                if !output[:values].empty?
+                    output << " #{output[:values].join(' ')}"
+                end
+
+                thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{output}"
+            end
+
+        end
+    end
+
+    def do_mode (kind, from, thing, type, mode, values, output=nil)
+        if kind == :extended
+            if thing.is_a?(IRC::Channel) && !Utils::checkFlag(from, :can_change_channel_extended_modes)
+                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                return
+            elsif thing.is_a?(IRC::User) && !Utils::checkFlag(from, :can_change_user_extended_modes)
+                from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
+                return
+            elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !Utils::checkFlag(from, :can_change_client_extended_modes) && !Utils::checkFlag(from, :frozen)
+                from.send :numeric, ERR_NOPRIVILEGES
+                return
+            end
+
+            if type == '?'
+                if thing.is_a?(IRC::Channel)
+                    name = thing.name
+                elsif thing.is_a?(IRC::User)
+                    name = "#{thing.nick}@#{thing.channel.name}"
+                elsif thing.is_a?(IRC::Client)
+                    name = thing.nick
+                end
+
+                thing.modes[:extended].each {|key, value|
+                    from.server.dispatcher.execute :notice, :output, server, from, "#{name} #{key} = #{value}"
+                }
+            else
+                if !mode.match(/^\w+$/)
+                    from.server.dispatcher.execute :error, from, "#{mode} is not a valid extended mode."
+                    return
+                end
+
+                if type == '+'
+                    thing.modes[:extended][mode.to_sym] = values || true
+                else
+                    thing.modes[:extended].delete(mode.to_sym)
+                end
+            end
+        else
+            if thing.is_a?(IRC::Channel)
+                case mode
+
+                when 'a'
+                    if Utils::checkFlag(from, :can_give_channel_admin)
+                        value = values.shift
+
+                        if !(user = thing.users[value])
+                            from.send :numeric, ERR_NOSUCHNICK, value
+                            return
+                        end
+
+                        if Utils::checkFlag(user, :a) == (type == '+')
+                            return
+                        end
+
+                        Utils::User::setLevel(user, :a, (type == '+'))
+
+                        output[:modes].push('a')
+                        output[:values].push(value)
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'b'
+                    if type == '+'
+                        if values.empty?
+                            thing.modes[:bans].each {|ban|
+                                from.send :numeric, RPL_BANLIST, ban
+                            }
+
+                            from.send :numeric, RPL_ENDOFBANLIST, thing.name
+                        else
+                        end
+                    end
+
+                when 'h'
+                    if Utils::checkFlag(from, :can_give_channel_half_operator)
+                        value = values.shift
+
+                        if !(user = thing.users[value])
+                            from.send :numeric, ERR_NOSUCHNICK, value
+                            return
+                        end
+
+                        if Utils::checkFlag(user, :h) == (type == '+')
+                            return
+                        end
+
+                        Utils::User::setLevel(user, :h, (type == '+'))
+
+                        output[:modes].push('h')
+                        output[:values].push(value)
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'i'
+                    if Utils::checkFlag(from, :can_change_invite_only_mode)
+                        if Utils::checkFlag(thing, :i) == (type == '+')
+                            return
+                        end
+
+                        Utils::setFlags(thing, :i, type == '+')
+
+                        output[:modes].push('i')
+                    end
+
+                when 'm'
+                    if Utils::checkFlag(from, :can_change_moderated_mode)
+                        if Utils::checkFlag(thing, :m) == (type == '+')
+                            return
+                        end
+
+                        Utils::setFlags(thing, :m, type == '+')
+
+                        output[:modes].push('m')
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'n'
+                    if Utils::checkFlag(from, :can_change_no_external_messages_mode)
+                        if Utils::checkFlag(thing, :n) == (type == '+')
+                            return
+                        end
+
+                        Utils::setFlags(thing, :n, type == '+')
+
+                        output[:modes].push('n')
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'o'
+                    if Utils::checkFlag(from, :can_give_channel_operator)
+                        value = values.shift
+
+                        if !(user = thing.users[value])
+                            from.send :numeric, ERR_NOSUCHNICK, value
+                            return
+                        end
+
+                        if Utils::checkFlag(user, :o) == (type == '+')
+                            return
+                        end
+
+                        Utils::User::setLevel(user, :o, (type == '+'))
+
+                        output[:modes].push('o')
+                        output[:values].push(value)
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'q'
+                    if Utils::checkFlag(from, :can_give_channel_owner)
+                        value = values.shift
+
+                        if !(user = thing.users[value])
+                            from.send :numeric, ERR_NOSUCHNICK, value
+                            return
+                        end
+
+                        if Utils::checkFlag(user, :q) == (type == '+')
+                            return
+                        end
+
+                        Utils::User::setLevel(user, :q, (type == '+'))
+
+                        output[:modes].push('q')
+                        output[:values].push(value)
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 's'
+                    if Utils::checkFlag(from, :can_change_secret_mode)
+                        if Utils::checkFlag(thing, :s) == (type == '+')
+                            return
+                        end
+
+                        Utils::setFlags(thing, :s, type == '+')
+
+                        output[:modes].push('s')
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 't'
+                    if Utils::checkFlag(from, :can_change_topic_mode)
+                        if Utils::checkFlag(thing, :t) == (type == '+')
+                            return
+                        end
+
+                        Utils::setFlags(thing, :t, type == '+')
+
+                        output[:modes].push('t')
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'u'
+                    if Utils::checkFlag(from, :can_change_auditorium_mode)
+                        if Utils::checkFlag(thing, :u) == (type == '+')
+                            return
+                        end
+
+                        Utils::setFlags(thing, :u, type == '+')
+
+                        output[:modes].push('u')
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'v'
+                    if Utils::checkFlag(from, :can_give_voice)
+                        value = values.shift
+
+                        if !(user = thing.users[value])
+                            from.send :numeric, ERR_NOSUCHNICK, value
+                            return
+                        end
+
+                        if Utils::checkFlag(user, :v) == (type == '+')
+                            return
+                        end
+
+                        Utils::User::setLevel(user, :v, (type == '+'))
+
+                        output[:modes].push('v')
+                        output[:values].push(value)
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'z'
+                    if Utils::checkFlag(from, :can_change_ssl_mode)
+                        if Utils::checkFlag(thing, :z) == (type == '+')
+                            return
+                        end
+
+                        if type == '+'
+                            ok = true
+
+                            thing.users.each_value {|user|
+                                if !Utils::checkFlag(user, :ssl)
+                                    ok = false
+                                    break
+                                end
+                            }
+
+                            if ok
+                                Utils::setFlags(thing, :z, true)
+                            else
+                                from.send :numeric, ERR_ALLMUSTUSESSL
+                                return
+                            end
+                        else
+                            Utils::setFlags(thing, :z, false)
+                        end
+
+                        output[:modes].push('z')
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+                end
+            elsif thing.is_a?(IRC::Client)
             end
         end
     end
@@ -1192,10 +1283,11 @@ class Base < Module
 
             if !server.channels[channel]
                 channel = server.channels[channel] = Channel.new(server, channel)
-                channel.modes[:type]    = channel.name[0, 1]
-                channel.modes[:bans]    = []
-                channel.modes[:invites] = []
-                channel.modes[:invited] = ThreadSafeHash.new
+                channel.modes[:type]       = channel.name[0, 1]
+                channel.modes[:bans]       = []
+                channel.modes[:exceptions] = []
+                channel.modes[:invites]    = []
+                channel.modes[:invited]    = ThreadSafeHash.new
             else
                 channel = server.channels[channel]
             end
@@ -1235,7 +1327,7 @@ class Base < Module
         user  = channel.add(client)
 
         if empty
-            Utils::setMode server, channel, "+o #{user.nick}", true
+            handle_mode server, channel, "+o #{user.nick}", true
         else
             channel.modes[:invited].delete(client.nick)
         end
@@ -1924,6 +2016,9 @@ class Base < Module
 
     def client_quit (thing, message)
         server.data[:nicks].delete(thing.nick)
+
+        @toPing.delete(thing.socket)
+        @pingedOut.delete(thing.socket)
 
         thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
     end 

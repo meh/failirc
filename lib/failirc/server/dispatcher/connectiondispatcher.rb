@@ -136,6 +136,18 @@ class ConnectionDispatcher
             @data[socket].shift
         end
 
+        def clear (socket)
+            if socket.is_a?(Client) || socket.is_a?(User)
+                socket = socket.socket
+            end
+
+            if !@data.has_key?(socket)
+                @data[socket] = []
+            end
+
+            @data[socket].clear
+        end
+
         def delete (socket)
             if socket.is_a?(Client) || socket.is_a?(User)
                 socket = socket.socket
@@ -285,34 +297,6 @@ class ConnectionDispatcher
                             raise Errno::EPIPE
                         end
 
-                        begin
-                            if thing && thing.modes[:encoding]
-                                input.force_encoding(thing.modes[:encoding])
-                                input.encode!('UTF-8')
-                            else
-                                input.force_encoding('UTF-8')
-
-                                if !input.valid_encoding?
-                                    raise Encoding::InvalidByteSequenceError
-                                end
-                            end
-                        rescue
-                            if thing
-                                if thing.modes[:encoding]
-                                    dispatcher.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
-                                else
-                                    dispatcher.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
-                                end
-                            end
-
-                            input.force_encoding('ASCII-8BIT')
-
-                            input.encode!('UTF-8',
-                                :invalid => :replace,
-                                :undef   => :replace
-                            )
-                        end
-
                         input.split(/[\r\n]+/).each {|string|
                             @input.push(socket, string)
                         }
@@ -377,7 +361,7 @@ class ConnectionDispatcher
                                 @output.pop(socket)
                                 message = @output.pop(socket)
 
-                                @dispatcher.execute(:kill, thing, message)
+                                @dispatcher.execute(:kill, thing, message) rescue nil
         
                                 if thing.is_a?(Client)
                                     thing.modes[:quitting] = true
@@ -396,12 +380,8 @@ class ConnectionDispatcher
 
                                 self.debug "#{thing.mask}[#{thing.ip}] disconnected."
         
-                                socket.close
+                                socket.close rescue nil
                             else
-                                if thing.modes[:encoding]
-                                    output.encode!(thing.modes[:encoding])
-                                end
-
                                 socket.write_nonblock "#{output}\r\n"
 
                                 @output.pop(socket)

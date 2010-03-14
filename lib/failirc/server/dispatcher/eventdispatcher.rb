@@ -78,15 +78,9 @@ class EventDispatcher
                 handle(:stop, chain, deep, thing)
                 return false
             end
-
-            if event.type && !event.same?(string)
-                result = dispatch(chain, thing, string, true)
-                handle(:stop, chain, deep, thing)
-                return result
-            end
         }
 
-        if event.type
+        if !event.types.empty?
             event.special = nil
 
             event.callbacks.each {|callback|
@@ -98,12 +92,6 @@ class EventDispatcher
                 rescue Exception => e
                     self.debug e
                 end
-    
-                if !event.same?(string)
-                    result = dispatch(chain, thing, string, true)
-                    handle(:stop,chain, deep, thing)
-                    return result
-                end
             }
         elsif chain == :input
             @events[:default].each {|callback|
@@ -112,12 +100,6 @@ class EventDispatcher
                 if callback.call(event, thing, string) == false
                     handle(:stop, chain, deep, thing)
                     return false
-                end
-    
-                if event.type && !event.same?(string)
-                    result = dispatch(chain, thing, string, true)
-                    handle(:stop, chain, deep, thing)
-                    return result
                 end
             }
         end
@@ -128,12 +110,6 @@ class EventDispatcher
             if callback.call(event, thing, string) == false
                 handle(:stop, chain, deep, thing)
                 return false
-            end
-
-            if event.type && !event.same?(string)
-                result = dispatch(chain, thing, string, true)
-                handle(:stop ,chain, deep, thing)
-                return result
             end
         }
 
@@ -150,7 +126,7 @@ class EventDispatcher
                         return false
                     end
                 rescue Exception => e
-                    self.debug(e)
+                    self.debug e
                 end
             }
         end
