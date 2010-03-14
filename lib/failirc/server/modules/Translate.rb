@@ -23,33 +23,33 @@ module IRC
 
 module Modules
 
-class Netlog < Module
+class Translate < Module
     def initialize (server)
+        @aliases = {
+            :input => {
+                :TRANSLATE => /^TRANSLATE( |$)/i,
+            },
+        }
+
         @events = {
             :custom => {
-                :message => Event::Callback.new(self.method(:netlog), -101),
-            }
+                :message => Event::Callback.new(self.method(:netlog), -50),
+            },
+
+            :input => {
+                :TRANSLATE => self.method(:set),
+            },
         }
 
         super(server)
     end
 
-    def netlog (chain, from, to, message, level=nil)
-        if chain != :input
-            return
+    def translate (chain, from, to, message, level)
+        if chain == :input
+
+        elsif chain == :output
+
         end
-
-        URI.extract(message).each {|uri|
-            if match = uri.match('http://(beta\.)?(\w+?)\.netlog.com.*?photo.*?(\d+)')
-                country = match[2]
-                url     = match[3]
-                code    = "000000000#{url}".match(/(\d{3})(\d{3})\d{3}$/)
-
-                message.gsub!(/#{Regexp.escape(uri)}/, "http://#{country}.netlogstatic.com/p/oo/#{code[1]}/#{code[2]}/#{url}.jpg")
-            elsif match = uri.match(/netlogstatic/)
-                message.gsub!(/#{Regexp.escape(uri)}/, uri.sub(/\/[to]{2}\//, '/oo/'))
-            end
-        }
     end
 end
 

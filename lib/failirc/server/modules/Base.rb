@@ -93,8 +93,8 @@ class Base < Module
                 # people who didn't answer with a PONG has to YIFF IN HELL.
                 @pingedOut.each_value {|client|
                     if !client.socket.closed?
-                        server.dispatcher.execute(:error, client, 'Ping timeout', :close)
-                        server.kill(client, 'Ping timeout')
+                        server.dispatcher.execute :error, client, 'Ping timeout', :close
+                        server.kill client, 'Ping timeout'
                     end
                 }
 
@@ -157,9 +157,9 @@ class Base < Module
 
                 :whois => self.method(:send_whois),
 
-                :message => self.method(:send_message),
-                :ctcp    => self.method(:send_ctcp),
-                :notice  => self.method(:send_notice),
+                :message => [self.method(:received_message), self.method(:send_message)],
+                :ctcp    => [self.method(:received_ctcp), self.method(:send_ctcp)],
+                :notice  => [self.method(:received_notice), self.method(:send_notice)],
                 :error   => self.method(:send_error),
 
                 :topic_change => self.method(:send_topic),
@@ -586,7 +586,7 @@ class Base < Module
                     end
 
                     thing.modes[:extended].each {|key, value|
-                        from.server.dispatcher.execute :notice, from.server, from, "#{name} #{key} = #{value}"
+                        from.server.dispatcher.execute :notice, :output, server, from, "#{name} #{key} = #{value}"
                     }
                 else
                     modes = value.split(/[^\\],/)
@@ -856,9 +856,9 @@ class Base < Module
 
         def self.dispatchMessage (from, to, message, level=nil)
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-                from.server.dispatcher.execute(:ctcp, from, to, match[1], match[2] ? match[3] : nil, level)
+                from.server.dispatcher.execute :ctcp, :input, from, to, match[1], (match[2] ? match[3] : nil), level
             else
-                from.server.dispatcher.execute(:message, from, to, message, level)
+                from.server.dispatcher.execute :message, :input, from, to, message, level
             end
         end
 
@@ -1401,7 +1401,7 @@ class Base < Module
 
         if server.channels[channel]
             server.channels[channel].modes[:invited][to.nick] = true
-            server.dispatcher.execute :notice, server, server.channels[channel], "#{from.nick} invited #{to.nick} into the channel.", '@'
+            server.dispatcher.execute :notice, :input, server, server.channels[channel], "#{from.nick} invited #{to.nick} into the channel.", '@'
         end
 
         to.send :raw, ":#{from.mask} INVITE #{to.nick} :#{channel}"
@@ -1683,7 +1683,11 @@ class Base < Module
         end
     end
 
-    def send_message (from, to, message, level)
+    def received_message (chain, from, to, message, level=nil)
+        if chain != :input
+            return
+        end
+
         if from.is_a?(IRC::User)
             from = from.client
         end
@@ -1691,17 +1695,61 @@ class Base < Module
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    user.send :raw, ":#{from} PRIVMSG #{to.name} :#{if level then "#{level}} " end}#{message}"
+                    server.dispatcher.execute :message, :output, from, user, message, level
                 end
             }
-        elsif to.is_a?(Client) || to.is_a?(User)
+        elsif to.is_a?(Client)
             to.send :raw, ":#{from} PRIVMSG #{to.nick} :#{message}"
         end
     end
 
-    def send_ctcp (from, to, type, message, level)
+    def send_message (chain, from, to, message, level=nil)
+        if chain != :output
+            return
+        end
+
+        if to.is_a?(IRC::User)
+            name = to.channel.name
+        elsif to.is_a?(IRC::Client)
+            name = to.nick
+        else
+            return
+        end
+
+        to.send :raw, ":#{from} PRIVMSG #{name} :#{if level then "#{level}} " end}#{message}"
+    end
+
+    def received_ctcp (chain, from, to, type, message, level)
+        if chain != :input
+            return
+        end
+
         if from.is_a?(IRC::User)
             from = from.client
+        end
+
+        if to.is_a?(Channel)
+            to.users.each_value {|user|
+                if user.client != from && Utils::User::isLevelEnough(user, level)
+                    server.dispatcher.execute :ctcp, :output, from, user, type, message, level
+                end
+            }
+        elsif to.is_a?(Client) || to.is_a?(User)
+            server.dispatcher.execute :ctcp, :output, from, to, type, message, level
+        end
+    end
+
+    def send_ctcp (chain, from, to, type, message, level)
+        if chain != :output
+            return
+        end
+
+        if to.is_a?(IRC::User)
+            name = to.channel.name
+        elsif to.is_a?(IRC::Client)
+            name = to.nick
+        else
+            return
         end
 
         if message
@@ -1710,16 +1758,7 @@ class Base < Module
             text = type
         end
 
-        if to.is_a?(Channel)
-            to.users.each_value {|user|
-                if user.client != from && Utils::User::isLevelEnough(user, level)
-                    user.send :raw, ":#{from} PRIVMSG #{to.name} :\x01#{text}\x01"
-                end
-            }
-        elsif to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from} PRIVMSG #{to.nick} :\x01#{text}\x01"
-        end
-
+        to.send :raw, ":#{from} PRIVMSG #{name} :\x01#{text}\x01"
     end
 
     def notice (thing, string)
@@ -1733,7 +1772,7 @@ class Base < Module
         message = match[2]
 
         if client = server.clients[name]
-            server.dispatcher.execute(:notice, thing, client, message)
+            server.dispatcher.execute :notice, :input, thing, client, message
         else
             if Utils::User::isLevel(level = name[0, 1])
                 channel = name[1, name.length]
@@ -1748,12 +1787,16 @@ class Base < Module
             end
 
             if !channel.modes[:no_external_messages] || channel.user(thing)
-                server.dispatcher.execute(:notice, thing, channel, message, level)
+                server.dispatcher.execute :notice, :input, thing, channel, message, level
             end
         end
     end
 
-    def send_notice (from, to, message, level=nil)
+    def received_notice (chain, from, to, message, level=nil)
+        if chain != :input
+            return
+        end
+
         if from.is_a?(IRC::User)
             from = from.client
         end
@@ -1761,25 +1804,41 @@ class Base < Module
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    user.send :raw, ":#{from} NOTICE #{to.name} :#{message}"
+                    server.dispatcher.execute :notice, :output, from, user, message, level
                 end
             }
-        elsif to.is_a?(Client) || to.is_a?(User)
-            to.send :raw, ":#{from} NOTICE #{to.nick} :#{message}"
+        elsif to.is_a?(Client)
+            server.dispatcher.execute :notice, :output, from, to, message, level
         end
+    end
+
+    def send_notice (chain, from, to, message, level)
+        if chain != :output
+            return
+        end
+
+        if to.is_a?(IRC::User)
+            name = to.channel.name
+        elsif to.is_a?(IRC::Client)
+            name = to.nick
+        else
+            return
+        end
+
+        to.send :raw, ":#{from} NOTICE #{name} :#{message}"
     end
 
     def send_error (thing, message, type=nil)
         case type
-            when :close
-                send_error(thing, "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})")
-            else
-                thing.send :raw, "ERROR :#{message}"
+        when :close
+            send_error(thing, "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})")
+        else
+            thing.send :raw, "ERROR :#{message}"
         end
     end
 
     def map (thing, string)
-        server.dispatcher.execute(:notice, server, thing, 'The X tells the point.')
+        server.dispatcher.execute :notice, :input, server, thing, 'The X tells the point.'
     end
 
     def version (thing, string)

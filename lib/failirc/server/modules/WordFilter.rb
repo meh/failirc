@@ -30,7 +30,7 @@ class WordFilter < Module
     def initialize (server)
         @events = {
             :custom => {
-                :message => Event::Callback.new(self.method(:filter), -500),
+                :message => Event::Callback.new(self.method(:filter), -1),
             }
         }
 
@@ -55,7 +55,11 @@ class WordFilter < Module
         end
     end
 
-    def filter (from, to, message, level)
+    def filter (chain, from, to, message, level=nil)
+        if chain != :input
+            return
+        end
+
         if to.is_a?(Channel)
             channel = to.modes
 

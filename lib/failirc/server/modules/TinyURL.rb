@@ -30,7 +30,7 @@ class TinyURL < Module
     def initialize (server)
         @events = {
             :custom => {
-                :message => Event::Callback.new(self.method(:tinyurl), -9001),
+                :message => Event::Callback.new(self.method(:tinyurl), -100),
             }
         }
 
@@ -45,14 +45,18 @@ class TinyURL < Module
         end
     end
 
-    def tinyurl (from, to, message, level)
-        URI.extract(message).each {|uri|
-            if uri.length > @length
-                tiny = tinyurlify(uri) rescue nil
+    def tinyurl (chain, from, to, message, level=nil)
+        if chain != :input
+            return
+        end
 
-                if tiny
-                    message.gsub!(/#{Regexp.escape(uri)}/, tiny)
-                end
+        URI.extract(message).each {|uri|
+            if uri.length <= @length
+                next
+            end
+
+            if tiny = tinyurlify(uri) rescue nil
+                message.gsub!(/#{Regexp.escape(uri)}/, tiny)
             end
         }
     end
