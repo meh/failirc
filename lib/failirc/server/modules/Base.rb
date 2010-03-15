@@ -1309,15 +1309,18 @@ class Base < Module
             @semaphore.synchronize {
                 if !server.channels[channel]
                     channel = server.channels[channel] = Channel.new(server, channel)
-                    channel.modes[:type]       = channel.name[0, 1]
-                    channel.modes[:bans]       = []
-                    channel.modes[:exceptions] = []
-                    channel.modes[:invites]    = []
-                    channel.modes[:invited]    = ThreadSafeHash.new
                 else
                     channel = server.channels[channel]
                 end
             }
+
+            if !channel.modes[:type]
+                channel.modes[:type]       = channel.name[0, 1]
+                channel.modes[:bans]       = []
+                channel.modes[:exceptions] = []
+                channel.modes[:invites]    = []
+                channel.modes[:invited]    = ThreadSafeHash.new
+            end
 
             if channel.modes[:password]
                 password = passwords.shift
