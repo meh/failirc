@@ -62,11 +62,18 @@ class TinyURL < Module
     end
 
     def tinyurlify (url)
-        content = Net::HTTP.post_form(URI.parse('http://tinyurl.com/create.php'), { 'url' => url }).body
-        match   = content.match('<blockquote><b>(http://tinyurl.com/\w+)</b>')
+        begin
+            timeout 2 do
+                content = Net::HTTP.post_form(URI.parse('http://tinyurl.com/create.php'), { 'url' => url }).body
+            end
+            
+            match = content.match('<blockquote><b>(http://tinyurl.com/\w+)</b>')
 
-        if match
-            return match[1]
+            if match
+                return match[1]
+            end
+        rescue Timeout::Error
+            return nil
         end
     end
 end
