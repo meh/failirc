@@ -120,10 +120,8 @@ class Base < Module
             'PREFIX'    => '(xyohv)~&@%+',
         })
 
-        @channel = {
-            :creating => ThreadSafeHash.new,
-            :joining  => ThreadSafeHash.new,
-        }
+        @joining   = ThreadSafeHash.new
+        @semaphore = Mutex.new
 
         @pingedOut = ThreadSafeHash.new
         @toPing    = ThreadSafeHash.new
@@ -1302,26 +1300,24 @@ class Base < Module
                 return
             end
 
-            if thing.channels[channel] && !@channel[:joining][thing]
+            if thing.channels[channel] && !@joining[thing]
                 return
             end
 
-            @channel[:joining][thing] = true
+            @joining[thing] = true
 
-            if !server.channels[channel] && !@channel[:creating][channel]
-                @channel[:creating][channel] = true
-
-                channel = server.channels[channel] = Channel.new(server, channel)
-                channel.modes[:type]       = channel.name[0, 1]
-                channel.modes[:bans]       = []
-                channel.modes[:exceptions] = []
-                channel.modes[:invites]    = []
-                channel.modes[:invited]    = ThreadSafeHash.new
-
-                @channel[:creating].delete(channel)
-            else
-                channel = server.channels[channel]
-            end
+            @semaphore.synchronize {
+                if !server.channels[channel]
+                    channel = server.channels[channel] = Channel.new(server, channel)
+                    channel.modes[:type]       = channel.name[0, 1]
+                    channel.modes[:bans]       = []
+                    channel.modes[:exceptions] = []
+                    channel.modes[:invites]    = []
+                    channel.modes[:invited]    = ThreadSafeHash.new
+                else
+                    channel = server.channels[channel]
+                end
+            }
 
             if channel.modes[:password]
                 password = passwords.shift
@@ -1351,7 +1347,7 @@ class Base < Module
 
             server.dispatcher.execute(:join, thing, channel)
 
-            @channel[:joining].delete(thing)
+            @joining.delete(thing)
         }
     end
 
