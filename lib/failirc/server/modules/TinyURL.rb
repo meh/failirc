@@ -21,6 +21,7 @@ require 'failirc/extensions'
 require 'failirc/server/module'
 require 'net/http'
 require 'uri'
+require 'timeout'
 
 module IRC
 
@@ -43,6 +44,12 @@ class TinyURL < Module
         else
             @length = 42
         end
+
+        if tmp = @server.config.elements['config/modules/module[@name="TinyURL"]/timeout']
+            @timeout = tmp.text.to_i
+        else
+            @timeout = 5
+        end
     end
 
     def tinyurl (chain, from, to, message, level=nil)
@@ -63,8 +70,8 @@ class TinyURL < Module
 
     def tinyurlify (url)
         begin
-            timeout 2 do
-                content = Net::HTTP.post_form(URI.parse('http://tinyurl.com/create.php'), { 'url' => url }).body
+            content = timeout @timeout do
+                Net::HTTP.post_form(URI.parse('http://tinyurl.com/create.php'), { 'url' => url }).body
             end
             
             match = content.match('<blockquote><b>(http://tinyurl.com/\w+)</b>')
