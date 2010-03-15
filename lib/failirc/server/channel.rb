@@ -73,6 +73,10 @@ class Channel
         @semaphore = Mutex.new
     end
 
+    def type
+        @name[0, 1]
+    end
+
     def topic= (data)
         @semaphore.synchronize {
             if data.is_a?(Topic)

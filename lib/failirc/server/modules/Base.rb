@@ -42,7 +42,8 @@ class Base < Module
                 :can_change_channel_extended_modes, :can_change_topic_mode,
                 :can_change_no_external_messages_mode, :can_change_secret_mode,
                 :can_change_ssl_mode, :can_change_moderated_mode,
-                :can_change_invite_only_mode, :can_change_auditorium_mode
+                :can_change_invite_only_mode, :can_change_auditorium_mode,
+                :can_change_anonymous_mode,
             ],
 
             :can_change_user_modes => [
@@ -67,8 +68,8 @@ class Base < Module
         },
 
         :user => {
-            :q => [:a, :can_give_channel_admin],
-            :a => [:o, :admin],
+            :x => [:y, :can_give_channel_admin],
+            :y => [:o, :admin],
             :o => [:h, :operator, :can_change_topic, :can_invite, :can_change_channel_modes, :can_change_user_modes],
             :h => [:v, :halfoperator, :can_kick],
             :v => [:voice, :can_talk],
@@ -81,7 +82,7 @@ class Base < Module
     }
 
     @@supportedModes = {
-        :user    => [],
+        :client  => [],
         :channel => [],
     }
 
@@ -110,12 +111,12 @@ class Base < Module
     def initialize (server)
         server.data[:nicks] = {}
 
-        @@supportedModes[:user].insert(-1, *('q'.split(//)))
-        @@supportedModes[:channel].insert(-1, *('mniszuvho'.split(//)))
+        @@supportedModes[:client].insert(-1, *('o'.split(//)))
+        @@supportedModes[:channel].insert(-1, *('mniszuvhoyx'.split(//)))
 
         @@support.merge!({
             'CHANTYPES' => '&#+!',
-            'PREFIX'    => '(qaohv)~&@%+',
+            'PREFIX'    => '(xyohv)~&@%+',
         })
 
         @pingedOut = ThreadSafeHash.new
@@ -134,7 +135,7 @@ class Base < Module
 
                 # clear and refil the hash of clients to ping with all the connected clients
                 @toPing.clear
-                @toPing.merge!(::Hash[server.clients.values.collect {|client| [client.socket, client]}])
+                @toPing.merge!(Hash[server.clients.values.collect {|client| [client.socket, client]}])
 
                 sleep server.config.elements['config/server/pingTimeout'].text.to_i
 
@@ -384,14 +385,14 @@ class Base < Module
 
         module User
             @@levels = {
-                :q => '~',
-                :a => '&',
+                :x => '~',
+                :y => '&',
                 :o => '@',
                 :h => '%',
                 :v => '+',
             }
 
-            @@levelsOrder = [:q, :a, :o, :h, :v]
+            @@levelsOrder = [:x, :y, :o, :h, :v]
 
             def self.isLevel (char)
                 @@levels.has_value?(char) ? char : false
@@ -406,10 +407,10 @@ class Base < Module
             end
 
             def self.getHighestLevel (user)
-                if user.modes[:q]
-                    return :q
-                elsif user.modes[:a]
-                    return :a
+                if user.modes[:x]
+                    return :x
+                elsif user.modes[:y]
+                    return :y
                 elsif user.modes[:o]
                     return :o
                 elsif user.modes[:h]
@@ -473,7 +474,7 @@ class Base < Module
                     thing.send :numeric, RPL_HOSTEDBY, thing
                     thing.send :numeric, RPL_SERVCREATEDON
                     thing.send :numeric, RPL_SERVINFO, {
-                        :user    => Base.supportedModes[:user].join(''),
+                        :user    => Base.supportedModes[:client].join(''),
                         :channel => Base.supportedModes[:channel].join(''),
                     }
 
@@ -700,55 +701,47 @@ class Base < Module
         nick = match[2].strip
 
         if server.dispatcher.execute(:client_nick_change, thing, nick) == false
+            if !thing.modes[:registered]
+                thing.modes[:__warned] = nick
+            end
+
             return
         end
 
         if !thing.modes[:registered]
-            # if the user hasn't registered yet and the choosen nick is already used,
-            # kill it with fire.
-            if server.clients[nick] || server.data[:nicks][nick]
-                thing.send :numeric, ERR_NICKNAMEINUSE, nick
-                thing.modes[:__warned] = nick
-            else
-                if thing.nick
-                    server.data[:nicks].delete(thing.nick)
-                end
+            thing.nick = nick
 
-                thing.nick = nick
-
-                # try to register it
-                Utils::registration(thing)
-            end
+            # try to register it
+            Utils::registration(thing)
         else
-            # if the user has already registered and the choosen nick is already used,
-            # just tell him that he's a faggot.
-            if server.clients[nick] || server.data[:nicks][nick]
-                thing.send :numeric, ERR_NICKNAMEINUSE, nick
+            server.data[:nicks].delete(nick)
+
+            mask       = thing.mask.clone
+            thing.nick = nick
+
+            server.clients[thing.nick] = server.clients.delete(mask.nick)
+
+            thing.channels.each_value {|channel|
+                channel.users.add(channel.users.delete(mask.nick))
+            }
+
+            if thing.channels.empty?
+                thing.send :raw, ":#{mask} NICK :#{nick}"
             else
-                server.data[:nicks].delete(nick)
-
-                mask       = thing.mask.clone
-                thing.nick = nick
-
-                server.clients[thing.nick] = server.clients.delete(mask.nick)
-
-                thing.channels.each_value {|channel|
-                    channel.users.add(channel.users.delete(mask.nick))
-                }
-
-                if thing.channels.empty?
-                    thing.send :raw, ":#{mask} NICK :#{nick}"
-                else
-                    thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
-                end
+                thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
             end
         end
     end
 
     def client_nick_change (thing, nick)
+        if server.clients[nick] || server.data[:nicks][nick]
+            thing.send :numeric, ERR_NICKNAMEINUSE, nick
+            return false
+        end
+
         allowed = eval(@nickAllowed) rescue false
 
-        if !allowed
+        if !allowed || nick.downcase == 'anonymous'
             thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
             return false
         end
@@ -905,7 +898,7 @@ class Base < Module
             value = match[1].strip
 
             if value == '?'
-                server.dispatcher.execute :mode, :extended, from, thing, '?', nil, nil
+                server.dispatcher.execute :mode, :extended, from, thing, '?', nil, nil, nil
             else
                 modes = value.split(/[^\\],/)
     
@@ -920,7 +913,7 @@ class Base < Module
     
                     mode = mode.split(/=/)
     
-                    server.dispatcher.execute :mode, :extended, from, thing, type, *mode
+                    server.dispatcher.execute :mode, :extended, from, thing, type, *mode, nil
                 }
             end
         else
@@ -948,19 +941,19 @@ class Base < Module
             end
 
             if !noAnswer && (!output[:modes].empty? || !output[:values].empty?)
-                output = "#{type}#{output[:modes].join('')}"
+                string = "#{type}#{output[:modes].join('')}"
                 
                 if !output[:values].empty?
-                    output << " #{output[:values].join(' ')}"
+                    string << " #{output[:values].join(' ')}"
                 end
 
-                thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{output}"
+                thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{string}"
             end
 
         end
     end
 
-    def do_mode (kind, from, thing, type, mode, values, output=nil)
+    def do_mode (kind, from, thing, type, mode, values, output={:modes => [], :values => []})
         if kind == :extended
             if thing.is_a?(IRC::Channel) && !Utils::checkFlag(from, :can_change_channel_extended_modes)
                 from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
@@ -1002,24 +995,18 @@ class Base < Module
                 case mode
 
                 when 'a'
-                    if Utils::checkFlag(from, :can_give_channel_admin)
-                        value = values.shift
+                    if thing.type != '&' && thing.type != '!'
+                        server.dispatcher.execute :error, from, 'Only & and ! channels can use this mode.'
+                    end
 
-                        if !(user = thing.users[value])
-                            from.send :numeric, ERR_NOSUCHNICK, value
+                    if Utils::checkFlag(from, :can_change_anonymous_mode)
+                        if Utils::checkFlag(thing, :a) == (type == '+')
                             return
                         end
 
-                        if Utils::checkFlag(user, :a) == (type == '+')
-                            return
-                        end
-
-                        Utils::User::setLevel(user, :a, (type == '+'))
+                        Utils::setFlags(thing, :a, type == '+')
 
                         output[:modes].push('a')
-                        output[:values].push(value)
-                    else
-                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                     end
 
                 when 'b'
@@ -1113,27 +1100,6 @@ class Base < Module
                         from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                     end
 
-                when 'q'
-                    if Utils::checkFlag(from, :can_give_channel_owner)
-                        value = values.shift
-
-                        if !(user = thing.users[value])
-                            from.send :numeric, ERR_NOSUCHNICK, value
-                            return
-                        end
-
-                        if Utils::checkFlag(user, :q) == (type == '+')
-                            return
-                        end
-
-                        Utils::User::setLevel(user, :q, (type == '+'))
-
-                        output[:modes].push('q')
-                        output[:values].push(value)
-                    else
-                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                    end
-
                 when 's'
                     if Utils::checkFlag(from, :can_change_secret_mode)
                         if Utils::checkFlag(thing, :s) == (type == '+')
@@ -1189,6 +1155,48 @@ class Base < Module
                         Utils::User::setLevel(user, :v, (type == '+'))
 
                         output[:modes].push('v')
+                        output[:values].push(value)
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'x'
+                    if Utils::checkFlag(from, :can_give_channel_owner)
+                        value = values.shift
+
+                        if !(user = thing.users[value])
+                            from.send :numeric, ERR_NOSUCHNICK, value
+                            return
+                        end
+
+                        if Utils::checkFlag(user, :x) == (type == '+')
+                            return
+                        end
+
+                        Utils::User::setLevel(user, :x, (type == '+'))
+
+                        output[:modes].push('x')
+                        output[:values].push(value)
+                    else
+                        from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                    end
+
+                when 'y'
+                    if Utils::checkFlag(from, :can_give_channel_admin)
+                        value = values.shift
+
+                        if !(user = thing.users[value])
+                            from.send :numeric, ERR_NOSUCHNICK, value
+                            return
+                        end
+
+                        if Utils::checkFlag(user, :y) == (type == '+')
+                            return
+                        end
+
+                        Utils::User::setLevel(user, :y, (type == '+'))
+
+                        output[:modes].push('y')
                         output[:values].push(value)
                     else
                         from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
@@ -1334,7 +1342,13 @@ class Base < Module
 
         user.client.channels.add(channel)
 
-        user.channel.send :raw, ":#{user.mask} JOIN :#{user.channel}"
+        if user.channel.modes[:anonymous]
+            mask = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+        else
+            mask = user.mask
+        end
+
+        user.channel.send :raw, ":#{mask} JOIN :#{user.channel}"
 
         if !user.channel.topic.nil?
             topic user.client, "TOPIC #{user.channel}"
@@ -1378,7 +1392,13 @@ class Base < Module
 
         text = eval(Utils::escapeMessage(@messages[:part]))
 
-        user.channel.send :raw, ":#{user.mask} PART #{user.channel} :#{text}"
+        if user.channel.modes[:anonymous]
+            mask = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+        else
+            mask = user.mask
+        end
+
+        user.channel.send :raw, ":#{mask} PART #{user.channel} :#{text}"
 
         user.channel.delete(user)
         user.client.channels.delete(user.channel.name)
@@ -1802,6 +1822,10 @@ class Base < Module
 
         if to.is_a?(IRC::User)
             name = to.channel.name
+
+            if to.channel.modes[:anonymous]
+                from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+            end
         elsif to.is_a?(IRC::Client)
             name = to.nick
         else
@@ -1838,6 +1862,10 @@ class Base < Module
 
         if to.is_a?(IRC::User)
             name = to.channel.name
+
+            if to.channel.modes[:anonymous]
+                from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+            end
         elsif to.is_a?(IRC::Client)
             name = to.nick
         else
@@ -1911,6 +1939,10 @@ class Base < Module
 
         if to.is_a?(IRC::User)
             name = to.channel.name
+
+            if to.channel.modes[:anonymous]
+                from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+            end
         elsif to.is_a?(IRC::Client)
             name = to.nick
         else
@@ -2019,6 +2051,10 @@ class Base < Module
 
         @toPing.delete(thing.socket)
         @pingedOut.delete(thing.socket)
+
+        thing.channels.select {|name, channel| channel.modes[:anonymous]}.each_value {|channel|
+            server.dispatcher.execute :part, channel.user(thing).clone, message
+        }
 
         thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
     end 
