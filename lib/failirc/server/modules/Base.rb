@@ -652,7 +652,10 @@ class Base < Module
         end
 
         if thing.modes[:encoding]
-            string.encode!(thing.modes[:encoding])
+            string.encode!(thing.modes[:encoding],
+                :invalid => :replace,
+                :undef   => :replace
+            )
         end
     end
 

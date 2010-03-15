@@ -382,6 +382,7 @@ class ConnectionDispatcher
         
                                 socket.close rescue nil
                             else
+                                output.force_encoding 'ASCII-8BIT'
                                 socket.write_nonblock "#{output}\r\n"
 
                                 @output.pop(socket)
