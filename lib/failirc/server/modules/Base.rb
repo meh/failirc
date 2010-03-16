@@ -1300,13 +1300,13 @@ class Base < Module
                 return
             end
 
-            if thing.channels[channel] && !@joining[thing]
-                return
-            end
-
-            @joining[thing] = true
-
             @semaphore.synchronize {
+                if thing.channels[channel] || @joining[thing]
+                    return
+                end
+
+                @joining[thing] = true
+
                 if !server.channels[channel]
                     channel = server.channels[channel] = Channel.new(server, channel)
                 else

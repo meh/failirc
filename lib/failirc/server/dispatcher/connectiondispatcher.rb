@@ -301,15 +301,15 @@ class ConnectionDispatcher
                             @input.push(socket, string)
                         }
                     rescue IOError
-                        server.kill thing, 'Input/output error'
+                        server.kill thing, 'Input/output error', true
                     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill thing, 'Client exited'
+                        server.kill thing, 'Client exited', true
                     rescue Errno::ECONNRESET
-                        server.kill thing, 'Connection reset by peer'
+                        server.kill thing, 'Connection reset by peer', true
                     rescue Errno::ETIMEDOUT
-                        server.kill thing, 'Ping timeout'
+                        server.kill thing, 'Ping timeout', true
                     rescue Errno::EHOSTUNREACH
-                        server.kill thing, 'No route to host'
+                        server.kill thing, 'No route to host', true
                     rescue Errno::EAGAIN
                     rescue Exception => e
                         self.debug e
@@ -389,13 +389,13 @@ class ConnectionDispatcher
                             end
                         end
                     rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill thing, 'Client exited'
+                        server.kill thing, 'Client exited', true
                     rescue Errno::ECONNRESET
-                        server.kill thing, 'Connection reset by peer'
+                        server.kill thing, 'Connection reset by peer', true
                     rescue Errno::ETIMEDOUT
-                        server.kill thing, 'Ping timeout'
+                        server.kill thing, 'Ping timeout', true
                     rescue Errno::EHOSTUNREACH
-                        server.kill thing, 'No route to host'
+                        server.kill thing, 'No route to host', true
                     rescue Errno::EAGAIN, IO::WaitWritable
                     rescue Exception => e
                         self.debug e
