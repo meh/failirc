@@ -158,7 +158,7 @@ class Server
 
     # kill connection with harpoons on fire
     def kill (thing, message=nil, force=false)
-        if !thing || thing.modes[:killing] || !@dispatcher.connections.exists?(thing.socket)
+        if !thing || (thing.modes[:killing] && !force) || !@dispatcher.connections.exists?(thing.socket)
             return
         end
 
