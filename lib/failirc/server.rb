@@ -169,7 +169,12 @@ class Server
         thing.modes[:killing] = true
 
         if force
-            @dispatcher.output.clear(thing)
+            tmp = @dispatcher.output[thing].drop_while {|item|
+                item != :EOC
+            }
+
+            @dispatcher.output[thing].clear
+            @dispatcher.output[thing].insert(-1, *tmp)
         end
 
         @dispatcher.output.push(thing, :EOC)

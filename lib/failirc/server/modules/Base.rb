@@ -578,11 +578,11 @@ class Base < Module
             return result
         end
 
-        def self.dispatchMessage (from, to, message, level=nil)
+        def self.dispatchMessage (kind, from, to, message, level=nil)
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-                from.server.dispatcher.execute :ctcp, :input, from, to, match[1], (match[2] ? match[3] : nil), level
+                from.server.dispatcher.execute :ctcp, :input, kind, from, to, match[1], (match[2] ? match[3] : nil), level
             else
-                from.server.dispatcher.execute :message, :input, from, to, message, level
+                from.server.dispatcher.execute kind, :input, from, to, message, level
             end
         end
 
@@ -1314,8 +1314,7 @@ class Base < Module
                 end
             }
 
-            if !channel.modes[:type]
-                channel.modes[:type]       = channel.name[0, 1]
+            if !channel.modes[:bans]
                 channel.modes[:bans]       = []
                 channel.modes[:exceptions] = []
                 channel.modes[:invites]    = []
@@ -1800,12 +1799,12 @@ class Base < Module
             end
 
             if thing.is_a?(IRC::User)
-                Utils::dispatchMessage(thing, channel, message, level)
+                Utils::dispatchMessage(:message, thing, channel, message, level)
             else
                 if server.channels[receiver].modes[:no_external_messages]
                     thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
                 else
-                    Utils::dispatchMessage(thing, channel, message, level)
+                    Utils::dispatchMessage(:message, thing, channel, message, level)
                 end
             end
         else
@@ -1814,7 +1813,7 @@ class Base < Module
             if !client
                 thing.send :numeric, ERR_NOSUCHNICK, receiver
             else
-                Utils::dispatchMessage(thing, client, message)
+                Utils::dispatchMessage(:message, thing, client, message)
             end
         end
     end
@@ -1859,7 +1858,7 @@ class Base < Module
         to.send :raw, ":#{from} PRIVMSG #{name} :#{if level then "#{level}} " end}#{message}"
     end
 
-    def received_ctcp (chain, from, to, type, message, level)
+    def received_ctcp (chain, kind, from, to, type, message, level)
         if chain != :input
             return
         end
@@ -1871,15 +1870,15 @@ class Base < Module
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :ctcp, :output, from, user, type, message, level
+                    server.dispatcher.execute :ctcp, :output, kind, from, user, type, message, level
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            server.dispatcher.execute :ctcp, :output, from, to, type, message, level
+            server.dispatcher.execute :ctcp, :output, kind, from, to, type, message, level
         end
     end
 
-    def send_ctcp (chain, from, to, type, message, level)
+    def send_ctcp (chain, kind, from, to, type, message, level)
         if chain != :output
             return
         end
@@ -1902,7 +1901,15 @@ class Base < Module
             text = type
         end
 
-        to.send :raw, ":#{from} PRIVMSG #{name} :\x01#{text}\x01"
+        if kind == :message
+            kind = 'PRIVMSG'
+        elsif kind == :notice
+            kind = 'NOTICE'
+        end
+
+        if kind.is_a?(String)
+            to.send :raw, ":#{from} #{kind} #{name} :\x01#{text}\x01"
+        end
     end
 
     def notice (thing, string)
@@ -1916,7 +1923,7 @@ class Base < Module
         message = match[2]
 
         if client = server.clients[name]
-            server.dispatcher.execute :notice, :input, thing, client, message
+            Utils::dispatchMessage(:notice, thing, client, message)
         else
             if Utils::User::isLevel(level = name[0, 1])
                 channel = name[1, name.length]
@@ -1931,7 +1938,7 @@ class Base < Module
             end
 
             if !channel.modes[:no_external_messages] || channel.user(thing)
-                server.dispatcher.execute :notice, :input, thing, channel, message, level
+                Utils::dispatchMessage(:notice, thing, channel, message, level)
             end
         end
     end
@@ -1956,7 +1963,7 @@ class Base < Module
         end
     end
 
-    def send_notice (chain, from, to, message, level)
+    def send_notice (chain, from, to, message, level=nil)
         if chain != :output
             return
         end

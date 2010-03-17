@@ -106,46 +106,34 @@ class ConnectionDispatcher
             @data   = ThreadSafeHash.new
         end
 
-        def push (socket, string)
+        def [] (socket)
             if socket.is_a?(Client) || socket.is_a?(User)
                 socket = socket.socket
             end
 
-            if !@data.has_key?(socket)
+            if !@data[socket].is_a?(Array)
                 @data[socket] = []
             end
 
+            @data[socket]
+        end
+
+        def push (socket, string)
             if string.is_a?(String)
                 string.lstrip!
             end
 
-            if (string && !string.empty?) || @data[socket].first == :EOC
-                @data[socket].push(string)
+            if (string && !string.empty?) || [socket].last == :EOC
+                self[socket].push(string)
             end
         end
 
         def pop (socket)
-            if socket.is_a?(Client) || socket.is_a?(User)
-                socket = socket.socket
-            end
-
-            if !@data.has_key?(socket)
-                @data[socket] = []
-            end
-
-            @data[socket].shift
+            self[socket].shift
         end
 
         def clear (socket)
-            if socket.is_a?(Client) || socket.is_a?(User)
-                socket = socket.socket
-            end
-
-            if !@data.has_key?(socket)
-                @data[socket] = []
-            end
-
-            @data[socket].clear
+            self[socket].clear
         end
 
         def delete (socket)
@@ -157,15 +145,11 @@ class ConnectionDispatcher
         end
 
         def first (socket)
-            if socket.is_a?(Client) || socket.is_a?(User)
-                socket = socket.socket
-            end
+            self[socket].first
+        end
 
-            if !@data.has_key?(socket)
-                @data[socket] = []
-            end
-           
-            return @data[socket].first
+        def last (socket)
+            self[socket].last
         end
 
         def empty? (socket=nil)
@@ -323,11 +307,6 @@ class ConnectionDispatcher
 
     def handle
         @input.each {|socket|
-            if socket.closed?
-                server.kill @connections.things[socket], 'Ping timeout', true
-                return
-            end
-
             if dispatcher.event.handling[socket] || @input.empty?(socket)
                 next
             end

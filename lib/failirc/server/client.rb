@@ -75,7 +75,6 @@ class Client
 
     def raw (text)
         @server.dispatcher.dispatch :output, self, text
-
         @server.dispatcher.connection.output.push @socket, text
     end
 
