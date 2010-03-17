@@ -1356,9 +1356,12 @@ class Base < Module
                 next
             end
 
+            jump = false
+
             @semaphore.synchronize {
                 if thing.channels[channel] || @joining[thing]
-                    next
+                    jump = true
+                    break
                 end
 
                 @joining[thing] = true
@@ -1369,6 +1372,10 @@ class Base < Module
                     channel = server.channels[channel]
                 end
             }
+
+            if jump
+                next
+            end
 
             if !channel.modes[:bans]
                 channel.modes[:bans]       = []
