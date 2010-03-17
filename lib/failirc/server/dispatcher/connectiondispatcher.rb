@@ -267,15 +267,7 @@ class ConnectionDispatcher
                     thing = @connections.things[socket]
 
                     begin
-                        input = String.new
-
-                        begin
-                            socket.read_nonblock 2048, input
-                        rescue Errno::EAGAIN, IO::WaitReadable
-                            if !input || input.empty?
-                                raise Errno::EAGAIN
-                            end
-                        end
+                        input = socket.read_nonblock 2048
 
                         if !input || input.empty?
                             raise Errno::EPIPE
@@ -284,9 +276,7 @@ class ConnectionDispatcher
                         input.split(/[\r\n]+/).each {|string|
                             @input.push(socket, string)
                         }
-                    rescue IOError
-                        server.kill thing, 'Input/output error', true
-                    rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+                    rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
                         server.kill thing, 'Client exited', true
                     rescue Errno::ECONNRESET
                         server.kill thing, 'Connection reset by peer', true
@@ -294,7 +284,7 @@ class ConnectionDispatcher
                         server.kill thing, 'Ping timeout', true
                     rescue Errno::EHOSTUNREACH
                         server.kill thing, 'No route to host', true
-                    rescue Errno::EAGAIN
+                    rescue Errno::EAGAIN, IO::WaitReadable
                     rescue Exception => e
                         self.debug e
                     end
@@ -327,13 +317,15 @@ class ConnectionDispatcher
 
     def write (timeout=0)
         begin
-            none, writing = IO::select nil, @connections.sockets.map {|item| if !@output.empty?(item) then item end}.compact, nil, timeout
+            none, writing = IO::select nil, @connections.sockets, nil, timeout
 
             if writing
                 writing.each {|socket|
-                    thing = @connections.things[socket]
+                    if @output.empty?(socket)
+                        next
+                    end
 
-                    if !thing
+                    if !(thing = @connections.things[socket])
                         next
                     end
 

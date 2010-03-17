@@ -44,22 +44,25 @@ class Base < Module
                 :can_change_no_external_messages_mode, :can_change_secret_mode,
                 :can_change_ssl_mode, :can_change_moderated_mode,
                 :can_change_invite_only_mode, :can_change_auditorium_mode,
-                :can_change_anonymous_mode,
+                :can_change_anonymous_mode, :can_change_limit_mode,
+                :can_change_redirect_mode,
             ],
 
             :can_change_user_modes => [
                 :can_give_channel_operator, :can_give_channel_half_operator,
-                :can_give_voice, :can_change_user_extended_modes
+                :can_give_voice, :can_change_user_extended_modes,
             ],
 
             :can_change_client_modes => [
-                :can_change_client_extended_modes
+                :can_change_client_extended_modes,
             ],
         },
 
         :channel => {
             :a => :anonymous,
             :i => :invite_only,
+            :l => :limit,
+            :L => :redirect,
             :m => :moderated,
             :n => :no_external_messages,
             :s => :secret,
@@ -146,8 +149,7 @@ class Base < Module
                 # people who didn't answer with a PONG has to YIFF IN HELL.
                 @pingedOut.each_value {|client|
                     if !client.socket.closed?
-                        server.dispatcher.execute :error, client, 'Ping timeout', :close
-                        server.kill client, 'Ping timeout'
+                        server.kill client, 'Ping timeout', true
                     end
                 }
 
@@ -1025,6 +1027,60 @@ class Base < Module
                     Utils::setFlags(thing, :i, type == '+')
 
                     output[:modes].push('i')
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'l'
+                if Utils::checkFlag(from, :can_change_limit_mode)
+                    if (!Utils::checkFlag(thing, :l) && type == '-') || (Utils::checkFlag(thing, :l) && type == '+')
+                        return
+                    end
+
+                    if type == '+'
+                        value = values.shift
+
+                        if !value.match(/^\d+$/)
+                            return
+                        end
+
+                        Utils::setFlags(thing, :l, value)
+
+                        output[:modes].push('l')
+                        output[:values].push(value)
+                    else
+                        Utils::setFlags(thing, :l, false)
+
+                        output[:modes].push('l')
+                    end
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'L'
+                if Utils::checkFlag(from, :can_change_redirect_mode)
+                    if (!Utils::checkFlag(thing, :L) && type == '-') || (Utils::checkFlag(thing, :L) && type == '+')
+                        return
+                    end
+
+                    if type == '+'
+                        value = values.shift
+
+                        if !Utils::Channel::isValid(value)
+                            return
+                        end
+
+                        Utils::setFlag(thing, :L, value)
+
+                        output[:modes].push('L')
+                        output[:values].push(value)
+                    else
+                        Utils::setFlag(thing, :L, false)
+
+                        output[:modes].push('L')
+                    end
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
 
             when 'm'
@@ -1297,12 +1353,12 @@ class Base < Module
 
             if !Utils::Channel::isValid(channel)
                 thing.send :numeric, ERR_BADCHANMASK, channel
-                return
+                next
             end
 
             @semaphore.synchronize {
                 if thing.channels[channel] || @joining[thing]
-                    return
+                    next
                 end
 
                 @joining[thing] = true
@@ -1327,24 +1383,41 @@ class Base < Module
                 password = ''
             end
 
+            if channel.modes[:l]
+                if channel.users.length >= channel.modes[:l]
+                    if channel.modes[:L]
+                        join thing, "JOIN #{channel.modes[:L]}"
+                    else
+                        thing.send :numeric, ERR_CHANNELISFULL, channel.name
+                    end
+
+                    @joining.delete(thing)
+                    next
+                end
+            end
+
             if channel.modes[:ssl_only] && !thing.modes[:ssl]
                 thing.send :numeric, ERR_SSLREQUIRED, channel.name
-                return
+                @joining.delete(thing)
+                next
             end
 
             if channel.modes[:password] && password != channel.modes[:password]
                 thing.send :numeric, ERR_BADCHANNELKEY, channel
-                return 
+                @joining.delete(thing)
+                next
             end
 
             if channel.modes[:invite_only] && !Utils::Channel::invited?(channel, thing, true)
                 thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
-                return
+                @joining.delete(thing)
+                next
             end
 
             if Utils::Channel::banned?(channel, thing) && !Utils::Channel::invited?(channel, thing)
                 thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
-                return
+                @joining.delete(thing)
+                next
             end
 
             server.dispatcher.execute(:join, thing, channel)

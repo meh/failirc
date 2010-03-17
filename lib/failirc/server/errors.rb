@@ -230,7 +230,7 @@ ERR_KEYSET = {
 
 ERR_CHANNELISFULL = {
     :code => 471,
-    :text => '"#{channel.name} :Cannot join channel (+l)"'
+    :text => '"#{value} :Cannot join channel (+l)"'
 }
 
 ERR_UNKNOWNMODE = {
