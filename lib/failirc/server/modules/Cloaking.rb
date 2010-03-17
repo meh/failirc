@@ -28,16 +28,52 @@ class Cloaking < Module
         @aliases = {
             :output => {
                 :NAMES => /:.*? 353 /,
-            }
+            },
+
+            :input => {
+                :DISGUISEAS => /^DISGUISEAS( |$)/i,
+            },
         }
 
         @events = {
+            :custom => {
+                :message => Event::Callback.new(self.method(:received_message), -100),
+            },
+
             :output => {
-                :NAMES => Event::Callback.new(self.method(:hide), -9001),
-            }
+                :NAMES => Event::Callback.new(self.method(:hide), -100),
+            },
+
+            :input => {
+                :DISGUISEAS => self.method(:disguiseas),
+            },
         }
 
+        @disguises = {}
+
         super(server)
+    end
+
+    def disguiseas (thing, string)
+        match = string.match(/DISGUISEAS\s+(.+?)$/i)
+
+        if !match
+            @disguises.delete(thing)
+        else
+            @disguises[thing] = match[1].strip
+        end
+    end
+
+    def received_message (chain, from, to, message, level=nil)
+        if chain != :input
+            return
+        end
+
+        client = from.value
+
+        if client.modes[:operator] && (tmp = server.clients[@disguises[client]])
+            from.value = tmp
+        end
     end
 
     def hide (thing, string)

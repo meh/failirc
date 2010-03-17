@@ -515,7 +515,7 @@ class Base < Module
         end
 
         # This method assigns flags recursively using groups of flags
-        def self.setFlags (thing, type, value, inherited=false)
+        def self.setFlags (thing, type, value, inherited=false, forceFalse=false)
             if Base.modes[:groups][type]
                 main = Base.modes[:groups]
             else
@@ -548,7 +548,7 @@ class Base < Module
 
             modes.each {|mode|
                 if (main[mode] || Base.modes[:groups][mode]) && !thing.modes.has_key?(mode)
-                    self.setFlags(thing, mode, value, true)
+                    self.setFlags(thing, mode, value, !forceFalse)
                 else
                     if value == false
                         if !main.has_key?(mode)
@@ -581,10 +581,14 @@ class Base < Module
         end
 
         def self.dispatchMessage (kind, from, to, message, level=nil)
+            if from.is_a?(IRC::User)
+                from = from.client
+            end
+
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-                from.server.dispatcher.execute :ctcp, :input, kind, from, to, match[1], (match[2] ? match[3] : nil), level
+                from.server.dispatcher.execute :ctcp, :input, kind, ref{:from}, ref{:to}, match[1], (match[2] ? match[3] : nil), level
             else
-                from.server.dispatcher.execute kind, :input, from, to, message, level
+                from.server.dispatcher.execute kind, :input, ref{:from}, ref{:to}, message, level
             end
         end
 
@@ -1347,6 +1351,8 @@ class Base < Module
         passwords = (match[3] || '').split(/,/)
 
         channels.each {|channel|
+            channel.strip!
+
             if !Utils::Channel::type(channel)
                 channel = "##{channel}"
             end
@@ -1392,13 +1398,14 @@ class Base < Module
 
             if channel.modes[:l]
                 if channel.users.length >= channel.modes[:l]
+                    @joining.delete(thing)
+
                     if channel.modes[:L]
                         join thing, "JOIN #{channel.modes[:L]}"
                     else
                         thing.send :numeric, ERR_CHANNELISFULL, channel.name
                     end
 
-                    @joining.delete(thing)
                     next
                 end
             end
@@ -1668,25 +1675,24 @@ class Base < Module
 
         channel = match[1].strip
 
-        if thing.channels[channel]
+        if channel = thing.channels[channel]
             users = String.new
+            thing = channel.user(thing)
 
-            if thing.channels[channel].modes[:auditorium]
-                thing.channels[channel].users.each_value {|user|
+            channel.users.each_value {|user|
+                if channel.modes[:auditorium] && !Utils::User::isLevelEnough(thing, '%') && !Utils::checkFlag(thing, :operator)
                     if user.modes[:level]
                         users << " #{user}"
                     end
-                }
-            else
-                thing.channels[channel].users.each_value {|user|
+                else
                     users << " #{user}"
-                }
-            end
+                end
+            }
 
             users = users[1, users.length]
 
             thing.send :numeric, RPL_NAMREPLY, {
-                :channel => channel,
+                :channel => channel.name,
                 :users   => users,
             }
         end
@@ -1898,30 +1904,32 @@ class Base < Module
         end
     end
 
-    def received_message (chain, from, to, message, level=nil)
+    def received_message (chain, fromRef, toRef, message, level=nil)
         if chain != :input
             return
         end
 
-        if from.is_a?(IRC::User)
-            from = from.client
-        end
+        from = fromRef.value
+        to   = toRef.value
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :message, :output, from, user, message, level
+                    server.dispatcher.execute :message, :output, fromRef, ref{:user}, message, level
                 end
             }
         elsif to.is_a?(Client)
-            to.send :raw, ":#{from} PRIVMSG #{to.nick} :#{message}"
+            server.dispatcher.execute :message, :output, fromRef, toRef, message
         end
     end
 
-    def send_message (chain, from, to, message, level=nil)
+    def send_message (chain, fromRef, toRef, message, level=nil)
         if chain != :output
             return
         end
+
+        from = fromRef.value
+        to   = toRef.value
 
         if to.is_a?(IRC::User)
             name = to.channel.name
@@ -1938,30 +1946,32 @@ class Base < Module
         to.send :raw, ":#{from} PRIVMSG #{name} :#{if level then "#{level}} " end}#{message}"
     end
 
-    def received_ctcp (chain, kind, from, to, type, message, level)
+    def received_ctcp (chain, kind, fromRef, toRef, type, message, level)
         if chain != :input
             return
         end
 
-        if from.is_a?(IRC::User)
-            from = from.client
-        end
+        from = fromRef.value
+        to   = toRef.value
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :ctcp, :output, kind, from, user, type, message, level
+                    server.dispatcher.execute :ctcp, :output, kind, fromRef, ref{:user}, type, message, level
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            server.dispatcher.execute :ctcp, :output, kind, from, to, type, message, level
+            server.dispatcher.execute :ctcp, :output, kind, fromRef, toRef, type, message, level
         end
     end
 
-    def send_ctcp (chain, kind, from, to, type, message, level)
+    def send_ctcp (chain, kind, fromRef, toRef, type, message, level)
         if chain != :output
             return
         end
+
+        from = fromRef.value
+        to   = toRef.value
 
         if to.is_a?(IRC::User)
             name = to.channel.name
@@ -2023,30 +2033,32 @@ class Base < Module
         end
     end
 
-    def received_notice (chain, from, to, message, level=nil)
+    def received_notice (chain, fromRef, toRef, message, level=nil)
         if chain != :input
             return
         end
 
-        if from.is_a?(IRC::User)
-            from = from.client
-        end
+        from = fromRef.value
+        to   = toRef.value
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :notice, :output, from, user, message, level
+                    server.dispatcher.execute :notice, :output, fromRef, ref{:user}, message, level
                 end
             }
         elsif to.is_a?(Client)
-            server.dispatcher.execute :notice, :output, from, to, message, level
+            server.dispatcher.execute :notice, :output, fromRef, toRef, message, level
         end
     end
 
-    def send_notice (chain, from, to, message, level=nil)
+    def send_notice (chain, fromRef, toRef, message, level=nil)
         if chain != :output
             return
         end
+
+        from = fromRef.value
+        to   = toRef.value
 
         if to.is_a?(IRC::User)
             name = to.channel.name
@@ -2102,7 +2114,7 @@ class Base < Module
         server.config.elements['config/operators'].elements.each('operator') {|element|
             if mask.match(element.attributes['mask']) && password == element.attributes['password']
                 element.attributes['flags'].split(/,/).each {|flag|
-                    Utils::setFlags(thing, flag.to_sym, true)
+                    Utils::setFlags(thing, flag.to_sym, true, false, true)
                 }
 
                 thing.modes[:message] = 'is an IRC operator'

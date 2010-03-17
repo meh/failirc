@@ -17,11 +17,23 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-class String
-    def assign! (string)
-        self.sub!(/^.*$/m, string)
-        self
+class Reference
+    def initialize (name, vars)
+        @getter = eval "lambda { #{name} }", vars
+        @setter = eval "lambda { |v| #{name} = v }", vars
     end
+    
+    def value
+        @getter.call
+    end
+    
+    def value= (newValue)
+        @setter.call(newValue)    
+    end
+end
+
+def ref (&block)
+    Reference.new(block.call, block.binding)
 end
 
 class CaseInsensitiveHash < Hash

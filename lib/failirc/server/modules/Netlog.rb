@@ -35,10 +35,13 @@ class Netlog < Module
         super(server)
     end
 
-    def netlog (chain, from, to, message, level=nil)
+    def netlog (chain, fromRef, toRef, message, level=nil)
         if chain != :input
             return
         end
+
+        from = fromRef.value
+        to   = toRef.value
 
         URI.extract(message).each {|uri|
             if match = uri.match('http://(beta\.)?(\w+?)\.netlog.com.*?photo.*?(\d+)')

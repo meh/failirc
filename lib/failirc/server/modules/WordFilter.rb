@@ -55,10 +55,13 @@ class WordFilter < Module
         end
     end
 
-    def filter (chain, from, to, message, level=nil)
+    def filter (chain, fromRef, toRef, message, level=nil)
         if chain != :input
             return
         end
+
+        from = fromRef.value
+        to   = toRef.value
 
         if to.is_a?(Channel)
             channel = to.modes
@@ -93,7 +96,7 @@ class WordFilter < Module
             position += 1
         }
 
-        string.assign!(result)
+        string.replace result
     end
 
     def self.color (char)

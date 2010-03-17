@@ -52,10 +52,13 @@ class TinyURL < Module
         end
     end
 
-    def tinyurl (chain, from, to, message, level=nil)
+    def tinyurl (chain, fromRef, toRef, message, level=nil)
         if chain != :input
             return
         end
+
+        from = fromRef.value
+        to   = toRef.value
 
         URI.extract(message).each {|uri|
             if uri.length <= @length
