@@ -1660,9 +1660,10 @@ class Base < Module
 
         if !server.channels[channel]
             thing.send :numeric, ERR_NOSUCHCHANNEL, channel
-        else
-            channel = channel
+            return
         end
+
+        channel = server.channels[channel]
 
         if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel.name] && !Utils::checkFlag(thing, :operator)
             thing.send :numeric, ERR_NOTONCHANNEL, channel
@@ -1687,7 +1688,7 @@ class Base < Module
     end
 
     def topic_change (channel, topic, fromRef)
-        channel.topic = [from.value, topic]
+        channel.topic = [fromRef.value, topic]
 
         channel.send :raw, ":#{channel.topic.setBy} TOPIC #{channel} :#{channel.topic}"
     end
