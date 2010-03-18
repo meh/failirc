@@ -38,6 +38,10 @@ class Cloaking < Module
         @events = {
             :custom => {
                 :message => Event::Callback.new(self.method(:received_message), -100),
+                :notice  => Event::Callback.new(self.method(:received_notice), -100),
+                :ctcp    => Event::Callback.new(self.method(:received_ctcp), -100),
+
+                :topic_change => Event::Callback.new(self.method(:topic_change), -100),
             },
 
             :output => {
@@ -60,20 +64,54 @@ class Cloaking < Module
         if !match
             @disguises.delete(thing)
         else
-            @disguises[thing] = match[1].strip
+            mask = match[1].strip
+
+            if mask.match(/^.+!.+@.+$/)
+                @disguises[thing] = Mask::parse(mask)
+            else
+                @disguises[thing] = mask
+            end
         end
     end
 
-    def received_message (chain, from, to, message, level=nil)
+    def disguise (fromRef)
+        from = fromRef.value
+
+        if from.modes[:operator]
+            if @disguises[from].is_a?(Mask)
+                fromRef.value = Client.new(server, @disguises[from])
+            elsif tmp = server.clients[@disguises[from]]
+                fromRef.value = tmp
+            end
+        end
+    end
+
+    def received_message (chain, fromRef, toRef, message, level=nil)
         if chain != :input
             return
         end
 
-        client = from.value
+        disguise(fromRef)
+    end
 
-        if client.modes[:operator] && (tmp = server.clients[@disguises[client]])
-            from.value = tmp
+    def received_notice (chain, fromRef, toRef, message, level=nil)
+        if chain != :input
+            return
         end
+
+        disguise(fromRef)
+    end
+
+    def received_ctcp (chain, kind, fromRef, toRef, type, message, level)
+        if chain != :input
+            return
+        end
+
+        disguise(fromRef)
+    end
+
+    def topic_change (channel, topic, fromRef)
+        disguise(fromRef)
     end
 
     def hide (thing, string)

@@ -214,11 +214,11 @@ class Base < Module
                 :whois => self.method(:send_whois),
 
                 :message => [self.method(:received_message), self.method(:send_message)],
-                :ctcp    => [self.method(:received_ctcp), self.method(:send_ctcp)],
                 :notice  => [self.method(:received_notice), self.method(:send_notice)],
+                :ctcp    => [self.method(:received_ctcp), self.method(:send_ctcp)],
                 :error   => self.method(:send_error),
 
-                :topic_change => self.method(:send_topic),
+                :topic_change => self.method(:topic_change),
 
                 :mode => [self.method(:normal_mode), self.method(:extended_mode)],
             },
@@ -1314,18 +1314,37 @@ class Base < Module
     end
 
     def encoding (thing, string)
-        match = string.match(/ENCODING\s+(.+)$/i)
+        match = string.match(/ENCODING\s+(.+?)(\s+(.+))?$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'ENCODING'
             return
         end
 
-        name = match[1].strip
+        if match[2]
+            nick = match[1].strip
+            name = match[3].strip
+        else
+            nick = nil
+            name = match[1].strip
+        end
 
         begin
             "".encode(name)
-            thing.modes[:encoding] = name
+
+            if nick
+                if Utils::checkFlag(thing, :operator)
+                    if client = server.clients[nick]
+                        client.modes[:encoding] = name
+                    else
+                        thing.send :numeric, ERR_NOSUCHNICK, nick
+                    end
+                else
+                    thing.send :numeric, ERR_NOPRIVILEGES
+                end
+            else
+                thing.modes[:encoding] = name
+            end
         rescue Encoding::ConverterNotFoundError
             server.dispatcher.execute(:error, thing, "#{name} is not a valid encoding.")
         end
@@ -1639,29 +1658,37 @@ class Base < Module
 
         channel = match[1].strip
 
-        if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel]
-            thing.send :numeric, ERR_NOTONCHANNEL, server.channels[channel]
+        if !server.channels[channel]
+            thing.send :numeric, ERR_NOSUCHCHANNEL, channel
+        else
+            channel = channel
+        end
+
+        if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel.name] && !Utils::checkFlag(thing, :operator)
+            thing.send :numeric, ERR_NOTONCHANNEL, channel
         else
             if match[2]
                 topic = match[3].to_s
 
-                if thing.channels[channel].modes[:t] && !Utils::checkFlag(thing.channels[channel].user(thing), :can_change_topic)
-                    thing.send :numeric, ERR_CHANOPRIVSNEEDED, server.channels[channel]
+                if channel.modes[:t] && !Utils::checkFlag(channel.user(thing), :can_change_topic)
+                    thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
                 else
-                    thing.channels[channel].topic = [thing, topic]
+                    server.dispatcher.execute :topic_change, channel, topic, ref{:thing}
                 end
             else
-                if thing.channels[channel].topic.nil?
-                    thing.send :numeric, RPL_NOTOPIC, server.channels[channel]
+                if !channel.topic
+                    thing.send :numeric, RPL_NOTOPIC, channel
                 else
-                    thing.send :numeric, RPL_TOPIC, server.channels[channel].topic
-                    thing.send :numeric, RPL_TOPICSETON, thing.channels[channel].topic
+                    thing.send :numeric, RPL_TOPIC, channel.topic
+                    thing.send :numeric, RPL_TOPICSETON, channel.topic
                 end
             end
         end
     end
 
-    def send_topic (channel)
+    def topic_change (channel, topic, fromRef)
+        channel.topic = [from.value, topic]
+
         channel.send :raw, ":#{channel.topic.setBy} TOPIC #{channel} :#{channel.topic}"
     end
 
@@ -1946,62 +1973,6 @@ class Base < Module
         to.send :raw, ":#{from} PRIVMSG #{name} :#{if level then "#{level}} " end}#{message}"
     end
 
-    def received_ctcp (chain, kind, fromRef, toRef, type, message, level)
-        if chain != :input
-            return
-        end
-
-        from = fromRef.value
-        to   = toRef.value
-
-        if to.is_a?(Channel)
-            to.users.each_value {|user|
-                if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :ctcp, :output, kind, fromRef, ref{:user}, type, message, level
-                end
-            }
-        elsif to.is_a?(Client) || to.is_a?(User)
-            server.dispatcher.execute :ctcp, :output, kind, fromRef, toRef, type, message, level
-        end
-    end
-
-    def send_ctcp (chain, kind, fromRef, toRef, type, message, level)
-        if chain != :output
-            return
-        end
-
-        from = fromRef.value
-        to   = toRef.value
-
-        if to.is_a?(IRC::User)
-            name = to.channel.name
-
-            if to.channel.modes[:anonymous]
-                from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
-            end
-        elsif to.is_a?(IRC::Client)
-            name = to.nick
-        else
-            return
-        end
-
-        if message
-            text = "#{type} #{message}"
-        else
-            text = type
-        end
-
-        if kind == :message
-            kind = 'PRIVMSG'
-        elsif kind == :notice
-            kind = 'NOTICE'
-        end
-
-        if kind.is_a?(String)
-            to.send :raw, ":#{from} #{kind} #{name} :\x01#{text}\x01"
-        end
-    end
-
     def notice (thing, string)
         match = string.match(/NOTICE\s+(.*?)\s+:(.*)$/i)
 
@@ -2073,6 +2044,62 @@ class Base < Module
         end
 
         to.send :raw, ":#{from} NOTICE #{name} :#{message}"
+    end
+
+    def received_ctcp (chain, kind, fromRef, toRef, type, message, level)
+        if chain != :input
+            return
+        end
+
+        from = fromRef.value
+        to   = toRef.value
+
+        if to.is_a?(Channel)
+            to.users.each_value {|user|
+                if user.client != from && Utils::User::isLevelEnough(user, level)
+                    server.dispatcher.execute :ctcp, :output, kind, fromRef, ref{:user}, type, message, level
+                end
+            }
+        elsif to.is_a?(Client) || to.is_a?(User)
+            server.dispatcher.execute :ctcp, :output, kind, fromRef, toRef, type, message, level
+        end
+    end
+
+    def send_ctcp (chain, kind, fromRef, toRef, type, message, level)
+        if chain != :output
+            return
+        end
+
+        from = fromRef.value
+        to   = toRef.value
+
+        if to.is_a?(IRC::User)
+            name = to.channel.name
+
+            if to.channel.modes[:anonymous]
+                from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+            end
+        elsif to.is_a?(IRC::Client)
+            name = to.nick
+        else
+            return
+        end
+
+        if message
+            text = "#{type} #{message}"
+        else
+            text = type
+        end
+
+        if kind == :message
+            kind = 'PRIVMSG'
+        elsif kind == :notice
+            kind = 'NOTICE'
+        end
+
+        if kind.is_a?(String)
+            to.send :raw, ":#{from} #{kind} #{name} :\x01#{text}\x01"
+        end
     end
 
     def send_error (thing, message, type=nil)

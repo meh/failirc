@@ -68,6 +68,8 @@ class WordFilter < Module
 
             if user = to.user(from)
                 user = user.modes
+            else
+                user = Modes.new
             end
         else
             channel = Modes.new

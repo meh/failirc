@@ -42,8 +42,6 @@ class Channel
                 @text  = value
                 @setOn = Time.now
             }
-
-            @server.dispatcher.execute(:topic_change, @channel)
         end
 
         def setBy= (value)

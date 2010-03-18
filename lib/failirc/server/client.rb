@@ -31,24 +31,27 @@ class Client
     attr_writer   :quitting
     attr_accessor :password, :ip, :realName
 
-    def initialize (server, socket, listen)
+    def initialize (server, socket, listen=nil)
         @server = server
         @socket = socket
         @listen = listen
-
-        @host = socket.peeraddr[2]
-        @ip   = socket.peeraddr[3]
 
         @registered = false
 
         @channels = Channels.new(@server)
         @modes    = Modes.new
 
-        if listen.attributes['ssl'] == 'enabled'
+        if listen && listen.attributes['ssl'] == 'enabled'
             @modes[:ssl] = true
         end
 
-        @mask = Mask.new
+        if socket.is_a?(Mask)
+            @mask = socket
+        else
+            @mask = Mask.new
+            host = socket.peeraddr[2]
+            ip   = socket.peeraddr[3]
+        end
 
         @connectedOn = Time.now
     end
