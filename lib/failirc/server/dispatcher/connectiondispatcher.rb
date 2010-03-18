@@ -276,7 +276,9 @@ class ConnectionDispatcher
                         input.split(/[\r\n]+/).each {|string|
                             @input.push(socket, string)
                         }
-                    rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+                    rescue IOError
+                        server.kill thing, 'Input/output error', true
+                    rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
                         server.kill thing, 'Client exited', true
                     rescue Errno::ECONNRESET
                         server.kill thing, 'Connection reset by peer', true
@@ -364,7 +366,9 @@ class ConnectionDispatcher
                                 @output.pop(socket)
                             end
                         end
-                    rescue IOError, Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+                    rescue IOError
+                        server.kill thing, 'Input/output error', true
+                    rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
                         server.kill thing, 'Client exited', true
                     rescue Errno::ECONNRESET
                         server.kill thing, 'Connection reset by peer', true
