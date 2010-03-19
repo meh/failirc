@@ -299,6 +299,11 @@ class ConnectionDispatcher
 
     def handle
         @input.each {|socket|
+            if socket.closed?
+                server.kill @connections.things[socket], 'Ping timeout', true
+                next
+            end
+
             if dispatcher.event.handling[socket] || @input.empty?(socket)
                 next
             end
