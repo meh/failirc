@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -22,6 +22,8 @@ require 'failirc/server/clients'
 require 'failirc/server/channel'
 
 module IRC
+
+class Server
 
 class Channels < ThreadSafeHash
     attr_reader :server
@@ -75,6 +77,8 @@ class Channels < ThreadSafeHash
 
         return result[1, result.length]
     end
+end
+
 end
 
 end

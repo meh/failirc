@@ -17,9 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server'
-require 'failirc/client'
+require 'resolv'
+
+require 'rexml/document'
+include REXML
+
+require 'failirc'
+require 'failirc/extensions'
 
 module IRC
-    VERSION = '0.0.1'
+
+class Client
+
+end
+
 end

@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -17,13 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/extensions'
-require 'failirc/server/module'
 require 'net/http'
 require 'uri'
 require 'timeout'
 
+require 'failirc/extensions'
+require 'failirc/server/module'
+
 module IRC
+
+class Server
 
 module Modules
 
@@ -86,6 +89,8 @@ class TinyURL < Module
             return nil
         end
     end
+end
+
 end
 
 end

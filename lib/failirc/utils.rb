@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #

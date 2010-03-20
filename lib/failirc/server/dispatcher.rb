@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -22,6 +22,8 @@ require 'failirc/server/dispatcher/eventdispatcher'
 
 module IRC
 
+class Server
+
 class Dispatcher
     include Utils
 
@@ -32,6 +34,9 @@ class Dispatcher
 
         @connection = ConnectionDispatcher.new(self)
         @event      = EventDispatcher.new(self)
+
+        @intervals = {}
+        @timeouts  = {}
     end
 
     def start
@@ -74,6 +79,8 @@ class Dispatcher
                 Fiber.yield
             end
         }
+
+        @defaults = [@listening, @reading, @handling, @writing]
         
         self.loop
     end
@@ -94,14 +101,75 @@ class Dispatcher
 
     def loop
         while true
-            [@listening, @reading, @handling, @writing].each {|fiber|
+            @defaults.each {|fiber|
                 begin
                     fiber.resume
                 rescue Exception => e
                     self.debug e
                 end
             }
+
+            @intervals.each {|fiber, meta|
+                begin
+                    if !@intervals[fiber]
+                        raise FiberError
+                    end
+
+                    if meta[:at] <= Time.now
+                        fiber.resume
+
+                        meta[:at] += meta[:offset]
+                    end
+                rescue FiberError
+                    clearInterval meta
+                rescue Exception => e
+                    self.debug e
+                end
+            }
+
+            @timeouts.each {|fiber, meta|
+                begin
+                    if !@timeouts[fiber]
+                        raise FiberError
+                    end
+
+                    if meta[:at] <= Time.now
+                        fiber.resume
+
+                        clearTimeout meta
+                    end
+                rescue FiberError
+                    clearTimeout meta
+                rescue Exception => e
+                    self.debug e
+                end
+            }
         end
+    end
+
+    def setTimeout (fiber, time)
+        @timeouts[fiber] = {
+            :fiber => fiber,
+            :at    => Time.now + time,
+            :on    => Time.now,
+        }
+    end
+
+    def clearTimeout (timeout)
+        @timeouts.delete(timeout[:fiber])
+    end
+
+    def setInterval (fiber, time)
+        @intervals[fiber] = {
+            :fiber  => fiber,
+            :offset => time,
+            :at     => Time.now + time,
+            :on     => Time.now,
+        }
+    end
+
+    def clearInterval (interval)
+        @intervals.delete(interval[:fiber])
     end
 
     def connections
@@ -131,6 +199,8 @@ class Dispatcher
     def execute (*args)
         @event.execute(*args)
     end
+end
+
 end
 
 end

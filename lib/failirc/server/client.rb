@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -18,11 +18,14 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/utils'
-require 'failirc/server/modes'
-require 'failirc/server/channels'
+require 'failirc/modes'
 require 'failirc/mask'
 
+require 'failirc/server/channels'
+
 module IRC
+
+class Server
 
 class Client
     include Utils
@@ -92,6 +95,8 @@ class Client
     def inspect
         return "#<Client: #{mask} #{modes}#{(modes[:registered]) ? ' registered' : ''}>"
     end
+end
+
 end
 
 end

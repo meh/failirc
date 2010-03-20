@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -17,10 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server/module'
 require 'uri'
 
+require 'failirc/server/module'
+
 module IRC
+
+class Server
 
 module Modules
 
@@ -55,6 +58,8 @@ class Netlog < Module
             end
         }
     end
+end
+
 end
 
 end

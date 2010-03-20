@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -20,6 +20,8 @@
 require 'failirc/server/module'
 
 module IRC
+
+class Server
 
 module Modules
 
@@ -93,6 +95,8 @@ class Firewall < Module
 
         return target
     end
+end
+
 end
 
 end

@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -23,11 +23,11 @@ require 'rexml/document'
 include REXML
 
 require 'failirc'
-require 'failirc/extensions'
+require 'failirc/utils'
+
 require 'failirc/server/clients'
 require 'failirc/server/links'
 require 'failirc/server/channels'
-require 'failirc/utils'
 require 'failirc/server/dispatcher'
 
 module IRC

@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -18,11 +18,13 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/extensions'
-require 'failirc/server/channel'
-require 'failirc/server/modes'
+require 'failirc/modes'
+
 require 'failirc/server/module'
 
 module IRC
+
+class Server
 
 module Modules
 
@@ -133,6 +135,8 @@ class WordFilter < Module
         :y => 7,
         :Y => 8,
     }
+end
+
 end
 
 end

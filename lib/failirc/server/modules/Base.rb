@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -18,17 +18,19 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'thread'
+
 require 'failirc/extensions'
+require 'failirc/errors'
+require 'failirc/responses'
 
 require 'failirc/server/module'
-require 'failirc/server/errors'
-require 'failirc/server/responses'
-
 require 'failirc/server/client'
 require 'failirc/server/channel'
 require 'failirc/server/user'
 
 module IRC
+
+class Server
 
 module Modules
 
@@ -113,50 +115,6 @@ class Base < Module
     end
 
     def initialize (server)
-        server.data[:nicks] = {}
-
-        @@supportedModes[:client].insert(-1, *('o'.split(//)))
-        @@supportedModes[:channel].insert(-1, *('mniszuvhoyx'.split(//)))
-
-        @@support.merge!({
-            'CHANTYPES' => '&#+!',
-            'PREFIX'    => '(xyohv)~&@%+',
-        })
-
-        @joining   = ThreadSafeHash.new
-        @semaphore = Mutex.new
-
-        @pingedOut = ThreadSafeHash.new
-        @toPing    = ThreadSafeHash.new
-
-        @pingThread = Thread.new {
-            while true
-                # time to ping non active users
-                @toPing.each_value {|client|
-                    @pingedOut[client.socket] = client
-
-                    if client.modes[:registered]
-                        client.send :raw, "PING :#{server.host}"
-                    end
-                }
-
-                # clear and refil the hash of clients to ping with all the connected clients
-                @toPing.clear
-                @toPing.merge!(Hash[server.clients.values.collect {|client| [client.socket, client]}])
-
-                sleep server.config.elements['config/server/pingTimeout'].text.to_i
-
-                # people who didn't answer with a PONG has to YIFF IN HELL.
-                @pingedOut.each_value {|client|
-                    if !client.socket.closed?
-                        server.kill client, 'Ping timeout', true
-                    end
-                }
-
-                @pingedOut.clear
-            end
-        }
-
         @aliases = {
             :input => {
                 :PASS => /^PASS( |$)/i,
@@ -265,9 +223,59 @@ class Base < Module
         }
 
         super(server)
+
+        server.data[:nicks] = {}
+
+        @@supportedModes[:client].insert(-1, *('o'.split(//)))
+        @@supportedModes[:channel].insert(-1, *('mniszuvhoyx'.split(//)))
+
+        @@support.merge!({
+            'CHANTYPES' => '&#+!',
+            'PREFIX'    => '(xyohv)~&@%+',
+        })
+
+        @joining   = ThreadSafeHash.new
+        @semaphore = Mutex.new
+
+        @pingedOut = ThreadSafeHash.new
+        @toPing    = ThreadSafeHash.new
+
+        @pingInterval = server.dispatcher.setInterval Fiber.new {
+            while true
+                # time to ping non active users
+                @toPing.each_value {|client|
+                    @pingedOut[client.socket] = client
+
+                    if client.modes[:registered]
+                        client.send :raw, "PING :#{server.host}"
+                    end
+                }
+
+                # clear and refil the hash of clients to ping with all the connected clients
+                @toPing.clear
+                @toPing.merge!(Hash[server.clients.values.collect {|client| [client.socket, client]}])
+
+                Fiber.yield
+
+                # people who didn't answer with a PONG has to YIFF IN HELL.
+                @pingedOut.each_value {|client|
+                    if !client.socket.closed?
+                        server.kill client, 'Ping timeout', true
+                    end
+                }
+
+                @pingedOut.clear
+            end
+        }, (@pingTimeout / 2)
     end
 
     def rehash
+        if tmp = server.config.elements['config/modules/module[@name="Base"]/misc/pingTimeout']
+            @pingTimeout = tmp.text.to_f
+        else
+            @pingTimeout = 60
+        end
+
         if tmp = server.config.elements['config/modules/module[@name="Base"]/misc/nickAllowed']
             @nickAllowed = tmp.text
         else
@@ -302,7 +310,7 @@ class Base < Module
     end
 
     def finalize
-        Thread.kill(@pingThread)
+        server.dispatcher.clearInterval @pingInterval
     end
 
     module Utils
@@ -519,11 +527,11 @@ class Base < Module
             if Base.modes[:groups][type]
                 main = Base.modes[:groups]
             else
-                if thing.is_a?(IRC::Channel)
+                if thing.is_a?(Server::Channel)
                     main = Base.modes[:channel]
-                elsif thing.is_a?(IRC::User)
+                elsif thing.is_a?(Server::User)
                     main = Base.modes[:user]
-                elsif thing.is_a?(IRC::Client)
+                elsif thing.is_a?(Server::Client)
                     main = Base.modes[:client]
                 else
                     raise 'What sould I do?'
@@ -563,13 +571,13 @@ class Base < Module
 
         def self.checkFlag (thing, type)
             # servers can do everything
-            if thing.is_a?(IRC::Server)
+            if thing.is_a?(Server::Server)
                 return true
             end
 
             result = thing.modes[type]
 
-            if !result && thing.is_a?(IRC::User)
+            if !result && thing.is_a?(Server::User)
                 result = thing.client.modes[type]
             end
 
@@ -581,7 +589,7 @@ class Base < Module
         end
 
         def self.dispatchMessage (kind, from, to, message, level=nil)
-            if from.is_a?(IRC::User)
+            if from.is_a?(Server::User)
                 from = from.client
             end
 
@@ -949,7 +957,7 @@ class Base < Module
                 server.dispatcher.execute :mode, :normal, from, thing, type, mode, values, output
             }
 
-            if from.is_a?(IRC::Client) || from.is_a?(IRC::User)
+            if from.is_a?(Server::Client) || from.is_a?(Server::User)
                 from = from.mask
             end
 
@@ -960,7 +968,7 @@ class Base < Module
                     string << " #{output[:values].join(' ')}"
                 end
 
-                thing.send :raw, ":#{from} MODE #{thing.is_a?(IRC::Channel) ? thing.name : thing.nick} #{string}"
+                thing.send :raw, ":#{from} MODE #{thing.is_a?(Server::Channel) ? thing.name : thing.nick} #{string}"
             end
 
         end
@@ -971,7 +979,7 @@ class Base < Module
             return
         end
 
-        if thing.is_a?(IRC::Channel)
+        if thing.is_a?(Server::Channel)
             case mode
 
             when 'a'
@@ -1267,7 +1275,7 @@ class Base < Module
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
             end
-        elsif thing.is_a?(IRC::Client)
+        elsif thing.is_a?(Server::Client)
         end
     end
 
@@ -1276,23 +1284,23 @@ class Base < Module
             return
         end
 
-        if thing.is_a?(IRC::Channel) && !Utils::checkFlag(from, :can_change_channel_extended_modes)
+        if thing.is_a?(Server::Channel) && !Utils::checkFlag(from, :can_change_channel_extended_modes)
             from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
             return
-        elsif thing.is_a?(IRC::User) && !Utils::checkFlag(from, :can_change_user_extended_modes)
+        elsif thing.is_a?(Server::User) && !Utils::checkFlag(from, :can_change_user_extended_modes)
             from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
             return
-        elsif thing.is_a?(IRC::Client) && from.nick != thing.nick && !Utils::checkFlag(from, :can_change_client_extended_modes) && !Utils::checkFlag(from, :frozen)
+        elsif thing.is_a?(Server::Client) && from.nick != thing.nick && !Utils::checkFlag(from, :can_change_client_extended_modes) && !Utils::checkFlag(from, :frozen)
             from.send :numeric, ERR_NOPRIVILEGES
             return
         end
 
         if type == '?'
-            if thing.is_a?(IRC::Channel)
+            if thing.is_a?(Server::Channel)
                 name = thing.name
-            elsif thing.is_a?(IRC::User)
+            elsif thing.is_a?(Server::User)
                 name = "#{thing.nick}@#{thing.channel.name}"
-            elsif thing.is_a?(IRC::Client)
+            elsif thing.is_a?(Server::Client)
                 name = thing.nick
             end
 
@@ -1912,7 +1920,7 @@ class Base < Module
                 return
             end
 
-            if thing.is_a?(IRC::User)
+            if thing.is_a?(Server::User)
                 Utils::dispatchMessage(:message, thing, channel, message, level)
             else
                 if server.channels[receiver].modes[:no_external_messages]
@@ -1959,13 +1967,13 @@ class Base < Module
         from = fromRef.value
         to   = toRef.value
 
-        if to.is_a?(IRC::User)
+        if to.is_a?(Server::User)
             name = to.channel.name
 
             if to.channel.modes[:anonymous]
                 from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
             end
-        elsif to.is_a?(IRC::Client)
+        elsif to.is_a?(Server::Client)
             name = to.nick
         else
             return
@@ -2032,13 +2040,13 @@ class Base < Module
         from = fromRef.value
         to   = toRef.value
 
-        if to.is_a?(IRC::User)
+        if to.is_a?(Server::User)
             name = to.channel.name
 
             if to.channel.modes[:anonymous]
                 from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
             end
-        elsif to.is_a?(IRC::Client)
+        elsif to.is_a?(Server::Client)
             name = to.nick
         else
             return
@@ -2074,13 +2082,13 @@ class Base < Module
         from = fromRef.value
         to   = toRef.value
 
-        if to.is_a?(IRC::User)
+        if to.is_a?(Server::User)
             name = to.channel.name
 
             if to.channel.modes[:anonymous]
                 from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
             end
-        elsif to.is_a?(IRC::Client)
+        elsif to.is_a?(Server::Client)
             name = to.nick
         else
             return
@@ -2209,6 +2217,8 @@ class Base < Module
 
         thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
     end 
+end
+
 end
 
 end

@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -21,6 +21,8 @@ require 'thread'
 require 'failirc/server/client'
 
 module IRC
+
+class Server
 
 class Clients < Hash
     attr_reader :server
@@ -46,6 +48,8 @@ class Clients < Hash
 
         return result[1, result.length]
     end
+end
+
 end
 
 end

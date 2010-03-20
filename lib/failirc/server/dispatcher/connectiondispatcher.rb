@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -244,7 +244,7 @@ class ConnectionDispatcher
                 end
 
                 @connections.sockets.push(socket)
-                @connections.things[socket] = @connections.clients[socket] = IRC::Client.new(server, socket, listen)
+                @connections.things[socket] = @connections.clients[socket] = Server::Client.new(server, socket, listen)
             rescue OpenSSL::SSL::SSLError
                 socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
                 self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the handshake.", ''
@@ -266,32 +266,28 @@ class ConnectionDispatcher
                 reading.each {|socket|
                     thing = @connections.things[socket]
 
-                    begin
-                        input = socket.read_nonblock 2048
+                    input = socket.read_nonblock 2048
 
-                        if !input || input.empty?
-                            raise Errno::EPIPE
-                        end
-
-                        input.split(/[\r\n]+/).each {|string|
-                            @input.push(socket, string)
-                        }
-                    rescue IOError
-                        server.kill thing, 'Input/output error', true
-                    rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill thing, 'Client exited', true
-                    rescue Errno::ECONNRESET
-                        server.kill thing, 'Connection reset by peer', true
-                    rescue Errno::ETIMEDOUT
-                        server.kill thing, 'Ping timeout', true
-                    rescue Errno::EHOSTUNREACH
-                        server.kill thing, 'No route to host', true
-                    rescue Errno::EAGAIN, IO::WaitReadable
-                    rescue Exception => e
-                        self.debug e
+                    if !input || input.empty?
+                        raise Errno::EPIPE
                     end
+
+                    input.split(/[\r\n]+/).each {|string|
+                        @input.push(socket, string)
+                    }
                 }
             end
+        rescue IOError
+            server.kill thing, 'Input/output error', true
+        rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+            server.kill thing, 'Client exited', true
+        rescue Errno::ECONNRESET
+            server.kill thing, 'Connection reset by peer', true
+        rescue Errno::ETIMEDOUT
+            server.kill thing, 'Ping timeout', true
+        rescue Errno::EHOSTUNREACH
+            server.kill thing, 'No route to host', true
+        rescue Errno::EAGAIN, IO::WaitReadable
         rescue Exception => e
             self.debug e
         end
@@ -336,57 +332,53 @@ class ConnectionDispatcher
                         next
                     end
 
-                    begin
-                        while !@output.empty?(socket)
-                            output = @output.first(socket)
+                    while !@output.empty?(socket)
+                        output = @output.first(socket)
 
-                            if output == :EOC
-                                @output.pop(socket)
-                                message = @output.pop(socket)
+                        if output == :EOC
+                            @output.pop(socket)
+                            message = @output.pop(socket)
 
-                                @dispatcher.execute(:kill, thing, message) rescue nil
-        
-                                if thing.is_a?(Client)
-                                    thing.modes[:quitting] = true
-        
-                                    if thing.modes[:registered]
-                                        thing.channels.each_value {|channel|
-                                            channel.users.delete(thing.nick)
-                                        }
-                                    end
-                                elsif thing.is_a?(Link)
-                                    # wat
+                            @dispatcher.execute(:kill, thing, message) rescue nil
+    
+                            if thing.is_a?(Client)
+                                thing.modes[:quitting] = true
+    
+                                if thing.modes[:registered]
+                                    thing.channels.each_value {|channel|
+                                        channel.users.delete(thing.nick)
+                                    }
                                 end
-                            
-                                @output.delete(socket)
-                                connections.delete(thing.socket)
-
-                                self.debug "#{thing.mask}[#{thing.ip}] disconnected."
-        
-                                socket.close rescue nil
-                            else
-                                output.force_encoding 'ASCII-8BIT'
-                                socket.write_nonblock "#{output}\r\n"
-
-                                @output.pop(socket)
+                            elsif thing.is_a?(Link)
+                                # wat
                             end
+                        
+                            @output.delete(socket)
+                            connections.delete(thing.socket)
+
+                            self.debug "#{thing.mask}[#{thing.ip}] disconnected."
+    
+                            socket.close rescue nil
+                        else
+                            output.force_encoding 'ASCII-8BIT'
+                            socket.write_nonblock "#{output}\r\n"
+
+                            @output.pop(socket)
                         end
-                    rescue IOError
-                        server.kill thing, 'Input/output error', true
-                    rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                        server.kill thing, 'Client exited', true
-                    rescue Errno::ECONNRESET
-                        server.kill thing, 'Connection reset by peer', true
-                    rescue Errno::ETIMEDOUT
-                        server.kill thing, 'Ping timeout', true
-                    rescue Errno::EHOSTUNREACH
-                        server.kill thing, 'No route to host', true
-                    rescue Errno::EAGAIN, IO::WaitWritable
-                    rescue Exception => e
-                        self.debug e
                     end
                 }
             end
+        rescue IOError
+            server.kill thing, 'Input/output error', true
+        rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+            server.kill thing, 'Client exited', true
+        rescue Errno::ECONNRESET
+            server.kill thing, 'Connection reset by peer', true
+        rescue Errno::ETIMEDOUT
+            server.kill thing, 'Ping timeout', true
+        rescue Errno::EHOSTUNREACH
+            server.kill thing, 'No route to host', true
+        rescue Errno::EAGAIN, IO::WaitWritable
         rescue Exception => e
             self.debug e
         end

@@ -1,4 +1,4 @@
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -18,12 +18,15 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'thread'
+
 require 'failirc/utils'
-require 'failirc/server/responses'
+require 'failirc/modes'
+
 require 'failirc/server/users'
-require 'failirc/server/modes'
 
 module IRC
+
+class Server
 
 class Channel
     class Topic
@@ -114,6 +117,8 @@ class Channel
     def to_s
         @name
     end
+end
+
 end
 
 end
