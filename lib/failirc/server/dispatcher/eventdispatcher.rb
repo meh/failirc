@@ -22,6 +22,10 @@ require 'failirc/server/dispatcher/event'
 
 module IRC
 
+class Server
+
+class Dispatcher
+
 class EventDispatcher
     include Utils
 
@@ -185,6 +189,10 @@ class EventDispatcher
             a.priority <=> b.priority
         }
     end
+end
+
+end
+
 end
 
 end

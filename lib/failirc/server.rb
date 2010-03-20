@@ -127,7 +127,7 @@ class Server
                 :bind => listen.attributes['bind'],
                 :port => listen.attributes['port'],
 
-                :ssl      => (listen.attributes['ssl'] == 'enabled'),
+                :ssl      => listen.attributes['ssl'],
                 :ssl_cert => listen.attributes['sslCert'],
                 :ssl_key  => listen.attributes['sslKey']
             }, listen)
@@ -158,7 +158,7 @@ class Server
 
     # kill connection with harpoons on fire
     def kill (thing, message=nil, force=false)
-        if !thing || (thing.modes[:killing] && !force) || !@dispatcher.connections.exists?(thing.socket)
+        if !thing || (thing.modes[:killing] && (!force || thing.modes[:kill_forcing])) || !@dispatcher.connections.exists?(thing.socket)
             return
         end
 
@@ -169,6 +169,8 @@ class Server
         thing.modes[:killing] = true
 
         if force
+            thing.modes[:kill_forcing] = true
+
             tmp = @dispatcher.output[thing].drop_while {|item|
                 item != :EOC
             }
@@ -222,7 +224,7 @@ class Server
                 element.attributes['bind'] = '0.0.0.0'
             end
 
-            if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enabled' && element.attributes['ssl'] != 'disabled')
+            if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enabled' && element.attributes['ssl'] != 'disabled' && element.attributes['ssl'] != 'promiscuous')
                 element.attributes['ssl'] = 'disabled'
             end
 

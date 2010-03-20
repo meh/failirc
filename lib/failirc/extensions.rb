@@ -17,6 +17,9 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'socket'
+require 'openssl'
+
 class Reference
     def initialize (name, vars)
         @getter = eval "lambda { #{name} }", vars

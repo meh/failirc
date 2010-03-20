@@ -19,6 +19,10 @@
 
 module IRC
 
+class Server
+
+class Dispatcher
+
 class Event
     class Callback
         attr_reader :method
@@ -98,6 +102,12 @@ class Event
 
         return callbacks
     end
+end
+
+end
+
+Event = Dispatcher::Event
+
 end
 
 end

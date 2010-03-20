@@ -64,6 +64,14 @@ class Dispatcher
             end
         }
 
+        @cleaning = Fiber.new {
+            while true
+                @connection.clean
+
+                Fiber.yield
+            end
+        }
+
         @handling = Fiber.new {
             while true
                 @connection.handle
@@ -80,7 +88,7 @@ class Dispatcher
             end
         }
 
-        @defaults = [@listening, @reading, @handling, @writing]
+        @defaults = [@listening, @cleaning, @reading, @handling, @writing]
         
         self.loop
     end
@@ -104,6 +112,9 @@ class Dispatcher
             @defaults.each {|fiber|
                 begin
                     fiber.resume
+                rescue FiberError
+                    self.debug 'Something went deeply wrong in the dispatcher, aborting.'
+                    Process::exit 23
                 rescue Exception => e
                     self.debug e
                 end
@@ -182,6 +193,10 @@ class Dispatcher
 
     def output
         @connection.output
+    end
+
+    def disconnecting
+        @connection.disconnecting
     end
 
     def alias (*args)

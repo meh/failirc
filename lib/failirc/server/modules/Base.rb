@@ -571,7 +571,7 @@ class Base < Module
 
         def self.checkFlag (thing, type)
             # servers can do everything
-            if thing.is_a?(Server::Server)
+            if thing.is_a?(IRC::Server)
                 return true
             end
 

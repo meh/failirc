@@ -19,6 +19,8 @@
 
 module IRC
 
+class Server
+
 class User
     attr_reader :client, :channel, :modes
 
@@ -63,6 +65,8 @@ class User
     def inspect
         return "#<User: #{client.inspect} #{channel.inspect} #{modes.inspect}>"
     end
+end
+
 end
 
 end

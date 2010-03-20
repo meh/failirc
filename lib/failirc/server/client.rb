@@ -44,16 +44,16 @@ class Client
         @channels = Channels.new(@server)
         @modes    = Modes.new
 
-        if listen && listen.attributes['ssl'] == 'enabled'
-            @modes[:ssl] = true
-        end
-
         if socket.is_a?(Mask)
             @mask = socket
         else
             @mask = Mask.new
-            host = socket.peeraddr[2]
-            ip   = socket.peeraddr[3]
+            host = socket.peeraddr[2].clone
+            ip   = socket.peeraddr[3].clone
+
+            if socket.is_a?(OpenSSL::SSL::SSLSocket)
+                @modes[:ssl] = true
+            end
         end
 
         @connectedOn = Time.now

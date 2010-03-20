@@ -18,9 +18,12 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/extensions'
+
 require 'failirc/server/user'
 
 module IRC
+
+class Server
 
 class Users < ThreadSafeHash
     attr_reader :server, :channel
@@ -93,6 +96,8 @@ class Users < ThreadSafeHash
             user.send(*args)
         }
     end
+end
+
 end
 
 end
