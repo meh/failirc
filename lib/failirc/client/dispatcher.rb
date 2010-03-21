@@ -17,18 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server/dispatcher/connectiondispatcher'
-require 'failirc/server/dispatcher/eventdispatcher'
+require 'failirc/client/dispatcher/connectiondispatcher'
+require 'failirc/client/dispatcher/eventdispatcher'
 
 module IRC
 
-class Server
+class Client
 
 class Dispatcher
-    attr_reader :server, :connection, :event
+    attr_reader :client, :connection, :event
 
-    def initialize (server)
-        @server = server
+    def initialize (client)
+        @client = client
 
         @connection = ConnectionDispatcher.new(self)
         @event      = EventDispatcher.new(self)
@@ -39,20 +39,6 @@ class Dispatcher
 
     def start
         @started = true
-
-        @listening = Fiber.new {
-            while true
-                if !@connection.connections.empty?
-                    timeout = 0
-                else
-                    timeout = 2
-                end
-
-                @connection.accept timeout
-
-                Fiber.yield
-            end
-        }
 
         @reading = Fiber.new {
             while true
@@ -86,7 +72,7 @@ class Dispatcher
             end
         }
 
-        @defaults = [@listening, @cleaning, @reading, @handling, @writing]
+        @defaults = [@cleaning, @reading, @handling, @writing]
         
         self.loop
     end

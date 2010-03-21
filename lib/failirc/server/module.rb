@@ -24,8 +24,6 @@ module IRC
 class Server
 
 class Module
-    include Utils
-
     attr_reader :server
 
     def initialize (server)

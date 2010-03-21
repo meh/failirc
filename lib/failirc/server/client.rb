@@ -28,8 +28,6 @@ module IRC
 class Server
 
 class Client
-    include Utils
-
     attr_reader   :server, :socket, :listen, :channels, :modes, :mask, :nick, :user, :host, :connectedOn
     attr_writer   :quitting
     attr_accessor :password, :ip, :realName

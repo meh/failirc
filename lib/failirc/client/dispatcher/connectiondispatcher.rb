@@ -26,48 +26,31 @@ require 'failirc/sslutils'
 
 module IRC
 
-class Server
+class Client
 
 class Dispatcher
 
 class ConnectionDispatcher
     class Connections
-        attr_reader :server
+        attr_reader :client
     
-        def initialize (server)
-            @server = server
+        def initialize (client)
+            @client = client
     
-            @data = ThreadSafeHash.new
-    
-            @data[:listening] = {
-                :sockets => [],
-                :data    => {},
-            }
-    
+            @data           = ThreadSafeHash.new
             @data[:sockets] = []
-            @data[:things]  = {}
-            @data[:clients] = CaseInsensitiveHash.new
-            @data[:links]   = CaseInsensitiveHash.new
-        end
-    
-        def listening
-            @data[:listening]
+            @data[:servers] = {
+                :bySocket => {},
+                :byName   => {},
+            }
         end
     
         def sockets
             @data[:sockets]
         end
     
-        def things
-            @data[:things]
-        end
-    
-        def clients
-            @data[:clients]
-        end
-    
-        def links
-            @data[:links]
+        def servers
+            @data[:servers]
         end
     
         def empty?
@@ -75,7 +58,7 @@ class ConnectionDispatcher
         end
     
         def exists? (socket)
-            things[socket] ? true : false
+            server[socket] ? true : false
         end
     
         def delete (socket)
@@ -83,35 +66,28 @@ class ConnectionDispatcher
                 return
             end
 
-            thing = @data[:things][socket]
-    
-            if thing.is_a?(Client)
-                @data[:clients].delete(thing.nick)
-                @data[:clients].delete(socket)
-            elsif thing.is_a?(Link)
-                @data[:links].delete(thing.host)
-                @data[:links].delete(socket)
-            end
-    
             @data[:sockets].delete(socket)
-            @data[:things].delete(socket)
+
+            server = @data[:servers][:bySocket][socket]
+            @data[:servers][:bySocket].delete(socket)
+            @data[:servers][:byName].delete(server.name)
     
             socket.close rescue nil
         end
     end
 
     class Data
-        attr_reader :server, :dispatcher
+        attr_reader :client, :dispatcher
 
         def initialize (dispatcher)
-            @server     = dispatcher.server
+            @client     = dispatcher.client
             @dispatcher = dispatcher
 
             @data = ThreadSafeHash.new
         end
 
         def [] (socket)
-            if socket.is_a?(Client) || socket.is_a?(User)
+            if socket.is_a?(Server)
                 socket = socket.socket
             end
 
@@ -149,7 +125,7 @@ class ConnectionDispatcher
         end
 
         def delete (socket)
-            if socket.is_a?(Client) || socket.is_a?(User)
+            if socket.is_a?(Server)
                 socket = socket.socket
             end
 
@@ -165,11 +141,11 @@ class ConnectionDispatcher
         end
 
         def empty? (socket=nil)
-            if socket.is_a?(Client) || socket.is_a?(User)
-                socket = socket.socket
-            end
-
             if socket
+                if socket.is_a?(Server)
+                    socket = socket.socket
+                end
+
                 if @data.has_key?(socket)
                    return @data[socket].empty?
                 else
@@ -185,13 +161,13 @@ class ConnectionDispatcher
         end
     end
 
-    attr_reader :server, :dispatcher, :connections, :input, :output, :disconnecting
+    attr_reader :client, :dispatcher, :connections, :input, :output, :disconnecting
 
     def initialize (dispatcher)
-        @server     = dispatcher.server
+        @client     = dispatcher.client
         @dispatcher = dispatcher
 
-        @connections   = Connections.new(server)
+        @connections   = Connections.new(client)
         @input         = Data.new(dispatcher)
         @output        = Data.new(dispatcher)
         @disconnecting = []
@@ -201,79 +177,46 @@ class ConnectionDispatcher
         @connections.sockets
     end
 
-    def clients
-        @connections.clients
+    def servers
+        @connections.servers
     end
 
-    def links
-        @connections.links
-    end
-
-    def listen (options, listen)
-        server  = TCPServer.new(options[:bind], options[:port])
+    def connect (options, config)
+        server  = TCPSocket.new(Resolv.getaddress(options[:address]), options[:port])
         context = nil
 
         if options[:ssl] != 'disabled'
             context = SSLUtils::context(options[:ssl_cert], options[:ssl_key])
         end
 
-        @connections.listening[:sockets].push(server)
-        @connections.listening[:data][server] = { :listen => listen, :context => context }
-    end
+        self.debug "Connecting to #{server.peeraddr[2]}[#{server.peeraddr[3]}/#{server.peeraddr[1]}]"
 
-    def accept (timeout=0)
         begin
-            listening, = IO::select @connections.listening[:sockets], nil, nil, timeout
+            if listen.attributes['ssl'] != 'disabled'
+                ssl = OpenSSL::SSL::SSLSocket.new server, context
 
-            if listening
-                listening.each {|server|
-                    begin
-                        socket, = server.accept_nonblock
-
-                        if socket
-                            newConnection socket, @connections.listening[:data][server][:listen], @connections.listening[:data][server][:context]
-                        end
-                    rescue Errno::EAGAIN
-                    rescue Exception => e
-                        self.debug e
-                    end
-                }
+                ssl.connect
+                server = ssl
             end
-        rescue 
+
+            @connections.servers[:bySocket][server] = Client::Server.new(client, server, config)
+
+            @connections.servers[:byName][@connections.servers[:bySocket][server].name]
+                = @connections.servers[:bySocket][server]
+
+            @connections.sockets.push(server)
+
+            @input[server]
+        rescue OpenSSL::SSL::SSLError
+            self.debug "Tried to connect to #{server.peeraddr[3]}/#{server.peeraddr[1]} with SSL bubt the handshake failed."
+            server.close rescue nil
+        rescue Errno::ECONNRESET
+            server.close rescue nil
+            self.debug "#{server.peeraddr[2]}[#{server.peeraddr[3]}] connection reset."
+        rescue Exception => e
+            server.close rescue nil
+            self.debug e
         end
-    end
-
-    # Executed with each incoming connection
-    def newConnection (socket, listen, context=nil)
-        # here, somehow we should check if the incoming peer is a linked server or a real client
-
-        self.debug "#{socket.peeraddr[2]}[#{socket.peeraddr[3]}/#{socket.peeraddr[1]}] connecting."
-
-        Thread.new {
-            begin
-                if listen.attributes['ssl'] != 'disabled'
-                    ssl = OpenSSL::SSL::SSLSocket.new socket, context
-
-                    ssl.accept
-                    socket = ssl
-                end
-
-                @connections.things[socket] = @connections.clients[socket] = Server::Client.new(server, socket, listen)
-                @connections.sockets.push(socket)
-
-                @input[socket]
-            rescue OpenSSL::SSL::SSLError
-                socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
-                self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the handshake."
-                socket.close rescue nil
-            rescue Errno::ECONNRESET
-                socket.close rescue nil
-                self.debug "#{socket.peeraddr[2]}[#{socket.peeraddr[3]}] connection reset."
-            rescue Exception => e
-                socket.close rescue nil
-                self.debug(e)
-            end
-        }
     end
 
     def read (timeout=0.1)
@@ -288,7 +231,7 @@ class ConnectionDispatcher
         end
 
         reading.each {|socket|
-            thing = @connections.things[socket]
+            server = @connections.servers[:bySocket][socket]
 
             begin
                 input = socket.read_nonblock 2048
@@ -407,27 +350,15 @@ class ConnectionDispatcher
         }
     end
 
-    def handleDisconnection (thing, message)
-        @dispatcher.execute(:kill, thing, message) rescue nil
+    def handleDisconnection (server, message)
+        @dispatcher.execute(:disconnect, server, message) rescue nil
 
-        if thing.is_a?(Client)
-            thing.modes[:quitting] = true
+        @output.delete(server.socket)
+        connections.delete(server.socket)
 
-            if thing.modes[:registered]
-                thing.channels.each_value {|channel|
-                    channel.users.delete(thing.nick)
-                }
-            end
-        elsif thing.is_a?(Link)
-            # wat
-        end
-    
-        @output.delete(thing.socket)
-        connections.delete(thing.socket)
+        self.debug "Disconnected from #{server}[#{server.socket.peeraddr[3]}/#{server.socket.peeraddr[1]}]"
 
-        self.debug "#{thing.mask}[#{thing.socket.peeraddr[3]}/#{thing.socket.peeraddr[1]}] disconnected."
-
-        thing.socket.close rescue nil
+        server.socket.close rescue nil
     end
 
     def finalize

@@ -17,43 +17,4 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'resolv'
 
-require 'rexml/document'
-include REXML
-
-require 'failirc'
-require 'failirc/utils'
-
-module IRC
-
-class Client
-    attr_reader :version, :verbose, :dispatcher, :servers, :channels
-
-    def initialize (conf, verbose)
-        if conf.is_a?(Hash)
-
-        else
-            self.config = conf
-        end
-    end
-
-    def alias (*args)
-        dispatcher.alias(*args)
-    end
-
-    def register (*args)
-        dispatcher.register(*args)
-    end
-
-    def rehash
-        self.config = @configReference
-    end
-
-    def config= (reference)
-        @config          = Document.new reference
-        @configReference = reference
-    end
-end
-
-end

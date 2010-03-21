@@ -42,13 +42,18 @@ def debug (argument, separator='')
         output << separator
     end
 
-    if @verbose || (@server && @server.verbose)
-        puts output
+    begin
+        if @verbose || (@server && @server.verbose) || (@client && @client.verbose)
+            puts output
+        end
+    rescue
     end
 
-    (dispatcher rescue server.dispatcher).execute :log, output
+    (dispatcher rescue server.dispatcher rescue client.dispatcher).execute :log, output
 end
 
 end
 
 end
+
+Object.extend(IRC::Utils)

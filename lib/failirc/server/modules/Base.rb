@@ -314,8 +314,6 @@ class Base < Module
     end
 
     module Utils
-        include IRC::Utils
-
         module Client
             class Action
                 attr_reader :client, :event, :string, :on

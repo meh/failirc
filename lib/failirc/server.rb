@@ -33,8 +33,6 @@ require 'failirc/server/dispatcher'
 module IRC
 
 class Server
-    include Utils
-
     attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :connections, :config, :data
 
     def initialize (conf, verbose)
