@@ -202,7 +202,7 @@ class Server
         @configReference = reference
 
         if !@config.elements['config/server']
-            @config.element['config'].add(Element.new('server'))
+            @config.elements['config'].add(Element.new('server'))
         end
 
         if !@config.elements['config/server/name']

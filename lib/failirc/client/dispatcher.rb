@@ -167,6 +167,10 @@ class Dispatcher
         @intervals.delete(interval[:fiber])
     end
 
+    def servers
+        @connection.servers
+    end
+
     def server (identifier)
         @connection.server identifier
     end

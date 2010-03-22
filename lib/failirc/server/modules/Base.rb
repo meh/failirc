@@ -775,9 +775,6 @@ class Base < Module
                 thing.user     = match[1]
                 thing.realName = match[2]
 
-                thing.host = thing.socket.peeraddr[2]
-                thing.ip   = thing.socket.peeraddr[3]
-
                 # try to register it
                 Utils::registration(thing)
             end

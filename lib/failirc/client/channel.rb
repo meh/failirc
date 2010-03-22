@@ -58,9 +58,10 @@ class Channel
         end
     end
 
-    attr_reader :server, :name, :type, :createdOn, :users, :modes, :topic
+    attr_reader :client, :server, :name, :type, :createdOn, :users, :modes, :topic
 
     def initialize (server, name)
+        @client = server.client
         @server = server
         @name   = name
         @type   = name[0, 1]

@@ -58,4 +58,11 @@ end
 trap('INT') { stop client }
 trap('KILL') { stop client }
 
+client.register :custom, :numeric, lambda {|server, number, message|
+    # end of MOTD or no MOTD, hence concluded connection.
+    if number != 376 && number != 422
+        return
+    end
+}
+
 client.start

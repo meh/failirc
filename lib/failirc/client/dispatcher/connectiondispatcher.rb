@@ -24,6 +24,8 @@ require 'openssl/nonblock'
 require 'failirc/utils'
 require 'failirc/sslutils'
 
+require 'failirc/client/server'
+
 module IRC
 
 class Client
@@ -108,7 +110,7 @@ class ConnectionDispatcher
                     socket = socket.socket
                 end
 
-                dispatcher.disconnecting.push({ :server => dispatcher.connections.things[socket], :output => self[socket] })
+                dispatcher.disconnecting.push({ :server => client.server(socket), :output => self[socket] })
             end
 
             if (string && !string.empty?) || self[socket].last == :EOC
@@ -181,14 +183,14 @@ class ConnectionDispatcher
         @connections.servers
     end
 
-    def connect (options, config)
+    def connect (options, config, name=nil)
         socket  = nil
         context = nil
 
         begin
-            socket = TCPSocket.new(Resolv.getaddress(options[:host]), options[:port])
+            socket = TCPSocket.new(options[:host], options[:port])
         rescue Errno::ECONNREFUSED
-            self.debug "Could not connect to #{Resolv.getaddress(options[:host])}/#{options[:port]}."
+            self.debug "Could not connect to #{options[:host]}/#{options[:port]}."
             return
         end
 
@@ -198,25 +200,29 @@ class ConnectionDispatcher
 
         host = socket.peeraddr[2]
         ip   = socket.peeraddr[3]
-        port = socket.addr[1]
+        port = socket.peeraddr[1]
 
         self.debug "Connecting to #{host}[#{ip}/#{port}]"
 
         begin
-            if listen.attributes['ssl'] != 'disabled'
+            if config.attributes['ssl'] != 'disabled'
                 ssl = OpenSSL::SSL::SSLSocket.new socket, context
 
                 ssl.connect
                 socket = ssl
             end
 
-            @connections.sockets[:bySocket][socket] = socket.new(client, socket, config)
-
-            @connections.sockets[:byName][@connections.sockets[:bySocket][socket].name] = @connections.sockets[:bySocket][socket]
-
+            @connections.servers[:bySocket][socket] = Server.new(client, socket, config, name)
+            @connections.servers[:byName][server(socket).name] = server socket
             @connections.sockets.push(socket)
 
+            if config.attributes['password']
+                server(socket).password = config.attributes['password']
+            end
+
             @input[socket]
+            
+            dispatcher.execute :connect, @connections.servers[:bySocket][socket]
         rescue OpenSSL::SSL::SSLError
             self.debug "Tried to connect to #{host}[#{ip}/#{port}] with SSL but the handshake failed."
             socket.close rescue nil
@@ -232,6 +238,12 @@ class ConnectionDispatcher
     def read (timeout=0.1)
         begin
             reading, = IO::select @connections.sockets, nil, nil, timeout
+        rescue IOError
+            @connections.sockets.each {|socket|
+                if socket.closed?
+                    kill server socket
+                end
+            }
         rescue Exception => e
             self.debug e
         end
@@ -297,7 +309,7 @@ class ConnectionDispatcher
             Thread.new {
                 begin
                     if string = @input.pop(socket)
-                        dispatcher.dispatch(:input, @connections.things[socket], string)
+                        dispatcher.dispatch(:input, server(socket), string)
                     end
                 rescue Exception => e
                     self.debug e
@@ -308,15 +320,15 @@ class ConnectionDispatcher
 
     def write (timeout=0)
         begin
-            none, writing, erroring = IO::select nil, @connections.sockets, nil, timeout
+            none, writing = IO::select nil, @connections.sockets, nil, timeout
+        rescue IOError
+            @connections.sockets.each {|socket|
+                if socket.closed?
+                    kill server socket
+                end
+            }
         rescue Exception => e
             self.debug e
-        end
-
-        if erroring
-            erroring.each {|socket|
-                disconnect self.server(socket), 'Client exited', true
-            }
         end
 
         if !writing

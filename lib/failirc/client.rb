@@ -30,7 +30,7 @@ require 'failirc/client/dispatcher'
 module IRC
 
 class Client
-    attr_reader :version, :verbose, :modules, :dispatcher, :servers, :channels
+    attr_reader :version, :verbose, :config, :modules, :dispatcher, :servers, :channels
 
     def initialize (conf, verbose)
         @version = IRC::VERSION
@@ -128,6 +128,22 @@ class Client
         dispatcher.register(*args)
     end
 
+    def nick
+        @config.elements['config/informations/nick'].text
+    end
+
+    def user
+        @config.elements['config/informations/user'].text
+    end
+
+    def realName
+        @config.elements['config/informations/realName'].text
+    end
+
+    def execute (*args)
+        @dispatcher.execute(*args)
+    end
+
     def rehash
         self.config = @configReference
     end
@@ -137,11 +153,11 @@ class Client
             @config = Document.new
 
             @config.add Element.new 'config'
-            @config.element['config'].add Element.new 'informations'
-            @config.element['config'].add Element.new 'servers'
-            @config.element['config'].add Element.new 'modules'
+            @config.elements['config'].add Element.new 'informations'
+            @config.elements['config'].add Element.new 'servers'
+            @config.elements['config'].add Element.new 'modules'
 
-            informations = @config.element['config/informations']
+            informations = @config.elements['config/informations']
 
             informations.add(Element.new 'nick').text     = reference[:nick] || 'fail'
             informations.add(Element.new 'user').text     = reference[:user] || 'fail'
@@ -155,13 +171,13 @@ class Client
 
                     element.attributes['host']    = server[:host]
                     element.attributes['port']    = server[:port]
-                    element.attributes['ssl']     = server[:ssl]
+                    element.attributes['ssl']     = server[:ssl] || 'disabled'
                     element.attributes['sslCert'] = server[:ssl_cert]
                     element.attributes['sslKey']  = server[:ssl_key]
                 }
             end
 
-            modules = @config.element['config/modules']
+            modules = @config.elements['config/modules']
 
             if reference[:modules]
                 reference[:modules].each {|mod|
@@ -175,6 +191,16 @@ class Client
         end
 
         @configReference = reference
+
+        if !@config.elements['config/servers']
+            @config.elements['config'].add Element.new 'servers'
+        end
+
+        @config.elements.each('config/servers/server') {|server|
+            if !server.attributes['ssl']
+                server.attributes['ssl'] = 'disabled'
+            end
+        }
 
         self.debug 'Loading modules.'
 

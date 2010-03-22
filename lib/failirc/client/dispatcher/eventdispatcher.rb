@@ -34,8 +34,8 @@ class EventDispatcher
         @dispatcher = dispatcher
         @handling   = ThreadSafeHash.new
 
-        @aliases = { :default => newAliases }
-        @events  = { :default => newEvents }
+        @aliases = newAliases
+        @events  = newEvents
     end
 
     def newAliases
@@ -151,13 +151,7 @@ class EventDispatcher
         end
     end
 
-    def register (*args)
-        if !args.first.is_a?(Symbol)
-            server = client.server args.shift
-        end
-
-        chain, type, callback, priority = args
-
+    def register (chain, type, callback, priority=0)
         if !type
             events = @events[chain]
 

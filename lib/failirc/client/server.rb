@@ -22,10 +22,10 @@ module IRC
 class Client
 
 class Server
-    attr_reader :client, :socket, :config, :host, :ip, :port
-    attr_accessor :nick
+    attr_reader :client, :socket, :config, :name, :host, :ip, :port
+    attr_accessor :nick, :password
 
-    def initialize (client, socket, config)
+    def initialize (client, socket, config, name=nil)
         @client = client
         @socket = socket
         @config = config
@@ -35,6 +35,46 @@ class Server
         @port = socket.addr[1]
 
         nick = client.nick
+
+        if !name
+            name = @host
+        else
+            if client.server name
+                raise Error.new "There is already a server named `#{name}`."
+            end
+        end
+
+        while client.server name
+            name << '_'
+        end
+
+        @name = name
+    end
+
+    def name= (value)
+        if client.server value
+            raise Error.new "There is already a server named `#{name}`."
+        end
+
+        client.dispatcher.servers[:byName].delete(name)
+        client.dispatcher.servers[:byName][value] = self
+    end
+
+    def send (symbol, *args)
+        begin
+            self.method(symbol).call(*args)
+        rescue Exception => e
+            self.debug e
+        end
+    end
+
+    def raw (text)
+        @client.dispatcher.dispatch :output, self, text
+        @client.dispatcher.connection.output.push @socket, text
+    end
+
+    def to_s
+        name
     end
 end
 

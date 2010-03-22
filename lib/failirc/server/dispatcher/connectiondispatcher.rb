@@ -239,7 +239,14 @@ class ConnectionDispatcher
                     end
                 }
             end
-        rescue 
+        rescue IOError
+            @connections.listening[:sockets].each {|socket|
+                if socket.closed?
+                    @connections.listening[:sockets].delete(socket)
+                    @connections.listening[:data].delete(socket                 @connections.listening[:data].delete(socket))
+                end
+            }
+        rescue
         end
     end
 
@@ -283,6 +290,12 @@ class ConnectionDispatcher
     def read (timeout=0.1)
         begin
             reading, = IO::select @connections.sockets, nil, nil, timeout
+        rescue IOError
+            @connections.sockets.each {|socket|
+                if socket.closed?
+                    server.kill socket
+                end
+            }
         rescue Exception => e
             self.debug e
         end
@@ -292,7 +305,7 @@ class ConnectionDispatcher
         end
 
         reading.each {|socket|
-            thing = @connections.things[socket]
+            thing = thing socket
 
             begin
                 input = socket.read_nonblock 2048
@@ -343,7 +356,7 @@ class ConnectionDispatcher
             Thread.new {
                 begin
                     if string = @input.pop(socket)
-                        dispatcher.dispatch(:input, @connections.things[socket], string)
+                        dispatcher.dispatch(:input, thing(socket), string)
                     end
                 rescue Exception => e
                     self.debug e
@@ -355,14 +368,14 @@ class ConnectionDispatcher
     def write (timeout=0)
         begin
             none, writing, erroring = IO::select nil, @connections.sockets, nil, timeout
+        rescue IOError
+            @connections.sockets.each {|socket|
+                if socket.closed?
+                    server.kill thing socket, 'Client exited'
+                end
+            }
         rescue Exception => e
             self.debug e
-        end
-
-        if erroring
-            erroring.each {|socket|
-                server.kill @connections.things[socket], 'Client exited', true
-            }
         end
 
         if !writing
@@ -374,7 +387,7 @@ class ConnectionDispatcher
                 next
             end
 
-            thing = @connections.things[socket]
+            thing = thing socket
 
             begin
                 while !@output.empty?(socket)
@@ -444,6 +457,16 @@ class ConnectionDispatcher
             }
         rescue Exception => e
             self.debug e
+        end
+    end
+
+    def thing (identifier)
+        if identifier.is_a?(Client) || identifier.is_a?(Link)
+            return identifier
+        elsif identifier.is_a?(User)
+            return identifier.client
+        else
+            return @connections.things[identifier]
         end
     end
 end
