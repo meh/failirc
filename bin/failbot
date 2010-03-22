@@ -29,7 +29,7 @@ args = GetoptLong.new(
 
 options = {
     :verbose => false,
-    :config  => '/etc/failirc.conf',
+    :config  => '/etc/failirclient.conf',
 }
 
 args.each {|option, value|
@@ -48,14 +48,14 @@ args.each {|option, value|
     end
 }
 
-ircd = IRC::Server.new(File.new(options[:config]), options[:verbose])
+client = IRC::Client.new(File.new(options[:config]), options[:verbose])
 
-def stop (ircd)
-    ircd.stop
+def stop (client)
+    client.stop
     Process.exit!(0)
 end
 
-trap('INT') { stop ircd }
-trap('KILL') { stop ircd }
+trap('INT') { stop client }
+trap('KILL') { stop client }
 
-ircd.start
+client.start

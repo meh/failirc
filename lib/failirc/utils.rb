@@ -19,9 +19,7 @@
 
 require 'failirc/extensions'
 
-module IRC
-
-module Utils
+class Object
 
 def debug (argument, separator='')
     output = ''
@@ -49,11 +47,7 @@ def debug (argument, separator='')
     rescue
     end
 
-    (dispatcher rescue server.dispatcher rescue client.dispatcher).execute :log, output
+    (dispatcher rescue server.dispatcher rescue client.dispatcher).execute :log, output rescue nil
 end
 
 end
-
-end
-
-Object.extend(IRC::Utils)

@@ -247,7 +247,11 @@ class ConnectionDispatcher
     def newConnection (socket, listen, context=nil)
         # here, somehow we should check if the incoming peer is a linked server or a real client
 
-        self.debug "#{socket.peeraddr[2]}[#{socket.peeraddr[3]}/#{socket.peeraddr[1]}] connecting."
+        host = socket.peeraddr[2]
+        ip   = socket.peeraddr[3]
+        port = socket.addr[1]
+
+        self.debug "#{host}[#{ip}/#{port}] connecting."
 
         Thread.new {
             begin
@@ -264,11 +268,11 @@ class ConnectionDispatcher
                 @input[socket]
             rescue OpenSSL::SSL::SSLError
                 socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
-                self.debug "#{socket.peeraddr[2]} tried to connect to a SSL connection and failed the handshake."
+                self.debug "#{host}[#{ip}/#{port}] tried to connect to a SSL connection and failed the handshake."
                 socket.close rescue nil
             rescue Errno::ECONNRESET
                 socket.close rescue nil
-                self.debug "#{socket.peeraddr[2]}[#{socket.peeraddr[3]}] connection reset."
+                self.debug "#{host}[#{ip}/#{port}] connection reset."
             rescue Exception => e
                 socket.close rescue nil
                 self.debug(e)
@@ -357,12 +361,7 @@ class ConnectionDispatcher
 
         if erroring
             erroring.each {|socket|
-                thing = @connections.things[socket]
-
-                server.kill thing, 'Client exited', true
-
-                @output.pop(socket)
-                handleDisconnection thing, @output.pop(socket)
+                server.kill @connections.things[socket], 'Client exited', true
             }
         end
 
@@ -425,7 +424,7 @@ class ConnectionDispatcher
         @output.delete(thing.socket)
         connections.delete(thing.socket)
 
-        self.debug "#{thing.mask}[#{thing.socket.peeraddr[3]}/#{thing.socket.peeraddr[1]}] disconnected."
+        self.debug "#{thing.mask}[#{thing.ip}/#{thing.port}] disconnected."
 
         thing.socket.close rescue nil
     end

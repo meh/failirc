@@ -63,6 +63,11 @@ class Cloaking < Module
     def disguiseas (thing, string)
         match = string.match(/DISGUISEAS\s+(.+?)$/i)
 
+        if !thing.modes[:operator]
+            thing.send :numeric, ERR_NOPRIVILEGES
+            return
+        end
+
         if !match
             @disguises.delete(thing)
         else

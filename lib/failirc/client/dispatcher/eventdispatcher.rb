@@ -18,28 +18,35 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
 require 'failirc/utils'
-require 'failirc/server/dispatcher/event'
+require 'failirc/client/dispatcher/event'
 
 module IRC
 
-class Server
+class Client
 
 class Dispatcher
 
 class EventDispatcher
-    attr_reader :server, :dispatcher, :handling, :aliases, :events
+    attr_reader :client, :dispatcher, :handling, :aliases, :events
 
     def initialize (dispatcher)
-        @server     = dispatcher.server
+        @client     = dispatcher.client
         @dispatcher = dispatcher
         @handling   = ThreadSafeHash.new
 
-        @aliases = {
+        @aliases = { :default => newAliases }
+        @events  = { :default => newEvents }
+    end
+
+    def newAliases
+        Hash[
             :input  => {},
             :output => {},
-        }
+        ]
+    end
 
-        @events = {
+    def newEvents
+        Hash[
             :pre     => [],
             :post    => [],
             :default => [],
@@ -47,37 +54,37 @@ class EventDispatcher
             :custom => {},
 
             :input  => {},
-            :output => {},
-        }
+            :output => {}
+        ]
     end
 
-    def handle (what, chain, deep, thing)
+    def handle (what, chain, deep, server)
         if chain != :input || deep
             return
         end
 
         if what == :start
-            @handling[thing.socket] = true
+            @handling[server.socket] = true
         else
-            @handling.delete(thing.socket)
+            @handling.delete(server.socket)
         end
     end
 
-    def dispatch (chain, thing, string, deep=false)
-        if !thing
+    def dispatch (chain, server, string, deep=false)
+        if !server
             return
         end
 
-        handle(:start, chain, deep, thing)
+        handle(:start, chain, deep, server)
 
-        event  = Event.new(self, chain, thing, string)
+        event  = Event.new(self, chain, server, string)
         result = string
 
         @events[:pre].each {|callback|
             event.special = :pre
 
-            if callback.call(event, thing, string) == false
-                handle(:stop, chain, deep, thing)
+            if callback.call(event, server, string) == false
+                handle(:stop, chain, deep, server)
                 return false
             end
         }
@@ -87,8 +94,8 @@ class EventDispatcher
 
             event.callbacks.each {|callback|
                 begin
-                    if callback.call(thing, string) == false
-                        handle(:stop, chain, deep, thing)
+                    if callback.call(server, string) == false
+                        handle(:stop, chain, deep, server)
                         return false
                     end
                 rescue Exception => e
@@ -99,8 +106,8 @@ class EventDispatcher
             @events[:default].each {|callback|
                 event.special = :default
     
-                if callback.call(event, thing, string) == false
-                    handle(:stop, chain, deep, thing)
+                if callback.call(event, server, string) == false
+                    handle(:stop, chain, deep, server)
                     return false
                 end
             }
@@ -109,13 +116,13 @@ class EventDispatcher
         @events[:post].each {|callback|
             event.special = :post
 
-            if callback.call(event, thing, string) == false
-                handle(:stop, chain, deep, thing)
+            if callback.call(event, server, string) == false
+                handle(:stop, chain, deep, server)
                 return false
             end
         }
 
-        handle(:stop, chain, deep, thing)
+        handle(:stop, chain, deep, server)
 
         return result
     end
@@ -144,7 +151,13 @@ class EventDispatcher
         end
     end
 
-    def register (chain, type, callback, priority=0)
+    def register (*args)
+        if !args.first.is_a?(Symbol)
+            server = client.server args.shift
+        end
+
+        chain, type, callback, priority = args
+
         if !type
             events = @events[chain]
 

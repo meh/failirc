@@ -1,5 +1,4 @@
-#! /usr/bin/env ruby
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -18,44 +17,50 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server'
-require 'getoptlong'
+require 'failirc/utils'
+require 'failirc/errors'
+require 'failirc/responses'
 
-args = GetoptLong.new(
-    ['--version', '-v', GetoptLong::NO_ARGUMENT],
-    ['--verbose', '-V', GetoptLong::NO_ARGUMENT],
-    ['--config', '-f', GetoptLong::REQUIRED_ARGUMENT]
-)
+require 'failirc/server/module'
 
-options = {
-    :verbose => false,
-    :config  => '/etc/failirc.conf',
-}
+module IRC
 
-args.each {|option, value|
-    case option
+class Client
 
-    when '--version'
-        puts "Fail IRCd #{IRC::VERSION}"
-        exit 0
+module Modules
 
-    when '--verbose'
-        options[:verbose] = true
+class Base < Module
+    @@version = '0.0.1'
 
-    when '--config'
-        options[:config] = value
+    def self.version
+        @@version
+    end
+
+    def description
+        "Base-#{Base.version}"
+    end
+
+    def initialize (client)
+        @aliases = {
+            :input => {
+                :NUMERIC => /^:([^ ]+)\s+(\d{3})\s+(.+)/,
+            },
+        }
+
+        @events = {
+            :input => {
+                :NUMERIC => self.method(:numeric),
+            },
+        }
+    end
+
+    def numeric (server, string)
 
     end
-}
-
-ircd = IRC::Server.new(File.new(options[:config]), options[:verbose])
-
-def stop (ircd)
-    ircd.stop
-    Process.exit!(0)
 end
 
-trap('INT') { stop ircd }
-trap('KILL') { stop ircd }
+end
 
-ircd.start
+end
+
+end

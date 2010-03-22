@@ -88,7 +88,11 @@ class Server
         @config.elements['config/server/name'].text
     end
 
-    def loadModule (name, path=nil)
+    def loadModule (name, path=nil, reload=false)
+        if @modules[name] && !reload
+            return
+        end
+
         begin 
             if path[0] == '/'
                 $LOAD_PATH.push path
@@ -104,9 +108,10 @@ class Server
                 @modules[name] = klass.new(self)
                 self.debug "Loaded `#{name}`."
             else
-                self.debug "Failed to load `#{name}`."
+                raise Exception
             end
         rescue Exception => e
+            self.debug "Failed to load `#{name}`."
             self.debug e
         end
     end
@@ -117,11 +122,13 @@ class Server
         end
 
         if !@config
-            raise '@config is missing.'
+            raise 'config is missing.'
         end
 
+        @started = true
+
         @config.elements.each('config/server/listen') {|listen|
-            @dispatcher.connection.listen({
+            self.listen({
                 :bind => listen.attributes['bind'],
                 :port => listen.attributes['port'],
 
@@ -131,9 +138,7 @@ class Server
             }, listen)
         }
 
-        @started = true
-
-        @dispatcher.start()
+        @dispatcher.start
     end
 
     def stop
@@ -145,13 +150,19 @@ class Server
             @modules.each {|mod|
                 mod.finalize
             }
-        ensure
-            Process.exit!(0)
+        rescue
         end
+
+        @stopping = false
+        @started  = false
     end
 
     def stopping?
         @stopping
+    end
+
+    def listen (*args)
+        @dispatcher.connection.listen(*args)
     end
 
     # kill connection with harpoons on fire
@@ -195,18 +206,15 @@ class Server
         end
 
         if !@config.elements['config/server/name']
-            @config.elements['config/server'].add(Element.new('name'))
-            @config.elements['config/server/name'].text = 'Fail IRC'
+            @config.elements['config/server'].add(Element.new('name')).text = 'Fail IRC'
         end
 
         if !@config.elements['config/server/host']
-            @config.elements['config/server'].add(Element.new('host'))
-            @config.elements['config/server/host'].text = Socket.gethostname
+            @config.elements['config/server'].add(Element.new('host')).text = Socket.gethostname
         end
 
         if !@config.elements['config/server/pingTimeout']
-            @config.elements['config/server'].add(Element.new('pingTimeout'))
-            @config.elements['config/server/pingTimeout'].text = '60'
+            @config.elements['config/server'].add(Element.new('pingTimeout')).text = '60'
         end
 
         if !@config.elements['config/server/listen']
@@ -246,9 +254,7 @@ class Server
                 element.attributes['path'] = 'failirc/server/modules'
             end
 
-            if !@modules[element.attributes['name']]
-                self.loadModule(element.attributes['name'], element.attributes['path'])
-            end
+            self.loadModule element.attributes['name'], element.attributes['path']
         }
 
         self.debug 'Finished loading modules.', "\n"

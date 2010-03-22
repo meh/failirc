@@ -17,4 +17,27 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+module IRC
 
+class Client
+
+class Server
+    attr_reader :client, :socket, :config, :host, :ip, :port
+    attr_accessor :nick
+
+    def initialize (client, socket, config)
+        @client = client
+        @socket = socket
+        @config = config
+
+        @host = socket.peeraddr[2]
+        @ip   = socket.peeraddr[3]
+        @port = socket.addr[1]
+
+        nick = client.nick
+    end
+end
+
+end
+
+end

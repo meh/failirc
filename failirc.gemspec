@@ -9,7 +9,7 @@ Gem::Specification.new {|s|
     s.summary           = 'A fail IRC library.'
     s.files             = Dir.glob('lib/**/*.rb')
     s.require_path      = 'lib'
-    s.executables       = 'failircd'
+    s.executables       = ['failircd', 'failbot']
     s.test_files        = []
     s.has_rdoc          = true
     s.extra_rdoc_files  = ['README']

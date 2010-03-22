@@ -28,9 +28,9 @@ module IRC
 class Server
 
 class Client
-    attr_reader   :server, :socket, :listen, :channels, :modes, :mask, :nick, :user, :host, :connectedOn
+    attr_reader   :server, :socket, :listen, :ip, :port, :channels, :modes, :mask, :nick, :user, :host, :connectedOn
     attr_writer   :quitting
-    attr_accessor :password, :ip, :realName
+    attr_accessor :password, :realName
 
     def initialize (server, socket, listen=nil)
         @server = server
@@ -46,8 +46,9 @@ class Client
             @mask = socket
         else
             @mask = Mask.new
-            host = socket.peeraddr[2].clone
-            ip   = socket.peeraddr[3].clone
+            @host = socket.peeraddr[2]
+            @ip   = socket.peeraddr[3]
+            @port = socket.addr[1]
 
             if socket.is_a?(OpenSSL::SSL::SSLSocket)
                 @modes[:ssl] = true

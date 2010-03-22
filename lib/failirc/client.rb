@@ -25,17 +25,99 @@ include REXML
 require 'failirc'
 require 'failirc/utils'
 
+require 'failirc/client/dispatcher'
+
 module IRC
 
 class Client
-    attr_reader :version, :verbose, :dispatcher, :servers, :channels
+    attr_reader :version, :verbose, :modules, :dispatcher, :servers, :channels
 
     def initialize (conf, verbose)
-        if conf.is_a?(Hash)
+        @version = IRC::VERSION
+        @verbose = verbose
 
-        else
-            self.config = conf
+        @modules = {}
+
+        @dispatcher = Dispatcher.new self
+
+        self.config = conf
+    end
+
+    def loadModule (name, path=nil, reload=false)
+        if @modules[name] && !reload
+            return
         end
+
+        begin 
+            if path[0] == '/'
+                $LOAD_PATH.push path
+                require name
+                $LOAD_PATH.pop
+            else
+                require "#{path}/#{name}"
+            end
+
+            klass = eval("Modules::#{name}") rescue nil
+
+            if klass
+                @modules[name] = klass.new(self)
+                self.debug "Loaded `#{name}`."
+            else
+                raise Exception
+            end
+        rescue Exception => e
+            self.debug "Failed to load `#{name}`."
+            self.debug e
+        end
+    end
+
+    def start
+        if @started
+            return
+        end
+
+        if !@config
+            raise 'config is missing'
+        end
+
+        @started = true
+
+        @config.elements.each('config/servers/server') {|element|
+            self.connect({
+                :host => element.attributes['host'],
+                :port => element.attributes['port'],
+
+                :ssl      => element.attributes['ssl'],
+                :ssl_cert => element.attributes['sslCert'],
+                :ssl_key  => element.attributes['sslKey']
+            }, element)
+        }
+
+        @dispatcher.start
+    end
+
+    def stop
+        @stopping = true
+
+        begin
+            dispatcher.stop
+
+            @modules.each {|mod|
+                mod.finalize
+            }
+        rescue
+        end
+
+        @stopping = false
+        @started  = false
+    end
+
+    def connect (*args)
+        @dispatcher.connection.connect(*args)
+    end
+
+    def server (identifier)
+        dispatcher.server identifier
     end
 
     def alias (*args)
@@ -51,8 +133,60 @@ class Client
     end
 
     def config= (reference)
-        @config          = Document.new reference
+        if reference.is_a?(Hash)
+            @config = Document.new
+
+            @config.add Element.new 'config'
+            @config.element['config'].add Element.new 'informations'
+            @config.element['config'].add Element.new 'servers'
+            @config.element['config'].add Element.new 'modules'
+
+            informations = @config.element['config/informations']
+
+            informations.add(Element.new 'nick').text     = reference[:nick] || 'fail'
+            informations.add(Element.new 'user').text     = reference[:user] || 'fail'
+            informations.add(Element.new 'realName').text = reference[:realName] || "failirc-#{version}"
+
+            servers = @config.element['config/servers']
+
+            if reference[:servers]
+                reference[:servers].each {|server|
+                    element = servers.add(Element.new 'server')
+
+                    element.attributes['host']    = server[:host]
+                    element.attributes['port']    = server[:port]
+                    element.attributes['ssl']     = server[:ssl]
+                    element.attributes['sslCert'] = server[:ssl_cert]
+                    element.attributes['sslKey']  = server[:ssl_key]
+                }
+            end
+
+            modules = @config.element['config/modules']
+
+            if reference[:modules]
+                reference[:modules].each {|mod|
+                    element = modules.add(Element.new 'module')
+
+                    element.attributes['name'] = mod[:name]
+                }
+            end
+        else
+            @config = Document.new reference
+        end
+
         @configReference = reference
+
+        self.debug 'Loading modules.'
+
+        @config.elements.each('config/modules/module') {|element|
+            if !element.attributes['path']
+                element.attributes['path'] = 'failirc/client/modules'
+            end
+
+            self.loadModule element.attributes['name'], element.attributes['path']
+        }
+
+        self.debug 'Finished loading modules.', "\n"
     end
 end
 

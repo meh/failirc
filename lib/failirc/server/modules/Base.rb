@@ -17,13 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'thread'
-
-require 'failirc/extensions'
+require 'failirc/utils'
 require 'failirc/errors'
 require 'failirc/responses'
 
 require 'failirc/server/module'
+
 require 'failirc/server/client'
 require 'failirc/server/channel'
 require 'failirc/server/user'

@@ -108,7 +108,7 @@ class ConnectionDispatcher
                     socket = socket.socket
                 end
 
-                dispatcher.disconnecting.push({ :thing => dispatcher.connections.things[socket], :output => self[socket] })
+                dispatcher.disconnecting.push({ :server => dispatcher.connections.things[socket], :output => self[socket] })
             end
 
             if (string && !string.empty?) || self[socket].last == :EOC
@@ -182,39 +182,49 @@ class ConnectionDispatcher
     end
 
     def connect (options, config)
-        server  = TCPSocket.new(Resolv.getaddress(options[:address]), options[:port])
+        socket  = nil
         context = nil
+
+        begin
+            socket = TCPSocket.new(Resolv.getaddress(options[:host]), options[:port])
+        rescue Errno::ECONNREFUSED
+            self.debug "Could not connect to #{Resolv.getaddress(options[:host])}/#{options[:port]}."
+            return
+        end
 
         if options[:ssl] != 'disabled'
             context = SSLUtils::context(options[:ssl_cert], options[:ssl_key])
         end
 
-        self.debug "Connecting to #{server.peeraddr[2]}[#{server.peeraddr[3]}/#{server.peeraddr[1]}]"
+        host = socket.peeraddr[2]
+        ip   = socket.peeraddr[3]
+        port = socket.addr[1]
+
+        self.debug "Connecting to #{host}[#{ip}/#{port}]"
 
         begin
             if listen.attributes['ssl'] != 'disabled'
-                ssl = OpenSSL::SSL::SSLSocket.new server, context
+                ssl = OpenSSL::SSL::SSLSocket.new socket, context
 
                 ssl.connect
-                server = ssl
+                socket = ssl
             end
 
-            @connections.servers[:bySocket][server] = Client::Server.new(client, server, config)
+            @connections.sockets[:bySocket][socket] = socket.new(client, socket, config)
 
-            @connections.servers[:byName][@connections.servers[:bySocket][server].name]
-                = @connections.servers[:bySocket][server]
+            @connections.sockets[:byName][@connections.sockets[:bySocket][socket].name] = @connections.sockets[:bySocket][socket]
 
-            @connections.sockets.push(server)
+            @connections.sockets.push(socket)
 
-            @input[server]
+            @input[socket]
         rescue OpenSSL::SSL::SSLError
-            self.debug "Tried to connect to #{server.peeraddr[3]}/#{server.peeraddr[1]} with SSL bubt the handshake failed."
-            server.close rescue nil
+            self.debug "Tried to connect to #{host}[#{ip}/#{port}] with SSL but the handshake failed."
+            socket.close rescue nil
         rescue Errno::ECONNRESET
-            server.close rescue nil
-            self.debug "#{server.peeraddr[2]}[#{server.peeraddr[3]}] connection reset."
+            socket.close rescue nil
+            self.debug "#{host}[#{ip}/#{port}] connection reset."
         rescue Exception => e
-            server.close rescue nil
+            socket.close rescue nil
             self.debug e
         end
     end
@@ -231,7 +241,7 @@ class ConnectionDispatcher
         end
 
         reading.each {|socket|
-            server = @connections.servers[:bySocket][socket]
+            server = self.server socket
 
             begin
                 input = socket.read_nonblock 2048
@@ -244,15 +254,15 @@ class ConnectionDispatcher
                     @input.push(socket, string)
                 }
             rescue IOError
-                server.kill thing, 'Input/output error', true
+                disconnect server, 'Input/output error'
             rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                server.kill thing, 'Client exited', true
+                disconnect server, 'Client exited'
             rescue Errno::ECONNRESET
-                server.kill thing, 'Connection reset by peer', true
+                disconnect server, 'Connection reset by peer'
             rescue Errno::ETIMEDOUT
-                server.kill thing, 'Ping timeout', true
+                disconnect server, 'Ping timeout'
             rescue Errno::EHOSTUNREACH
-                server.kill thing, 'No route to host', true
+                disconnect server, 'No route to host'
             rescue Errno::EAGAIN, IO::WaitReadable
             rescue Exception => e
                 self.debug e
@@ -260,14 +270,19 @@ class ConnectionDispatcher
         }
     end
 
+    def disconnect (server, message)
+        @output.push server, :EOC
+        @output.push server, message
+    end
+
     def clean
         @disconnecting.each {|data|
-            thing  = data[:thing]
+            server = data[:server]
             output = data[:output]
 
             if output.first == :EOC
                 output.shift
-                handleDisconnection thing, output.shift
+                handleDisconnection server, output.shift
                 @disconnecting.delete(data)
             end
         }
@@ -300,12 +315,7 @@ class ConnectionDispatcher
 
         if erroring
             erroring.each {|socket|
-                thing = @connections.things[socket]
-
-                server.kill thing, 'Client exited', true
-
-                @output.pop(socket)
-                handleDisconnection thing, @output.pop(socket)
+                disconnect self.server(socket), 'Client exited', true
             }
         end
 
@@ -318,7 +328,7 @@ class ConnectionDispatcher
                 next
             end
 
-            thing = @connections.things[socket]
+            server = self.server socket
 
             begin
                 while !@output.empty?(socket)
@@ -334,15 +344,15 @@ class ConnectionDispatcher
                     end
                 end
             rescue IOError
-                server.kill thing, 'Input/output error', true
+                disconnect server, 'Input/output error'
             rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-                server.kill thing, 'Client exited', true
+                disconnect server, 'Client exited'
             rescue Errno::ECONNRESET
-                server.kill thing, 'Connection reset by peer', true
+                disconnect server, 'Connection reset by peer'
             rescue Errno::ETIMEDOUT
-                server.kill thing, 'Ping timeout', true
+                disconnect server, 'Ping timeout'
             rescue Errno::EHOSTUNREACH
-                server.kill thing, 'No route to host', true
+                disconnect server, 'No route to host'
             rescue Errno::EAGAIN, IO::WaitWritable
             rescue Exception => e
                 self.debug e
@@ -356,26 +366,28 @@ class ConnectionDispatcher
         @output.delete(server.socket)
         connections.delete(server.socket)
 
-        self.debug "Disconnected from #{server}[#{server.socket.peeraddr[3]}/#{server.socket.peeraddr[1]}]"
+        self.debug "Disconnected from #{server}[#{server.ip}/#{server.port}]"
 
         server.socket.close rescue nil
     end
 
     def finalize
         begin
-            @connections.listening[:sockets].each {|server|
-                server.close
-            }
-
-            @clients.each {|key, client|
-                kill client, 'Good night sweet prince.'
-            }
-
-            @links.each {|key, link|
-                kill client, 'Good night sweet prince.'
+            @connections.sockets.each {|socket|
+                disconnect self.server(socket), disconnecting
             }
         rescue Exception => e
             self.debug e
+        end
+    end
+
+    def server (identifier)
+        if identifier.is_a?(Server)
+            return identifier
+        elsif identifier.is_a?(String)
+            return @connections.servers[:byName][identifier]
+        else
+            return @connections.servers[:bySocket][identifier]
         end
     end
 end

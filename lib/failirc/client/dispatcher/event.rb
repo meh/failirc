@@ -19,7 +19,7 @@
 
 module IRC
 
-class Server
+class Client
 
 class Dispatcher
 
@@ -38,13 +38,13 @@ class Event
         end
     end
 
-    attr_reader :types, :chain, :aliases, :dispatcher, :thing, :string
+    attr_reader :types, :chain, :aliases, :dispatcher, :server, :string
     attr_accessor :special
 
-    def initialize (dispatcher, chain, thing, string)
+    def initialize (dispatcher, chain, server, string)
         @dispatcher = dispatcher
         @chain      = chain
-        @thing      = thing
+        @server     = server
         @string     = string
         @types      = Event.types(dispatcher, chain, string)
         @aliases    = Event.aliases(dispatcher, chain, types)
