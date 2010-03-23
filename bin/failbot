@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server'
+require 'failirc/client'
 require 'getoptlong'
 
 args = GetoptLong.new(
@@ -65,6 +65,20 @@ client.register :custom, :numeric, lambda {|server, number, message|
     end
 
     client.execute :join, server, '#fail'
+}
+
+client.register :custom, :message, lambda {|server, chain, from, to, message|
+    if chain != :input
+        return
+    end
+    
+    if message.match(/POPPE/)
+        if from.is_a?(IRC::Client::User)
+            from.channel.users.each {|nick, user|
+                client.execute :message, server, :output, client, from.channel, "#{nick} YOU'RE A FAGGOT"
+            }
+        end
+    end
 }
 
 client.start

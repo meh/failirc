@@ -50,6 +50,16 @@ class Mask
         return matches[:nick] && matches[:user] && matches[:host]
     end
 
+    def == (mask)
+        if @nick == mask.nick && @user == mask.user && @host == mask.host
+            return true
+        end
+    end
+
+    def != (mask)
+        !(self == mask)
+    end
+
     def to_s
         return "#{nick || '*'}!#{user || '*'}@#{host || '*'}"
     end

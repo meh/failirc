@@ -24,7 +24,7 @@ module IRC
 class Client
 
 class User
-    attr_reader :channel, :modes
+    attr_reader :client, :channel, :modes
 
     def initialize (client, channel, modes=Modes.new)
         @channel = channel

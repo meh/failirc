@@ -24,6 +24,10 @@ require 'failirc/responses'
 
 require 'failirc/client/module'
 
+require 'failirc/client/channel'
+require 'failirc/client/user'
+require 'failirc/client/client'
+
 module IRC
 
 class Client
@@ -44,31 +48,47 @@ class Base < Module
     def initialize (client)
         @aliases = {
             :input => {
-                :PING => /^PING( |$)/i,
-
                 :NUMERIC => /^:([^ ]+)\s+(\d{3})\s+(.+)/,
 
+                :PING => /^PING( |$)/i,
+
                 :JOIN => /^:.+?\s+JOIN\s+:./i,
+
+                :PRIVMSG => /^:.+?\s+PRIVMSG\s+.+?\s+:/i,
             },
         }
 
         @events = {
             :custom => {
                 :connect => self.method(:connect),
+                :numeric => self.method(:received_numeric),
 
                 :join => self.method(:join),
+                :who  => self.method(:who),
+
+                :message => self.method(:send_message),
             },
 
             :input => {
-                :PING => self.method(:pong),
-
                 :NUMERIC => self.method(:numeric),
 
+                :PING => self.method(:pong),
+
                 :JOIN => self.method(:joined),
+
+                :PRIVMSG => self.method(:message),
             },
         }
 
         super(client)
+    end
+
+    module Utils
+        module Channel
+            def self.isValid (string)
+                string.match(/^[&#+!][^ ,:\a]{0,50}$/) ? true : false
+            end
+        end
     end
 
     def connect (server)
@@ -96,21 +116,112 @@ class Base < Module
         end
     end
 
+    def received_numeric (server, number, message)
+        case number
+
+        when 352
+            match = message.match(/(.+?)\s+(.+?)\s+(.+?)\s+.+?\s+(.+?)\s+.+?\s+:\d+\s+(.+)$/)
+
+            if !match
+                return
+            end
+
+            channel  = match[1]
+            mask     = Mask.new(match[4], match[2], match[3])
+            realName = match[5]
+
+            if !server.channels[channel]
+                server.channels[channel] = Channel.new(server, channel)
+            end
+
+            channel = server.channels[channel]
+
+            if mask.nick == server.nick
+                return
+            end
+
+            if !server.clients[mask.nick] || server.clients[mask.nick].mask != mask
+                server.clients[mask.nick]          = Client.new(server, mask)
+                server.clients[mask.nick].realName = realName
+            end
+
+            channel.add(server.clients[mask.nick])
+
+        end
+    end
+
     def join (server, channel)
         server.send :raw, "JOIN #{channel}"
-        server.send :raw, "WHO #{channel}"
+        client.execute :who, server, channel
     end
 
     def joined (server, string)
         match = string.match(/^:(.+?)\s+JOIN\s+:(.+)$/i)
 
-        if match
-            mask    = Mask.parse(match[1])
-            channel = match[2]
+        if !match
+            return
+        end
 
-            if mask.nick == server.nick
+        mask    = Mask.parse(match[1])
+        channel = match[2]
+
+        if mask.nick == server.nick
+            if !server.channels[channel]
                 server.channels[channel] = Channel.new(server, channel)
             end
+        else
+            if !server.clients[mask.nick] || server.clients[mask.nick].mask != mask
+                server.clients[mask.nick] = Client.new(server, mask)
+            end
+
+            if server.channels[channel]
+                server.channels[channel].add(server.clients[mask.nick])
+            end
+        end
+    end
+
+    def who (server, channel)
+        server.send :raw, "WHO #{channel}"
+    end
+
+    def message (server, string)
+        match = string.match(/:(.+?)\s+PRIVMSG\s+(.+)\s+:(.*)$/i)
+
+        if !match
+            return
+        end
+
+        from = Mask.parse(match[1])
+
+        if !server.clients[from.nick] || server.clients[from.nick] != from
+            from = server.clients[from.nick] = Client.new(server, from)
+        else
+            from = server.clients[from.nick]
+        end
+
+        to = match[2]
+
+        if Utils::Channel::isValid(to)
+            to   = server.channels[to]
+            from = to.user from
+        else
+            to = client
+        end
+
+        message = match[3]
+
+        client.execute :message, server, :input, from, to, message
+    end
+
+    def send_message (server, chain, from, to, message)
+        if chain != :output
+            return
+        end
+
+        if to.is_a?(Channel)
+            server.send :raw, "PRIVMSG #{to.name} :#{message}"
+        elsif to.is_a?(Client)
+            server.send :raw, "PRIVMSG #{to.nick} :#{message}"
         end
     end
 end

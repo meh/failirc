@@ -20,11 +20,11 @@
 require 'failirc/utils'
 require 'failirc/modes'
 
-require 'failirc/server/users'
+require 'failirc/client/users'
 
 module IRC
 
-class Server
+class Client
 
 class Channel
     class Topic
@@ -34,19 +34,6 @@ class Channel
         def initialize (channel)
             @server  = channel.server
             @channel = channel
-
-            @semaphore = Mutex.new
-        end
-
-        def text= (value)
-            @semaphore.synchronize {
-                @text  = value
-                @setOn = Time.now
-            }
-        end
-
-        def setBy= (value)
-            @setBy = value.mask.clone
         end
 
         def to_s
@@ -58,7 +45,8 @@ class Channel
         end
     end
 
-    attr_reader :client, :server, :name, :type, :createdOn, :users, :modes, :topic
+    attr_reader   :client, :server, :name, :type, :users, :modes, :topic
+    attr_accessor :createdOn
 
     def initialize (server, name)
         @client = server.client
@@ -70,23 +58,10 @@ class Channel
         @users     = Users.new(self)
         @modes     = Modes.new
         @topic     = Topic.new(self)
-
-        @semaphore = Mutex.new
     end
 
     def type
         @name[0, 1]
-    end
-
-    def topic= (data)
-        @semaphore.synchronize {
-            if data.is_a?(Topic)
-                @topic = data
-            elsif data.is_a?(Array)
-                @topic.setBy = data[0]
-                @topic.text  = data[1]
-            end
-        }
     end
 
     def [] (user)

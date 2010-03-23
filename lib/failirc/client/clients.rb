@@ -32,6 +32,10 @@ class Clients < Hash
 
         super(*args)
     end
+
+    def add (client)
+        self[client.nick] = client
+    end
 end
 
 end

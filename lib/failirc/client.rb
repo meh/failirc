@@ -27,6 +27,10 @@ require 'failirc/utils'
 
 require 'failirc/client/dispatcher'
 
+require 'failirc/client/client'
+require 'failirc/client/user'
+require 'failirc/client/channel'
+
 module IRC
 
 class Client

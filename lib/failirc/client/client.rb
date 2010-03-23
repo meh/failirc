@@ -26,7 +26,8 @@ module IRC
 class Client
 
 class Client
-    attr_reader :client, :server, :modes, :mask
+    attr_reader   :client, :server, :modes, :mask
+    attr_accessor :realName
 
     def initialize (server, mask)
         @client = client
