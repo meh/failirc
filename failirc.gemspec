@@ -3,7 +3,7 @@ Gem::Specification.new {|s|
     s.version           = '0.0.1'
     s.author            = 'meh.'
     s.email             = 'meh.ffff@gmail.com'
-    s.homepage          = 'http://meh.doesntexist.org/#failirc'
+    s.homepage          = 'http://github.com/meh/failirc'
     s.platform          = Gem::Platform::RUBY
     s.description       = 'A fail IRC library, Server and Client. Includes a working IRCd.'
     s.summary           = 'A fail IRC library.'

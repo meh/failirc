@@ -17,39 +17,20 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/utils'
-require 'failirc/modes'
-require 'failirc/mask'
+require 'failirc/server/client'
 
 module IRC
 
 class Client
 
-class Client
-    attr_reader :client, :server, :modes, :mask
+class Clients < Hash
+    attr_reader :client, :server
 
-    def initialize (server, mask)
-        @client = client
+    def initialize (server, *args)
+        @client = server.client
         @server = server
-        @mask   = mask
 
-        @modes  = Modes.new
-    end
-
-    def nick
-        mask.nick
-    end
-
-    def user
-        mask.user
-    end
-
-    def host
-        mask.host
-    end
-
-    def to_s
-        mask.to_s
+        super(*args)
     end
 end
 

@@ -98,6 +98,7 @@ class Base < Module
 
     def join (server, channel)
         server.send :raw, "JOIN #{channel}"
+        server.send :raw, "WHO #{channel}"
     end
 
     def joined (server, string)

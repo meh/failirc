@@ -17,12 +17,15 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/client/channels'
+require 'failirc/client/clients'
+
 module IRC
 
 class Client
 
 class Server
-    attr_reader :client, :socket, :config, :name, :host, :ip, :port, :channels
+    attr_reader :client, :socket, :config, :name, :host, :ip, :port, :channels, :clients
     attr_accessor :nick, :password
 
     def initialize (client, socket, config, name=nil)
@@ -31,6 +34,7 @@ class Server
         @config = config
 
         @channels = Channels.new(self)
+        @clients  = Clients.new(self)
 
         @host = socket.peeraddr[2]
         @ip   = socket.peeraddr[3]

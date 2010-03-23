@@ -63,6 +63,8 @@ client.register :custom, :numeric, lambda {|server, number, message|
     if number != 376 && number != 422
         return
     end
+
+    client.execute :join, server, '#fail'
 }
 
 client.start
