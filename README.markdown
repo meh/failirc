@@ -3,6 +3,12 @@ Fail IRC
 
 Fail IRC is a Ruby (1.9+) library that implements and abstracts a Server and a Client.
 
+Both are implemented in an event driven, concurrent and modular way. You can easily write modules that can
+do pretty much anything, in fact the standard protocols are implemented as modules.
+
+There's still no documentation about the API and the events, but I will add it sooner or later. For the moment
+just read the sources, they're pretty easy to understand (dispatcher excluded).
+
 Installation
 ------
 Installation after cloning or downloading the source tree.
