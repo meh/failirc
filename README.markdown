@@ -7,8 +7,8 @@ Installation
 ------
 Installation after cloning or downloading the source tree.
 
-> $ gem build *.gemspec
-> \# gem install *.gem
+> $ gem build \*.gemspec
+> \# gem install \*.gem
 
 Installation from rubygems.org (not yet uploaded)
 > \# gem install failirc
