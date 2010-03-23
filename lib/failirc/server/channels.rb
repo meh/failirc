@@ -54,7 +54,7 @@ class Channels < ThreadSafeHash
 
         each_value {|channel|
             channel.users.each {|nick, user|
-                result[nick] = user
+                result[nick] = user.client
             }
         }
 

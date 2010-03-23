@@ -46,7 +46,7 @@ class Base < Module
                 :can_change_ssl_mode, :can_change_moderated_mode,
                 :can_change_invite_only_mode, :can_change_auditorium_mode,
                 :can_change_anonymous_mode, :can_change_limit_mode,
-                :can_change_redirect_mode,
+                :can_change_redirect_mode, :can_change_noknock_mode,
             ],
 
             :can_change_user_modes => [
@@ -64,6 +64,7 @@ class Base < Module
             :i => :invite_only,
             :l => :limit,
             :L => :redirect,
+            :K => :no_knock,
             :m => :moderated,
             :n => :no_external_messages,
             :s => :secret,
@@ -131,6 +132,7 @@ class Base < Module
                 :PART   => /^(:[^ ] )?PART( |$)/i,
                 :KICK   => /^(:[^ ] )?KICK( |$)/i,
                 :INVITE => /^INVITE( |$)/i,
+                :KNOCK  => /^KNOCK( |$)/i,
 
                 :TOPIC => /^(:[^ ] )?TOPIC( |$)/i,
                 :NAMES => /^NAMES( |$)/i,
@@ -198,6 +200,7 @@ class Base < Module
                 :PART   => self.method(:part),
                 :KICK   => self.method(:kick),
                 :INVITE => self.method(:invite),
+                :KNOCK  => self.method(:knock),
 
                 :TOPIC => self.method(:topic),
                 :NAMES => self.method(:names),
@@ -229,8 +232,15 @@ class Base < Module
         @@supportedModes[:channel].insert(-1, *('mniszuvhoyx'.split(//)))
 
         @@support.merge!({
-            'CHANTYPES' => '&#+!',
-            'PREFIX'    => '(xyohv)~&@%+',
+            'CASEMAPPING' => 'ascii',
+            'SAFELIST'    => true,
+            'EXCEPTS'     => true,
+            'CHANTYPES'   => '&#+!',
+            'PREFIX'      => '(xyohv)~&@%+',
+            'STATUSMSG'   => '~&@%+',
+            'FNC'         => true,
+
+            'CMDS' => 'KNOCK',
         })
 
         @joining   = ThreadSafeHash.new
@@ -403,6 +413,10 @@ class Base < Module
                 :v => '+',
             }
 
+            def self.levels
+                return @@levels
+            end
+
             @@levelsOrder = [:x, :y, :o, :h, :v]
 
             def self.isLevel (char)
@@ -410,11 +424,30 @@ class Base < Module
             end
 
             def self.isLevelEnough (user, level)
-                if !level
+                if !level || (level.is_a?(String) && level.empty?)
                     return true
                 end
 
-                (@@levelsOrder.index(self.getHighestLevel(user)) || 9001) < (@@levelsOrder.index(level) || 9000)
+                if level.is_a?(String)
+                    level = @@levels.key level
+                end
+
+                highest = self.getHighestLevel(user)
+
+                if !highest
+                    return false
+                else
+                    highest = @@levelsOrder.index(highest)
+                    level   = @@levelsOrder.index(level)
+
+                    if !level
+                        return true
+                    elsif !highest
+                        return false
+                    else
+                        return highest <= level
+                    end
+                end
             end
 
             def self.getHighestLevel (user)
@@ -492,12 +525,16 @@ class Base < Module
                     supported = String.new
 
                     Base.support.each {|key, value|
-                        supported << " #{key}=#{value}"
+                        if value != true
+                            supported << " #{key}=#{value}"
+                        else
+                            supported << " #{key}"
+                        end
                     }
 
                     supported = supported[1, supported.length]
 
-                    thing.send :numeric, RPL_SERVSUPPORTED, supported
+                    thing.send :numeric, RPL_ISUPPORT, supported
     
                     motd(thing)
                 end
@@ -593,7 +630,11 @@ class Base < Module
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
                 from.server.dispatcher.execute :ctcp, :input, kind, ref{:from}, ref{:to}, match[1], (match[2] ? match[3] : nil), level
             else
-                from.server.dispatcher.execute kind, :input, ref{:from}, ref{:to}, message, level
+                if kind == :notice
+                    from.server.dispatcher.execute :notice, :input, ref{:from}, ref{:to}, message, level
+                elsif kind == :message
+                     from.server.dispatcher.execute :message, :input, ref{:from}, ref{:to}, message
+                end
             end
         end
 
@@ -1085,6 +1126,20 @@ class Base < Module
 
                         output[:modes].push('L')
                     end
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'K'
+                if Utils::checkFlag(from, :can_change_noknock_mode)
+                    if Utils::checkFlag(thing, :K) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :K, type == '+')
+
+                    output[:modes].push('K')
+                   
                 else
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
@@ -1650,6 +1705,38 @@ class Base < Module
         to.send :raw, ":#{from.mask} INVITE #{to.nick} :#{channel}"
     end
 
+    def knock (thing, string)
+        match = string.match(/KNOCK\s+(.+?)(\s+:(.*))?$/i)
+
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'KNOCK'
+            return
+        end
+
+        channel = match[1]
+        message = match[3]
+
+        if !server.channels[channel]
+            thing.send :numeric, ERR_NOKNOCK, { :channel => channel, :reason => 'Channel does not exist!' }
+            return
+        end
+
+        channel = server.channels[channel]
+
+        if !channel.modes[:i]
+            thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'Channel is not invite only!' }
+            return
+        end
+
+        if channel.modes[:K]
+            thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'No knocks are allowed! (+K)' }
+            return
+        end
+
+        server.dispatcher.execute :notice, :input, ref{:server}, ref{:channel}, "[Knock] by #{thing.mask} (#{message ? message : 'no reason specified'})", '@'
+        server.dispatcher.execute :notice, :input, ref{:server}, ref{:thing}, "Knocked on #{channel.name}"
+    end
+
     def topic (thing, string)
         match = string.match(/TOPIC\s+(.*?)(\s+:(.*))?$/i)
 
@@ -1888,13 +1975,7 @@ class Base < Module
         receiver = match[1]
         message  = match[3]
 
-        if Utils::Channel::isValid(receiver) || Utils::Channel::isValid(receiver[1, receiver.length])
-            if Utils::User::isLevel(level = receiver[0, 1])
-                receiver = receiver[1, receiver.length]
-            else
-                level = nil
-            end
-
+        if Utils::Channel::isValid(receiver)
             channel = server.channels[receiver]
 
             if !channel
@@ -1915,12 +1996,12 @@ class Base < Module
             end
 
             if thing.is_a?(Server::User)
-                Utils::dispatchMessage(:message, thing, channel, message, level)
+                Utils::dispatchMessage(:message, thing, channel, message)
             else
                 if server.channels[receiver].modes[:no_external_messages]
                     thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
                 else
-                    Utils::dispatchMessage(:message, thing, channel, message, level)
+                    Utils::dispatchMessage(:message, thing, channel, message)
                 end
             end
         else
@@ -1934,7 +2015,7 @@ class Base < Module
         end
     end
 
-    def received_message (chain, fromRef, toRef, message, level=nil)
+    def received_message (chain, fromRef, toRef, message)
         if chain != :input
             return
         end
@@ -1944,8 +2025,8 @@ class Base < Module
 
         if to.is_a?(Channel)
             to.users.each_value {|user|
-                if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :message, :output, fromRef, ref{:user}, message, level
+                if user.client != from
+                    server.dispatcher.execute :message, :output, fromRef, ref{:user}, message
                 end
             }
         elsif to.is_a?(Client)
@@ -1953,7 +2034,7 @@ class Base < Module
         end
     end
 
-    def send_message (chain, fromRef, toRef, message, level=nil)
+    def send_message (chain, fromRef, toRef, message)
         if chain != :output
             return
         end
@@ -1973,7 +2054,7 @@ class Base < Module
             return
         end
 
-        to.send :raw, ":#{from} PRIVMSG #{name} :#{if level then "#{level}} " end}#{message}"
+        to.send :raw, ":#{from} PRIVMSG #{name} :#{message}"
     end
 
     def notice (thing, string)
@@ -1989,17 +2070,20 @@ class Base < Module
         if client = server.clients[name]
             Utils::dispatchMessage(:notice, thing, client, message)
         else
-            if Utils::User::isLevel(level = name[0, 1])
+            if Utils::User::isLevel(name[0, 1])
+                level   = name[0, 1]
                 channel = name[1, name.length]
             else
-                channel = name
                 level   = nil
+                channel = name
             end
 
             if !server.channels[channel]
                 # unrealircd sends an error if it can't find nick/channel, what should I do?
                 return
             end
+
+            channel = server.channels[channel]
 
             if !channel.modes[:no_external_messages] || channel.user(thing)
                 Utils::dispatchMessage(:notice, thing, channel, message, level)
@@ -2046,10 +2130,10 @@ class Base < Module
             return
         end
 
-        to.send :raw, ":#{from} NOTICE #{name} :#{message}"
+        to.send :raw, ":#{from} NOTICE #{level}#{name} :#{message}"
     end
 
-    def received_ctcp (chain, kind, fromRef, toRef, type, message, level)
+    def received_ctcp (chain, kind, fromRef, toRef, type, message, level=nil)
         if chain != :input
             return
         end
@@ -2068,7 +2152,7 @@ class Base < Module
         end
     end
 
-    def send_ctcp (chain, kind, fromRef, toRef, type, message, level)
+    def send_ctcp (chain, kind, fromRef, toRef, type, message, level=nil)
         if chain != :output
             return
         end
@@ -2095,13 +2179,14 @@ class Base < Module
         end
 
         if kind == :message
-            kind = 'PRIVMSG'
+            kind  = 'PRIVMSG'
+            level = ''
         elsif kind == :notice
             kind = 'NOTICE'
         end
 
         if kind.is_a?(String)
-            to.send :raw, ":#{from} #{kind} #{name} :\x01#{text}\x01"
+            to.send :raw, ":#{from} #{kind} #{level}#{name} :\x01#{text}\x01"
         end
     end
 

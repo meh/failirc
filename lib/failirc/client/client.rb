@@ -21,78 +21,35 @@ require 'failirc/utils'
 require 'failirc/modes'
 require 'failirc/mask'
 
-require 'failirc/server/channels'
-
 module IRC
 
-class Server
+class Client
 
 class Client
-    attr_reader   :server, :socket, :listen, :ip, :port, :channels, :modes, :mask, :nick, :user, :host, :connectedOn
-    attr_writer   :quitting
-    attr_accessor :password, :realName
+    attr_reader :client, :server, :modes, :mask,
 
-    def initialize (server, socket, listen=nil)
+    def initialize (server, mask)
+        @client = client
         @server = server
-        @socket = socket
-        @listen = listen
+        @mask   = mask
 
-        @registered = false
-
-        @channels = Channels.new(@server)
-        @modes    = Modes.new
-
-        if socket.is_a?(Mask)
-            @mask = socket
-        else
-            @mask = Mask.new
-            host  = socket.peeraddr[2]
-            @ip   = socket.peeraddr[3]
-            @port = socket.addr[1]
-
-            if socket.is_a?(OpenSSL::SSL::SSLSocket)
-                @modes[:ssl] = true
-            end
-        end
-
-        @connectedOn = Time.now
+        @modes  = Modes.new
     end
 
-    def nick= (value)
-        @mask.nick = @nick = value
+    def nick
+        mask.nick
     end
 
-    def user= (value)
-        @mask.user = @user = value
+    def user
+        mask.user
     end
 
-    def host= (value)
-        @mask.host = @host = value
-    end
-
-    def send (symbol, *args)
-        begin
-            self.method(symbol).call(*args)
-        rescue Exception => e
-            self.debug e
-        end
-    end
-
-    def raw (text)
-        @server.dispatcher.dispatch :output, self, text
-        @server.dispatcher.connection.output.push @socket, text
-    end
-
-    def numeric (response, value=nil)
-        raw ":#{server.host} #{'%03d' % response[:code]} #{nick || 'faggot'} #{eval(response[:text])}"
+    def host
+        mask.host
     end
 
     def to_s
         mask.to_s
-    end
-
-    def inspect
-        return "#<Client: #{mask} #{modes}#{(modes[:registered]) ? ' registered' : ''}>"
     end
 end
 

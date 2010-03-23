@@ -337,7 +337,7 @@ RPL_SERVINFO = {
     :text => '"#{server.host} failirc-#{server.version} #{value[:user]} #{value[:channel]}"'
 }
 
-RPL_SERVSUPPORTED = {
+RPL_ISUPPORT = {
     :code => 5,
     :text => '"#{value} :are supported by this server"'
 }

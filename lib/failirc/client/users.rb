@@ -17,22 +17,25 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/extensions'
+require 'failirc/utils'
 
-require 'failirc/server/user'
+require 'failirc/client/user'
 
 module IRC
 
-class Server
+class Client
 
 class Users < ThreadSafeHash
-    attr_reader :server, :channel
+    attr_reader :channel
 
     def initialize (channel, *args)
-        @server  = channel.server
         @channel = channel
 
         super(*args)
+    end
+
+    def client
+        @channel.client
     end
 
     def server
@@ -89,12 +92,6 @@ class Users < ThreadSafeHash
         else
             raise 'You can only add Client or User.'
         end
-    end
-
-    def send (*args)
-        each_value {|user|
-            user.send(*args)
-        }
     end
 end
 

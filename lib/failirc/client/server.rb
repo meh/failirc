@@ -22,13 +22,15 @@ module IRC
 class Client
 
 class Server
-    attr_reader :client, :socket, :config, :name, :host, :ip, :port
+    attr_reader :client, :socket, :config, :name, :host, :ip, :port, :channels
     attr_accessor :nick, :password
 
     def initialize (client, socket, config, name=nil)
         @client = client
         @socket = socket
         @config = config
+
+        @channels = Channels.new(self)
 
         @host = socket.peeraddr[2]
         @ip   = socket.peeraddr[3]

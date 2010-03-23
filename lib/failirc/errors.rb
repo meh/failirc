@@ -253,6 +253,12 @@ ERR_BADCHANNELKEY = {
     :text => '"#{channel.name} :Cannot join channel (+k)"'
 }
 
+ERR_NOKNOCK = {
+    :code => 480,
+    :text => '":Cannot knock on #{value[:channel]} (#{value[:reason]})"'
+}
+
+
 # Any command requiring operator privileges to operate must return this error to indicate the attempt was unsuccessful.
 ERR_NOPRIVILEGES = {
     :code => 481,

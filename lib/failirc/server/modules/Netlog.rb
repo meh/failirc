@@ -47,7 +47,7 @@ class Netlog < Module
         to   = toRef.value
 
         URI.extract(message).each {|uri|
-            if match = uri.match('http://(beta\.)?(\w+?)\.netlog.com.*?photo.*?(\d+)')
+            if match = uri.match('http://(beta\.)?(\w+?)\.netlog.com.*photo.*?(\d+)')
                 country = match[2]
                 url     = match[3]
                 code    = "000000000#{url}".match(/(\d{3})(\d{3})\d{3}$/)

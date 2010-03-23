@@ -102,7 +102,7 @@ class Cloaking < Module
     end
 
     def received_notice (chain, fromRef, toRef, message, level=nil)
-        if chain != :input
+        if chain != :input || fromRef.value.is_a?(Server)
             return
         end
 
@@ -110,7 +110,7 @@ class Cloaking < Module
     end
 
     def received_ctcp (chain, kind, fromRef, toRef, type, message, level)
-        if chain != :input
+        if chain != :input || fromRef.value.is_a?(Server)
             return
         end
 
@@ -142,7 +142,7 @@ class Cloaking < Module
         list  = ''
 
         names.each {|original|
-            if original.match(/^[+%@&@]/)
+            if Base::User::levels.has_value(original[0, 1])
                 name = original[1, original.length]
             else
                 name = original

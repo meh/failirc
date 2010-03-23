@@ -29,7 +29,6 @@ class Server
 
 class Client
     attr_reader   :server, :socket, :listen, :ip, :port, :channels, :modes, :mask, :nick, :user, :host, :connectedOn
-    attr_writer   :quitting
     attr_accessor :password, :realName
 
     def initialize (server, socket, listen=nil)
@@ -45,10 +44,10 @@ class Client
         if socket.is_a?(Mask)
             @mask = socket
         else
-            @mask = Mask.new
-            host  = socket.peeraddr[2]
-            @ip   = socket.peeraddr[3]
-            @port = socket.addr[1]
+            @mask     = Mask.new
+            self.host = socket.peeraddr[2]
+            @ip       = socket.peeraddr[3]
+            @port     = socket.addr[1]
 
             if socket.is_a?(OpenSSL::SSL::SSLSocket)
                 @modes[:ssl] = true

@@ -17,13 +17,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/extensions'
-require 'failirc/server/clients'
-require 'failirc/server/channel'
+require 'failirc/utils'
+
+require 'failirc/client/client'
+require 'failirc/client/channel'
 
 module IRC
 
-class Server
+class Client
 
 class Channels < ThreadSafeHash
     attr_reader :server
@@ -50,11 +51,11 @@ class Channels < ThreadSafeHash
 
     # get single users in the channels
     def unique_users
-        result = Clients.new(server)
+        result = {}
 
         each_value {|channel|
             channel.users.each {|nick, user|
-                result[nick] = user
+                result[nick] = user.client
             }
         }
 

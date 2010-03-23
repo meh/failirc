@@ -17,15 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'failirc/modes'
+
 module IRC
 
-class Server
+class Client
 
 class User
-    attr_reader :client, :channel, :modes
+    attr_reader :channel, :modes
 
     def initialize (client, channel, modes=Modes.new)
-        @client  = client
         @channel = channel
         @modes   = modes
     end
@@ -48,14 +49,6 @@ class User
 
     def host
         @client.host
-    end
-
-    def realName
-        @client.realName
-    end
-
-    def send (type, *args)
-        @client.send(type, *args)
     end
 
     def to_s
