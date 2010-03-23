@@ -38,7 +38,7 @@ class Server
 
         @host = socket.peeraddr[2]
         @ip   = socket.peeraddr[3]
-        @port = socket.addr[1]
+        @port = socket.peeraddr[1]
 
         nick = client.nick
 

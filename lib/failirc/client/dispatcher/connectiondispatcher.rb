@@ -60,7 +60,7 @@ class ConnectionDispatcher
         end
     
         def exists? (socket)
-            server[socket] ? true : false
+            servers[:bySocket][socket] ? true : false
         end
     
         def delete (socket)
@@ -73,8 +73,6 @@ class ConnectionDispatcher
             server = @data[:servers][:bySocket][socket]
             @data[:servers][:bySocket].delete(socket)
             @data[:servers][:byName].delete(server.name)
-    
-            socket.close rescue nil
         end
     end
 
@@ -375,6 +373,7 @@ class ConnectionDispatcher
     def handleDisconnection (server, message)
         @dispatcher.execute(:disconnect, server, message) rescue nil
 
+        @input.delete(server.socket)
         @output.delete(server.socket)
         connections.delete(server.socket)
 

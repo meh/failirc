@@ -67,6 +67,8 @@ class Base < Module
                 :who  => self.method(:who),
 
                 :message => self.method(:send_message),
+
+                :quit => self.method(:do_quit),
             },
 
             :input => {
@@ -222,6 +224,14 @@ class Base < Module
             server.send :raw, "PRIVMSG #{to.name} :#{message}"
         elsif to.is_a?(Client)
             server.send :raw, "PRIVMSG #{to.nick} :#{message}"
+        end
+    end
+
+    def do_quit (server, message)
+        if message
+            server.send :raw, "QUIT #{message}"
+        else
+            server.send :raw, "QUIT"
         end
     end
 end

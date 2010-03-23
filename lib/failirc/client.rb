@@ -34,7 +34,7 @@ require 'failirc/client/channel'
 module IRC
 
 class Client
-    attr_reader :version, :verbose, :config, :modules, :dispatcher, :servers, :channels
+    attr_reader :version, :verbose, :config, :modules, :dispatcher
 
     def initialize (conf, verbose)
         @version = IRC::VERSION
@@ -118,6 +118,10 @@ class Client
 
     def connect (*args)
         @dispatcher.connection.connect(*args)
+    end
+
+    def servers
+        dispatcher.servers[:byName]
     end
 
     def server (identifier)

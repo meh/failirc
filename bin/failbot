@@ -20,6 +20,9 @@
 
 require 'failirc/client'
 require 'getoptlong'
+require 'uri'
+require 'net/http'
+require 'timeout'
 
 args = GetoptLong.new(
     ['--version', '-v', GetoptLong::NO_ARGUMENT],
@@ -29,7 +32,7 @@ args = GetoptLong.new(
 
 options = {
     :verbose => false,
-    :config  => '/etc/failirclient.conf',
+    :config  => '/etc/failbot.conf',
 }
 
 args.each {|option, value|
@@ -48,37 +51,102 @@ args.each {|option, value|
     end
 }
 
-client = IRC::Client.new(File.new(options[:config]), options[:verbose])
+$client = IRC::Client.new(File.new(options[:config]), options[:verbose])
 
 def stop (client)
     client.stop
     Process.exit!(0)
 end
 
-trap('INT') { stop client }
-trap('KILL') { stop client }
+trap('INT') { stop $client }
+trap('KILL') { stop $client }
 
-client.register :custom, :numeric, lambda {|server, number, message|
+$urls = {}
+
+module Commands
+    def self.quit (server, from, to, string)
+        $client.servers.each_value {|server|
+            $client.execute :quit, server, string
+        }
+
+        self.debug 'Quitting...'
+
+        while true
+            if $client.servers.empty?
+                Process.exit!(0)
+            end
+
+            sleep 0.1
+        end
+    end
+
+    def self.echo (server, from, to, string)
+        if !to.is_a?(IRC::Client::Channel)
+            to = from
+        end
+
+        $client.execute :message, server, :output, $client, to, string
+    end
+
+    def self.urls (server, from, to, string)
+        if !to.is_a?(IRC::Client::Channel)
+            to = from
+        end
+
+        $urls.each_value {|url|
+            $client.execute :message, server, :output, $client, to, "[#{url[:at]}] #{url[:uri]} { #{url[:from]} }"
+        }
+    end
+end
+
+$client.register :custom, :numeric, lambda {|server, number, message|
     # end of MOTD or no MOTD, hence concluded connection.
     if number != 376 && number != 422
         return
     end
 
-    client.execute :join, server, '#fail'
+    $client.config.elements.each('config/misc/channels/channel') {|channel|
+        $client.execute :join, server, channel.text
+    }
 }
 
-client.register :custom, :message, lambda {|server, chain, from, to, message|
+$client.register :custom, :message, lambda {|server, chain, from, to, message|
     if chain != :input
         return
     end
-    
-    if message.match(/POPPE/)
-        if from.is_a?(IRC::Client::User)
-            from.channel.users.each {|nick, user|
-                client.execute :message, server, :output, client, from.channel, "#{nick} YOU'RE A FAGGOT"
-            }
+
+    URI.extract(message).each {|uri|
+        if match = uri.match('http://tinyurl.com/(.+)$')
+            uri = timeout 5 do
+                Net::HTTP.get(URI.parse("http://preview.tinyurl.com/#{match[1]}"))
+            end rescue nil
+
+            if !uri
+                next
+            end
+
+            if match = uri.match(/redirecturl" href="(.+?)"/)
+                uri = URI.decode(match[1])
+            else
+                next
+            end
         end
+
+        if $urls[uri]
+            next
+        end
+
+        $urls[uri] = {
+            :from => from.mask.to_s,
+            :to   => to.to_s,
+            :uri  => uri,
+            :at   => Time.now,
+        }
+    }
+    
+    if match = message.match(/^~([^ ]+)(\s+(.*))?$/)
+        Commands.method(match[1].to_sym).call(server, from, to, match[3])
     end
 }
 
-client.start
+$client.start

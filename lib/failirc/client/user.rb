@@ -27,6 +27,7 @@ class User
     attr_reader :client, :channel, :modes
 
     def initialize (client, channel, modes=Modes.new)
+        @client  = client
         @channel = channel
         @modes   = modes
     end

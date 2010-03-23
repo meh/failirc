@@ -95,8 +95,6 @@ class ConnectionDispatcher
     
             @data[:sockets].delete(socket)
             @data[:things].delete(socket)
-    
-            socket.close rescue nil
         end
     end
 
@@ -434,6 +432,7 @@ class ConnectionDispatcher
             # wat
         end
     
+        @input.delete(thing.socket)
         @output.delete(thing.socket)
         connections.delete(thing.socket)
 
