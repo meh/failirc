@@ -171,7 +171,7 @@ class Client
             informations.add(Element.new 'user').text     = reference[:user] || 'fail'
             informations.add(Element.new 'realName').text = reference[:realName] || "failirc-#{version}"
 
-            servers = @config.element['config/servers']
+            servers = @config.elements['config/servers']
 
             if reference[:servers]
                 reference[:servers].each {|server|

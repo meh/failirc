@@ -99,17 +99,14 @@ module Commands
     end
 end
 
-$client.register :custom, :numeric, lambda {|server, number, message|
-    # end of MOTD or no MOTD, hence concluded connection.
-    if number != 376 && number != 422
-        return
-    end
-
+# check for connection
+$client.register :custom, :connected, lambda {|server|
     $client.config.elements.each('config/misc/channels/channel') {|channel|
         $client.execute :join, server, channel.text
     }
 }
 
+# fetch URLs
 $client.register :custom, :message, lambda {|server, chain, from, to, message|
     if chain != :input
         return
@@ -143,6 +140,13 @@ $client.register :custom, :message, lambda {|server, chain, from, to, message|
             :at   => Time.now,
         }
     }
+}
+
+# dispatch commands
+$client.register :custom, :message, lambda {|server, chain, from, to, message|
+    if chain != :input
+        return
+    end
     
     if match = message.match(/^~([^ ]+)(\s+(.*))?$/)
         Commands.method(match[1].to_sym).call(server, from, to, match[3])

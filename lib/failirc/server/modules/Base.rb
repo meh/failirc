@@ -628,7 +628,7 @@ class Base < Module
             end
 
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-                from.server.dispatcher.execute :ctcp, :input, kind, ref{:from}, ref{:to}, match[1], (match[2] ? match[3] : nil), level
+                from.server.dispatcher.execute :ctcp, :input, kind, ref{:from}, ref{:to}, match[1], match[3], level
             else
                 if kind == :notice
                     from.server.dispatcher.execute :notice, :input, ref{:from}, ref{:to}, message, level
@@ -1939,7 +1939,7 @@ class Base < Module
     end
 
     def ison (thing, string)
-        match = /ISON\s+(.+)$/i
+        match = string.match(/ISON\s+(.+)$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'ISON'

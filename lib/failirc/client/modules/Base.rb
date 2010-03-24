@@ -37,8 +37,14 @@ module Modules
 class Base < Module
     @@version = '0.0.1'
 
+    @@supported = {}
+
     def self.version
         @@version
+    end
+
+    def self.supported
+        @@supported
     end
 
     def description
@@ -86,6 +92,39 @@ class Base < Module
     end
 
     module Utils
+        module Server
+            @@defaultSupportedModes = [
+                { :mode => 'o', :status => '@' },
+                { :mode => 'h', :status => '%' },
+                { :mode => 'v', :status => '+' }
+            ]
+
+            def self.supportedModes
+                if !Base.supported['PREFIX']
+                    return @@defaultSupportedModes
+                else
+                    match = Base.supported['PREFIX'].match(/\((.*?)\)(.*)$/)
+
+                    if !match
+                        return @@defaultSupportedModes
+                    else
+                        modes    = match[1].split
+                        statuses = match[2].split
+                        result   = []
+
+                        1.upto(modes.length) {|f|
+                            result.push({
+                                :mode   => modes.shift
+                                :status => statuses.shift
+                            })
+                        }
+
+                        return result
+                    end
+                end
+            end
+        end
+
         module Channel
             def self.isValid (string)
                 string.match(/^[&#+!][^ ,:\a]{0,50}$/) ? true : false
@@ -121,6 +160,19 @@ class Base < Module
     def received_numeric (server, number, message)
         case number
 
+        # stuff supported by the server
+        when 5
+            message.split(/\s+/).each {|support|
+                support = support.split(/=/)
+
+                Base.supported[support[0]] = support[1]
+            }
+
+        # end of MOTD or no MOTD, hence concluded connection.
+        when 376, 422
+            client.dispatcher.execute :connected, server
+
+        # WHO reply
         when 352
             match = message.match(/(.+?)\s+(.+?)\s+(.+?)\s+.+?\s+(.+?)\s+.+?\s+:\d+\s+(.+)$/)
 
@@ -152,8 +204,14 @@ class Base < Module
         end
     end
 
-    def join (server, channel)
-        server.send :raw, "JOIN #{channel}"
+    def join (server, channel, password=nil)
+        text = "JOIN #{channel}"
+
+        if password
+            text << " #{password}"
+        end
+
+        server.send :raw, text
         client.execute :who, server, channel
     end
 
@@ -212,7 +270,11 @@ class Base < Module
 
         message = match[3]
 
-        client.execute :message, server, :input, from, to, message
+        if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
+            client.execute :ctcp, server, :message, from, to, match[1], match[3]
+        else
+            client.execute :message, server, :input, from, to, message
+        end
     end
 
     def send_message (server, chain, from, to, message)
@@ -221,10 +283,64 @@ class Base < Module
         end
 
         if to.is_a?(Channel)
-            server.send :raw, "PRIVMSG #{to.name} :#{message}"
+            name = to.name
         elsif to.is_a?(Client)
-            server.send :raw, "PRIVMSG #{to.nick} :#{message}"
+            name = to.nick
         end
+
+        server.send :raw, "PRIVMSG #{name} :#{message}"
+    end
+
+    def notice (server, string)
+        match = string.match(/:(.+?)\s+NOTICE\s+(.+)\s+:(.*)$/i)
+
+        if !match
+            return
+        end
+
+        from = Mask.parse(match[1])
+
+        if !server.clients[from.nick] || server.clients[from.nick] != from
+            from = server.clients[from.nick] = Client.new(server, from)
+        else
+            from = server.clients[from.nick]
+        end
+
+        to = match[2]
+
+        if Utils::Channel::isValid(to)
+            to   = server.channels[to]
+            from = to.user from
+        else
+            to = client
+        end
+
+        message = match[3]
+
+        if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
+            client.execute :ctcp, server, :notice, from, to, match[1], match[3]
+        else
+            client.execute :message, server, :input, from, to, message
+        end
+    end
+
+
+    def send_notice (server, chain, from, to, message, level=nil)
+        if chain != :output
+            return
+        end
+
+        if to.is_a?(Channel)
+            name = "#{level}#{to.name}"
+        elsif to.is_a?(Client)
+            name = to.nick
+        end
+
+        server.send :raw, "NOTICE #{name} :#{message}"
+    end
+
+    def send_ctcp (server, kind, chain, from, to, type, message, level=nil)
+
     end
 
     def do_quit (server, message)
