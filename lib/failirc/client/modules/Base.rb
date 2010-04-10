@@ -66,7 +66,9 @@ class Base < Module
 
         @events = {
             :custom => {
-                :connect => self.method(:connect),
+                :connect    => self.method(:connect),
+                :disconnect => self.method(:disconnect),
+
                 :numeric => self.method(:received_numeric),
 
                 :join => self.method(:join),
@@ -139,6 +141,10 @@ class Base < Module
 
         server.send :raw, "NICK #{client.nick}"
         server.send :raw, "USER #{client.user} * * :#{client.realName}"
+    end
+
+    def disconnect (server, message)
+        server.client.execute :quit, server, message
     end
 
     def pong (server, string)
@@ -245,7 +251,7 @@ class Base < Module
     end
 
     def message (server, string)
-        match = string.match(/:(.+?)\s+PRIVMSG\s+(.+)\s+:(.*)$/i)
+        match = string.match(/^:(.+?)\s+PRIVMSG\s+(.+?)\s+:(.*)$/i)
 
         if !match
             return

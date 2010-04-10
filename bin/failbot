@@ -66,7 +66,7 @@ $urls = {}
 module Commands
     def self.quit (server, from, to, string)
         $client.servers.each_value {|server|
-            $client.execute :quit, server, string
+            $client.fire :quit, server, string
         }
 
         self.debug 'Quitting...'
@@ -85,14 +85,19 @@ module Commands
             to = from
         end
 
-        $client.execute :message, server, :output, $client, to, string
+        $client.fire :message, server, :output, $client, to, string
     end
 
     def self.say (server, from, to, string)
         matches = string.match(/^(.+?) (.+)$/)
 
-        $client.execute :message, server, :output, $client, matches[1], matches[2]
+        $client.fire :message, server, :output, $client, matches[1], matches[2]
     end
+
+    def self.raw (server, from, to, string)
+        server.send :raw, string
+    end
+
 
     def self.urls (server, from, to, string)
         if !to.is_a?(IRC::Client::Channel)
@@ -100,20 +105,20 @@ module Commands
         end
 
         $urls.each_value {|url|
-            $client.execute :message, server, :output, $client, to, "[#{url[:at]}] #{url[:uri]} { #{url[:from]} }"
+            $client.fire :message, server, :output, $client, to, "[#{url[:at]}] #{url[:uri]} { #{url[:from]} }"
         }
     end
 end
 
 # check for connection
-$client.register :custom, :connected, lambda {|server|
+$client.observe :connected, lambda {|server|
     $client.config.elements.each('config/misc/channels/channel') {|channel|
-        $client.execute :join, server, channel.text
+        $client.fire :join, server, channel.text
     }
 }
 
 # fetch URLs
-$client.register :custom, :message, lambda {|server, chain, from, to, message|
+$client.observe :message, lambda {|server, chain, from, to, message|
     if chain != :input
         return
     end
@@ -149,13 +154,17 @@ $client.register :custom, :message, lambda {|server, chain, from, to, message|
 }
 
 # dispatch commands
-$client.register :custom, :message, lambda {|server, chain, from, to, message|
+$client.observe :message, lambda {|server, chain, from, to, message|
     if chain != :input
         return
     end
     
     if match = message.match(/^~([^ ]+)(\s+(.*))?$/)
-        Commands.method(match[1].to_sym).call(server, from, to, match[3])
+        begin
+            Commands.method(match[1].to_sym).call(server, from, to, match[3])
+        rescue Exception => e
+            self.debug e
+        end
     end
 }
 

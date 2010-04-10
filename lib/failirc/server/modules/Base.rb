@@ -95,7 +95,7 @@ class Base < Module
 
         :client => {
             :netadmin => [:N, :operator],
-            :operator => [:o, :can_kill, :can_kick, :can_give_channel_owner, :can_change_topic, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
+            :operator => [:o, :can_kill, :can_give_channel_owner, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
         },
     }
 
@@ -349,7 +349,7 @@ class Base < Module
         end
 
         module Channel
-            class Ban
+            class Modifier
                 attr_reader :setBy, :setOn, :channel, :mask
 
                 def initialize (by, channel, mask)
@@ -359,19 +359,12 @@ class Base < Module
                     @mask    = mask
                 end
 
-                def to_s
-                    "#{channel} #{mask} #{setBy.nick} #{setOn.tv_sec}"
+                def == (mask)
+                    @mask == mask
                 end
-            end
 
-            class Invitation
-                attr_reader :setBy, :setOn, :channel, :mask
-
-                def initialize (by, channel, mask)
-                    @setBy   = by
-                    @setOn   = Time.now
-                    @channel = channel
-                    @mask    = mask
+                def match (mask)
+                    @mask.match(mask)
                 end
 
                 def to_s
@@ -1083,7 +1076,7 @@ class Base < Module
 
                     if type == '+'
                         if !thing.modes[:bans].any? {|ban| ban == mask}
-                            thing.modes[:bans].push(mask)
+                            thing.modes[:bans].push(Utils::Channel::Modifier.new(from, thing, mask))
                         end
                     else
                         result = thing.modes[:bans].reject! {|ban|
@@ -1132,12 +1125,21 @@ class Base < Module
                 end
 
             when 'e'
+                if values.empty?
+                    thing.modes[:exceptions].each {|exception|
+                        from.send :numeric, RPL_EXCEPTIONLIST, exception
+                    }
+                    
+                    from.send :numeric, RPL_ENDOFEXCEPTIONLIST, thing.name
+                    return
+                end
+
                 if Utils::checkFlag(from, :can_add_ban_exception)
                     mask = Mask.parse(values.shift)
 
                     if type == '+'
                         if !thing.modes[:exceptions].any? {|exception| exception == mask}
-                            thing.modes[:exceptions].push(mask)
+                            thing.modes[:exceptions].push(Utils::Channel::Modifier.new(from, thing, mask))
                         end
                     else
                         result = thing.modes[:exceptions].reject! {|exception|
@@ -1194,12 +1196,21 @@ class Base < Module
                 end
 
             when 'I'
+                if values.empty?
+                    thing.modes[:invites].each {|invitation|
+                        from.send :numeric, RPL_INVITELIST, invitation
+                    }
+                    
+                    from.send :numeric, RPL_ENDOFINVITELIST, thing.name
+                    return
+                end
+
                 if Utils::checkFlag(from, :can_add_invitation)
                     mask = Mask.parse(values.shift)
 
                     if type == '+'
                         if !thing.modes[:invites].any? {|invitation| invitation == mask}
-                            thing.modes[:invites].push(mask)
+                            thing.modes[:invites].push(Utils::Channel::Modifier.new(from, thing, mask))
                         end
                     else
                         result = thing.modes[:invites].reject! {|invitation|
@@ -2216,7 +2227,7 @@ class Base < Module
                 return
             end
 
-            if Utils::Channel::banned?(channel, thing)
+            if Utils::Channel::banned?(channel, thing) && !Utils::Channel::exception?(channel, thing)
                 thing.send :numeric, ERR_YOUAREBANNED, channel.name
                 return
             end

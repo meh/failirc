@@ -136,6 +136,10 @@ class Client
         dispatcher.register(*args)
     end
 
+    def observe (*args)
+        dispatcher.register(:custom, *args)
+    end
+
     def nick
         @config.elements['config/informations/nick'].text
     end
@@ -151,6 +155,8 @@ class Client
     def execute (*args)
         @dispatcher.execute(*args)
     end
+
+    alias fire execute
 
     def rehash
         self.config = @configReference

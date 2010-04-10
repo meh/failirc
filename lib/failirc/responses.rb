@@ -210,6 +210,26 @@ RPL_ENDOFBANLIST = {
     :text => '"#{value} :End of channel ban list"'
 }
 
+RPL_EXCEPTIONLIST = {
+    :code => 348,
+    :text => '"#{value}"'
+}
+
+RPL_ENDOFEXCEPTIONLIST = {
+    :code => 349,
+    :text => '"#{value} :End of Channel Exception List"'
+}
+
+RPL_INVITELIST = {
+    :code => 346,
+    :text => '"#{value}"'
+}
+
+RPL_ENDOFINVITELIST = {
+    :code => 347,
+    :text => '"#{value} :End of Channel Invite List"'
+}
+
 RPL_INFO = {
     :code => 371,
     :text => '":#{value}"'
