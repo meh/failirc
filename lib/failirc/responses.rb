@@ -217,7 +217,7 @@ RPL_EXCEPTIONLIST = {
 
 RPL_ENDOFEXCEPTIONLIST = {
     :code => 349,
-    :text => '"#{value} :End of Channel Exception List"'
+    :text => '"#{value} :End of channel exception list"'
 }
 
 RPL_INVITELIST = {
@@ -227,7 +227,7 @@ RPL_INVITELIST = {
 
 RPL_ENDOFINVITELIST = {
     :code => 347,
-    :text => '"#{value} :End of Channel Invite List"'
+    :text => '"#{value} :End of channel invite list"'
 }
 
 RPL_INFO = {

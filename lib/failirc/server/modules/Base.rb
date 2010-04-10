@@ -241,7 +241,7 @@ class Base < Module
         server.data[:nicks] = {}
 
         @@supportedModes[:client].insert(-1, *('o'.split(//)))
-        @@supportedModes[:channel].insert(-1, *('abcCehiIkKlLmnoQsStuvVxyz'.split(//)))
+        @@supportedModes[:channel].insert(-1, *('abcCehiIkKlLmnNoQsStuvVxyz'.split(//)))
 
         @@support.merge!({
             'CASEMAPPING' => 'ascii',
@@ -377,6 +377,10 @@ class Base < Module
             end
 
             def self.isValid (string)
+                if !string
+                    return false
+                end
+
                 string.match(/^[&#+!][^ ,:\a]{0,50}$/) ? true : false
             end
     
