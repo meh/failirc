@@ -35,19 +35,24 @@ class Modes < ThreadSafeHash
     end
 
     def to_s
-        result = '+'
+        modes  = []
+        values = []
 
         each_key {|mode|
             if mode
                 mode = mode.to_s
 
                 if mode.length == 1
-                    result << mode
+                    modes.push mode
+
+                    if self[mode.to_sym] != true
+                        values.push self[mode.to_sym]
+                    end
                 end
             end
         }
 
-        return result
+        return "+#{modes.join} #{values.join ' '}"
     end
 end
 
