@@ -79,7 +79,7 @@ class Mask
             return Mask.new(string)
         end
 
-        if string.match(/!/)
+        if string.include?('!')
             matches = string.match(/^(.*?)!(.*)$/)
 
             if !matches[1] || matches[1].empty? || matches[1] == '*'
@@ -91,7 +91,7 @@ class Mask
             string = matches[2]
         end
 
-        if string.match(/@/)
+        if string.include?('@')
             matches = string.match(/^(.*?)@(.*)$/)
 
             if !matches[1] || matches[1].empty? || matches[1] == '*'

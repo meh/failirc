@@ -326,4 +326,14 @@ ERR_NONICKCHANGE = {
     :text => '"Can not change nickname while on #{value} (+N)"'
 }
 
+ERR_NOKICKS = {
+    :code => 972,
+    :text => '"KICK :channel is +Q"'
+}
+
+ERR_NOINVITE = {
+    :code => 518,
+    :text => '"Cannot invite (+V) at channel #{value}"'
+}
+
 end

@@ -50,6 +50,8 @@ class Base < Module
                 :can_add_invitation, :can_channel_ban, :can_add_ban_exception,
                 :can_change_channel_password, :can_change_nocolors_mode,
                 :can_change_noctcp_mode, :can_change_no_nick_change_mode,
+                :can_change_nokicks_mode, :can_change_strip_colors_mode,
+                :can_change_noinvites_mode,
             ],
 
             :can_change_user_modes => [
@@ -64,7 +66,6 @@ class Base < Module
 
         :channel => {
             :a => :anonymous,
-            :b => :ban,
             :c => :no_colors,
             :C => :no_ctcps,
             :i => :invite_only,
@@ -75,9 +76,12 @@ class Base < Module
             :m => :moderated,
             :n => :no_external_messages,
             :N => :no_nick_change,
+            :Q => :no_kicks,
             :s => :secret,
+            :S => :strip_colors,
             :t => :topic_change_needs_privileges,
             :u => :auditorium,
+            :V => :no_invites,
             :z => :ssl_only,
         },
 
@@ -237,7 +241,7 @@ class Base < Module
         server.data[:nicks] = {}
 
         @@supportedModes[:client].insert(-1, *('o'.split(//)))
-        @@supportedModes[:channel].insert(-1, *('abcCehiIkKlLmnostuvxyz'.split(//)))
+        @@supportedModes[:channel].insert(-1, *('abcCehiIkKlLmnoQsStuvVxyz'.split(//)))
 
         @@support.merge!({
             'CASEMAPPING' => 'ascii',
@@ -1363,6 +1367,19 @@ class Base < Module
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
 
+            when 'Q'
+                if Utils::checkFlag(from, :can_change_nokicks_mode)
+                    if Utils::checkFlag(thing, :Q) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :Q, type == '+')
+
+                    output[:modes].push('Q')
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
             when 's'
                 if Utils::checkFlag(from, :can_change_secret_mode)
                     if Utils::checkFlag(thing, :s) == (type == '+')
@@ -1372,6 +1389,19 @@ class Base < Module
                     Utils::setFlags(thing, :s, type == '+')
 
                     output[:modes].push('s')
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'S'
+                if Utils::checkFlag(from, :can_change_strip_colors_mode)
+                    if Utils::checkFlag(thing, :S) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :S, type == '+')
+
+                    output[:modes].push('S')
                 else
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
@@ -1419,6 +1449,19 @@ class Base < Module
 
                     output[:modes].push('v')
                     output[:values].push(value)
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'V'
+                if Utils::checkFlag(from, :can_change_noinvites_mode)
+                    if Utils::checkFlag(thing, :V) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :V, type == '+')
+
+                    output[:modes].push('V')
                 else
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
@@ -1802,7 +1845,11 @@ class Base < Module
         end
 
         if Utils::checkFlag(thing, :can_kick)
-            server.dispatcher.execute(:kick, thing, user, message)
+            if channel.modes[:no_kicks]
+                thing.send :numeric, ERR_NOKICKS
+            else
+                server.dispatcher.execute(:kick, thing, user, message)
+            end
         else
             thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
@@ -1851,6 +1898,11 @@ class Base < Module
                 }
 
                 return
+            end
+
+            if server.channels[channel].modes[:no_invites]
+                thing.send :numeric, ERR_NOINVITE, channel
+                return false
             end
         end
 
@@ -2198,7 +2250,11 @@ class Base < Module
         to   = toRef.value
 
         if to.is_a?(Channel)
-            if to.modes[:no_colors]
+            if to.modes[:strip_colors]
+                message.gsub!(/\x03((\d{1,2})?(,\d{1,2})?)?/, '')
+            end
+
+            if to.modes[:no_colors] && message.include?("\x03")
                 from.send :numeric, ERR_NOCOLORS, to.name
                 return false
             end
