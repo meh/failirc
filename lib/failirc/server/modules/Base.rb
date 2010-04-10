@@ -246,7 +246,8 @@ class Base < Module
         @@support.merge!({
             'CASEMAPPING' => 'ascii',
             'SAFELIST'    => true,
-            'EXCEPTS'     => true,
+            'EXCEPTS'     => 'e',
+            'INVEX'       => 'I',
             'CHANTYPES'   => '&#+!',
             'CHANMODES'   => 'beI,kfL,lj,acCiKmnNQsStuVz',
             'PREFIX'      => '(xyohv)~&@%+',
@@ -1319,7 +1320,7 @@ class Base < Module
                         output[:modes].push('L')
                         output[:values].push(value)
                     else
-                        Utils::setFlag(thing, :L, false)
+                        Utils::setFlags(thing, :L, false)
 
                         output[:modes].push('L')
                     end
