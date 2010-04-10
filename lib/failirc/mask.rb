@@ -51,9 +51,11 @@ class Mask
     end
 
     def == (mask)
-        if @nick == mask.nick && @user == mask.user && @host == mask.host
-            return true
+        if !mask.is_a?(Mask)
+            return false
         end
+
+        return (@nick == mask.nick && @user == mask.user && @host == mask.host)
     end
 
     def != (mask)
@@ -69,24 +71,39 @@ class Mask
     end
 
     def self.parse (string)
-        match = string.match(/^((.+?)!)?(.+?)(@(.+?))?$/)
-
-        if !match[2] || match[2] == '*'
-            nick = nil
-        else
-            nick = match[2]
+        if !string.match(/[!@]/)
+            return Mask.new(string)
         end
 
-        if match[3] == '*'
-            user = nil
-        else
-            user = match[3]
+        if string.match(/!/)
+            matches = string.match(/^(.*?)!(.*)$/)
+
+            if !matches[1] || matches[1].empty? || matches[1] == '*'
+                nick = nil
+            else
+                nick = matches[1]
+            end
+
+            string = matches[2]
         end
 
-        if !match[5] || match[5] == '*'
+        if string.match(/@/)
+            matches = string.match(/^(.*?)@(.*)$/)
+
+            if !matches[1] || matches[1].empty? || matches[1] == '*'
+                user = nil
+            else
+                user = matches[1]
+            end
+
+            if !matches[2] || matches[2].empty? || matches[2] == '*'
+                host = nil
+            else
+                host = matches[2]
+            end
+        else
+            user = string
             host = nil
-        else
-            host = match[5]
         end
 
         return Mask.new(nick, user, host)

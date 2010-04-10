@@ -225,7 +225,7 @@ ERR_YOUREBANNEDCREEP = {
 
 ERR_KEYSET = {
     :code => 467,
-    :text => '"#{channel.name} :Channel key already set"'
+    :text => '"#{value} :Channel key already set"'
 }
 
 ERR_CHANNELISFULL = {
@@ -240,17 +240,17 @@ ERR_UNKNOWNMODE = {
 
 ERR_INVITEONLYCHAN = {
     :code => 473,
-    :text => '"#{channel.name} :Cannot join channel (+i)"'
+    :text => '"#{value} :Cannot join channel (+i)"'
 }
 
 ERR_BANNEDFROMCHAN = {
     :code => 474,
-    :text => '"#{channel.name} :Cannot join channel (+b)"'
+    :text => '"#{value} :Cannot join channel (+b)"'
 }
 
 ERR_BADCHANNELKEY = {
     :code => 475,
-    :text => '"#{channel.name} :Cannot join channel (+k)"'
+    :text => '"#{value} :Cannot join channel (+k)"'
 }
 
 ERR_NOKNOCK = {

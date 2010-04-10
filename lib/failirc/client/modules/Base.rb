@@ -114,8 +114,8 @@ class Base < Module
 
                         1.upto(modes.length) {|f|
                             result.push({
-                                :mode   => modes.shift
-                                :status => statuses.shift
+                                :mode   => modes.shift,
+                                :status => statuses.shift,
                             })
                         }
 

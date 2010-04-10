@@ -10,7 +10,6 @@ Gem::Specification.new {|s|
     s.files        = Dir.glob('lib/**/*.rb')
     s.require_path = 'lib'
     s.executables  = ['failircd', 'failbot']
-    s.test_files   = []
     s.has_rdoc     = true
 
     s.add_dependency('openssl-nonblock')

@@ -47,6 +47,7 @@ class Base < Module
                 :can_change_invite_only_mode, :can_change_auditorium_mode,
                 :can_change_anonymous_mode, :can_change_limit_mode,
                 :can_change_redirect_mode, :can_change_noknock_mode,
+                :can_add_invitation,
             ],
 
             :can_change_user_modes => [
@@ -385,7 +386,7 @@ class Base < Module
                 end
 
                 channel.modes[:invites].each {|invite|
-                    if invite.mask.match(client.mask)
+                    if invite.match(client.mask)
                         return true
                     end
                 }
@@ -1078,6 +1079,34 @@ class Base < Module
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
 
+            when 'I'
+                if Utils::checkFlag(from, :can_add_invitation)
+                    mask = Mask.parse(values.shift)
+
+                    if type == '+'
+                        if !thing.modes[:invites].any? {|invitation| invitation == mask}
+                            thing.modes[:invites].push(mask)
+                        end
+                    else
+                        result = thing.modes[:invites].reject! {|invitation|
+                            if invitation == mask
+                                true
+                            end
+                        }
+
+                        if !result
+                            mask = nil
+                        end
+                    end
+
+                    if mask
+                        output[:modes].push('I')
+                        output[:values].push(mask.to_s)
+                    end
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
             when 'l'
                 if Utils::checkFlag(from, :can_change_limit_mode)
                     if (!Utils::checkFlag(thing, :l) && type == '-') || (Utils::checkFlag(thing, :l) && type == '+')
@@ -1354,7 +1383,7 @@ class Base < Module
             end
 
             thing.modes[:extended].each {|key, value|
-                from.server.dispatcher.execute :notice, :output, server, from, "#{name} #{key} = #{value}"
+                from.server.dispatcher.execute :notice, :output, ref{:server}, ref{:from}, "#{name} #{key} = #{value}"
             }
         else
             if !mode.match(/^\w+$/)
@@ -1493,7 +1522,7 @@ class Base < Module
             end
 
             if channel.modes[:password] && password != channel.modes[:password]
-                thing.send :numeric, ERR_BADCHANNELKEY, channel
+                thing.send :numeric, ERR_BADCHANNELKEY, channel.name
                 @joining.delete(thing)
                 next
             end
@@ -1697,12 +1726,14 @@ class Base < Module
             :channel => channel,
         }
 
-        if server.channels[channel]
-            server.channels[channel].modes[:invited][to.nick] = true
-            server.dispatcher.execute :notice, :input, server, server.channels[channel], "#{from.nick} invited #{to.nick} into the channel.", '@'
+        target = channel
+
+        if channel = server.channels[target]
+            channel.modes[:invited][to.nick] = true
+            server.dispatcher.execute :notice, :input, ref{:server}, ref{:channel}, "#{from.nick} invited #{to.nick} into the channel.", '@'
         end
 
-        to.send :raw, ":#{from.mask} INVITE #{to.nick} :#{channel}"
+        to.send :raw, ":#{from.mask} INVITE #{to.nick} :#{target}"
     end
 
     def knock (thing, string)
@@ -2200,7 +2231,7 @@ class Base < Module
     end
 
     def map (thing, string)
-        server.dispatcher.execute :notice, :input, server, thing, 'The X tells the point.'
+        server.dispatcher.execute :notice, :input, ref{:server}, ref{:thing}, 'The X tells the point.'
     end
 
     def version (thing, string)

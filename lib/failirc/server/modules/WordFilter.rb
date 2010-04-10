@@ -86,7 +86,7 @@ class WordFilter < Module
     end
 
     def rainbow (string, pattern=@rainbow)
-        string.gsub!(/\x03(\d{1,2}(,\d{1,2})?)?/, '')
+        string.gsub!(/\x03((\d{1,2})?(,\d{1,2})?)?/, '')
 
         result   = ''
         position = 0
