@@ -47,7 +47,7 @@ class Base < Module
                 :can_change_invite_only_mode, :can_change_auditorium_mode,
                 :can_change_anonymous_mode, :can_change_limit_mode,
                 :can_change_redirect_mode, :can_change_noknock_mode,
-                :can_add_invitation,
+                :can_add_invitation, :can_channel_ban, :can_add_ban_exception,
             ],
 
             :can_change_user_modes => [
@@ -376,7 +376,7 @@ class Base < Module
                 string.match(/^[&#+!][^ ,:\a]{0,50}$/) ? true : false
             end
     
-            def self.invited? (channel, client, shallow)
+            def self.invited? (channel, client, shallow=false)
                 if shallow && !channel.modes[:invite_only]
                     return true
                 end
@@ -396,7 +396,17 @@ class Base < Module
 
             def self.banned? (channel, client)
                 channel.modes[:bans].each {|ban|
-                    if ban.mask.match(client.mask)
+                    if ban.match(client.mask)
+                        return true
+                    end
+                }
+
+                return false
+            end
+
+            def self.exception? (channel, client)
+                channel.modes[:exceptions].each {|exception|
+                    if exception.match(client.mask)
                         return true
                     end
                 }
@@ -1034,15 +1044,68 @@ class Base < Module
                 end
 
             when 'b'
-                if type == '+'
-                    if values.empty?
-                        thing.modes[:bans].each {|ban|
-                            from.send :numeric, RPL_BANLIST, ban
+                if values.empty?
+                    thing.modes[:bans].each {|ban|
+                        from.send :numeric, RPL_BANLIST, ban
+                    }
+                    
+                    from.send :numeric, RPL_ENDOFBANLIST, thing.name
+                    return
+                end
+
+                if Utils::checkFlag(from, :can_channel_ban)
+                    mask = Mask.parse(values.shift)
+
+                    if type == '+'
+                        if !thing.modes[:bans].any? {|ban| ban == mask}
+                            thing.modes[:bans].push(mask)
+                        end
+                    else
+                        result = thing.modes[:bans].reject! {|ban|
+                            if ban == mask
+                                true
+                            end
                         }
 
-                        from.send :numeric, RPL_ENDOFBANLIST, thing.name
-                    else
+                        if !result
+                            mask = nil
+                        end
                     end
+
+                    if mask
+                        output[:modes].push('b')
+                        output[:values].push(mask.to_s)
+                    end
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'e'
+                if Utils::checkFlag(from, :can_add_ban_exception)
+                    mask = Mask.parse(values.shift)
+
+                    if type == '+'
+                        if !thing.modes[:exceptions].any? {|exception| exception == mask}
+                            thing.modes[:exceptions].push(mask)
+                        end
+                    else
+                        result = thing.modes[:exceptions].reject! {|exception|
+                            if exception == mask
+                                true
+                            end
+                        }
+
+                        if !result
+                            mask = nil
+                        end
+                    end
+
+                    if mask
+                        output[:modes].push('e')
+                        output[:values].push(mask.to_s)
+                    end
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
 
             when 'h'
@@ -1533,7 +1596,7 @@ class Base < Module
                 next
             end
 
-            if Utils::Channel::banned?(channel, thing) && !Utils::Channel::invited?(channel, thing)
+            if Utils::Channel::banned?(channel, thing) && !Utils::Channel::exception?(channel, thing) && !Utils::Channel::invited?(channel, thing)
                 thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
                 @joining.delete(thing)
                 next

@@ -71,6 +71,10 @@ class Mask
     end
 
     def self.parse (string)
+        if !string
+            return Mask.new
+        end
+
         if !string.match(/[!@]/)
             return Mask.new(string)
         end
