@@ -88,6 +88,12 @@ module Commands
         $client.execute :message, server, :output, $client, to, string
     end
 
+    def self.say (server, from, to, string)
+        matches = string.match(/^(.+?) (.+)$/)
+
+        $client.execute :message, server, :output, $client, matches[1], matches[2]
+    end
+
     def self.urls (server, from, to, string)
         if !to.is_a?(IRC::Client::Channel)
             to = from

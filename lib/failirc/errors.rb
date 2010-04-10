@@ -40,7 +40,7 @@ ERR_NOSUCHCHANNEL = {
 # Sent to a user who is either (a) not on a channel which is mode +n or (b) not a chanop (or mode +v) on a channel which has mode +m set and is trying to send a PRIVMSG message to that channel.
 ERR_CANNOTSENDTOCHAN = {
     :code => 404,
-    :text => '"#{value} :Cannot send to channel "'
+    :text => '"#{value[:channel]} :Cannot send to channel"'
 }
 
 ERR_YOUNEEDVOICE = {
@@ -56,6 +56,16 @@ ERR_NOEXTERNALMESSAGES = {
 ERR_YOUAREBANNED = {
     :code => 404,
     :text => '"#{value} :You are banned (#{value})"'
+}
+
+ERR_NOCTCPS = {
+    :code => 404,
+    :text => '"#{value} :CTCPs are not permtted in this channel (#{value})"'
+}
+
+ERR_NOCOLORS = {
+    :code => 404,
+    :text => '"#{value} :Color is not permitted in this channel (#{value})"'
 }
 
 # Sent to a user when they have joined the maximum number of allowed channels and they try to join another channel.

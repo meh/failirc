@@ -48,7 +48,8 @@ class Base < Module
                 :can_change_anonymous_mode, :can_change_limit_mode,
                 :can_change_redirect_mode, :can_change_noknock_mode,
                 :can_add_invitation, :can_channel_ban, :can_add_ban_exception,
-                :can_change_channel_password,
+                :can_change_channel_password, :can_change_nocolors_mode,
+                :can_change_noctcp_mode,
             ],
 
             :can_change_user_modes => [
@@ -63,6 +64,9 @@ class Base < Module
 
         :channel => {
             :a => :anonymous,
+            :b => :ban,
+            :c => :no_colors,
+            :C => :no_ctcps,
             :i => :invite_only,
             :l => :limit,
             :L => :redirect,
@@ -175,9 +179,9 @@ class Base < Module
 
                 :whois => self.method(:send_whois),
 
-                :message => [self.method(:received_message), self.method(:send_message)],
-                :notice  => [self.method(:received_notice), self.method(:send_notice)],
-                :ctcp    => [self.method(:received_ctcp), self.method(:send_ctcp)],
+                :message => [self.method(:handling_message), self.method(:send_message)],
+                :notice  => [self.method(:handling_notice), self.method(:send_notice)],
+                :ctcp    => [self.method(:handling_ctcp), self.method(:send_ctcp)],
                 :error   => self.method(:send_error),
 
                 :topic_change => self.method(:topic_change),
@@ -232,7 +236,7 @@ class Base < Module
         server.data[:nicks] = {}
 
         @@supportedModes[:client].insert(-1, *('o'.split(//)))
-        @@supportedModes[:channel].insert(-1, *('mniszuvhoyx'.split(//)))
+        @@supportedModes[:channel].insert(-1, *('abcCehiIkKlLmnostuvxyz'.split(//)))
 
         @@support.merge!({
             'CASEMAPPING' => 'ascii',
@@ -1082,6 +1086,32 @@ class Base < Module
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
 
+            when 'c'
+                if Utils::checkFlag(from, :can_change_nocolors_mode)
+                    if Utils::checkFlag(thing, :c) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :c, type == '+')
+
+                    output[:modes].push('c')
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'C'
+                if Utils::checkFlag(from, :can_change_noctcp_mode)
+                    if Utils::checkFlag(thing, :C) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :C, type == '+')
+
+                    output[:modes].push('C')
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
             when 'e'
                 if Utils::checkFlag(from, :can_add_ban_exception)
                     mask = Mask.parse(values.shift)
@@ -1192,6 +1222,20 @@ class Base < Module
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
 
+            when 'K'
+                if Utils::checkFlag(from, :can_change_noknock_mode)
+                    if Utils::checkFlag(thing, :K) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :K, type == '+')
+
+                    output[:modes].push('K')
+                   
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
             when 'l'
                 if Utils::checkFlag(from, :can_change_limit_mode)
                     if (!Utils::checkFlag(thing, :l) && type == '-') || (Utils::checkFlag(thing, :l) && type == '+')
@@ -1240,20 +1284,6 @@ class Base < Module
 
                         output[:modes].push('L')
                     end
-                else
-                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-                end
-
-            when 'K'
-                if Utils::checkFlag(from, :can_change_noknock_mode)
-                    if Utils::checkFlag(thing, :K) == (type == '+')
-                        return
-                    end
-
-                    Utils::setFlags(thing, :K, type == '+')
-
-                    output[:modes].push('K')
-                   
                 else
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
@@ -2131,7 +2161,7 @@ class Base < Module
         end
     end
 
-    def received_message (chain, fromRef, toRef, message)
+    def handling_message (chain, fromRef, toRef, message)
         if chain != :input
             return
         end
@@ -2140,6 +2170,11 @@ class Base < Module
         to   = toRef.value
 
         if to.is_a?(Channel)
+            if to.modes[:no_colors]
+                from.send :numeric, ERR_NOCOLORS, to.name
+                return false
+            end
+
             to.users.each_value {|user|
                 if user.client != from
                     server.dispatcher.execute :message, :output, fromRef, ref{:user}, message
@@ -2207,7 +2242,7 @@ class Base < Module
         end
     end
 
-    def received_notice (chain, fromRef, toRef, message, level=nil)
+    def handling_notice (chain, fromRef, toRef, message, level=nil)
         if chain != :input
             return
         end
@@ -2249,7 +2284,7 @@ class Base < Module
         to.send :raw, ":#{from} NOTICE #{level}#{name} :#{message}"
     end
 
-    def received_ctcp (chain, kind, fromRef, toRef, type, message, level=nil)
+    def handling_ctcp (chain, kind, fromRef, toRef, type, message, level=nil)
         if chain != :input
             return
         end
@@ -2258,6 +2293,11 @@ class Base < Module
         to   = toRef.value
 
         if to.is_a?(Channel)
+            if to.modes[:no_ctcps]
+                from.send :numeric, ERR_NOCTCPS, to.name
+                return false
+            end
+
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
                     server.dispatcher.execute :ctcp, :output, kind, fromRef, ref{:user}, type, message, level

@@ -286,6 +286,8 @@ class Base < Module
             name = to.name
         elsif to.is_a?(Client)
             name = to.nick
+        else
+            name = to.to_s
         end
 
         server.send :raw, "PRIVMSG #{name} :#{message}"
