@@ -248,6 +248,7 @@ class Base < Module
             'SAFELIST'    => true,
             'EXCEPTS'     => true,
             'CHANTYPES'   => '&#+!',
+            'CHANMODES'   => 'beI,kfL,lj,acCiKmnNQsStuVz',
             'PREFIX'      => '(xyohv)~&@%+',
             'STATUSMSG'   => '~&@%+',
             'FNC'         => true,
