@@ -1240,9 +1240,7 @@ class Base < Module
             when 'k'
                 if Utils::checkFlag(from, :can_change_channel_password)
                     if type == '+' && (password = values.shift)
-                        Utils::setFlags(thing, :k, true)
-
-                        thing.modes[:password] = password
+                        Utils::setFlags(thing, :k, password)
                     else
                         password = thing.modes[:password]
 
@@ -1310,7 +1308,7 @@ class Base < Module
                             return
                         end
 
-                        Utils::setFlag(thing, :L, value)
+                        Utils::setFlags(thing, :L, value)
 
                         output[:modes].push('L')
                         output[:values].push(value)
