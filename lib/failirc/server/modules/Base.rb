@@ -1170,7 +1170,7 @@ class Base < Module
                 if Utils::checkFlag(from, :can_give_channel_half_operator)
                     value = values.shift
 
-                    if !(user = thing.users[value])
+                    if !value || !(user = thing.users[value])
                         from.send :numeric, ERR_NOSUCHNICK, value
                         return
                     end
@@ -1239,7 +1239,13 @@ class Base < Module
 
             when 'k'
                 if Utils::checkFlag(from, :can_change_channel_password)
-                    if type == '+' && (password = values.shift)
+                    value = values.shift
+
+                    if !value
+                        return
+                    end
+
+                    if type == '+' && (password = value)
                         Utils::setFlags(thing, :k, password)
                     else
                         password = thing.modes[:password]
@@ -1278,11 +1284,11 @@ class Base < Module
                     if type == '+'
                         value = values.shift
 
-                        if !value.match(/^\d+$/)
+                        if !value || !value.match(/^\d+$/)
                             return
                         end
 
-                        Utils::setFlags(thing, :l, value)
+                        Utils::setFlags(thing, :l, value.to_i)
 
                         output[:modes].push('l')
                         output[:values].push(value)
@@ -1304,7 +1310,7 @@ class Base < Module
                     if type == '+'
                         value = values.shift
 
-                        if !Utils::Channel::isValid(value)
+                        if !value || !Utils::Channel::isValid(value)
                             return
                         end
 
@@ -1364,7 +1370,7 @@ class Base < Module
                 if Utils::checkFlag(from, :can_give_channel_operator)
                     value = values.shift
 
-                    if !(user = thing.users[value])
+                    if !value || !(user = thing.users[value])
                         from.send :numeric, ERR_NOSUCHNICK, value
                         return
                     end
@@ -1450,7 +1456,7 @@ class Base < Module
                 if Utils::checkFlag(from, :can_give_voice)
                     value = values.shift
 
-                    if !(user = thing.users[value])
+                    if !value || !(user = thing.users[value])
                         from.send :numeric, ERR_NOSUCHNICK, value
                         return
                     end
@@ -1484,7 +1490,7 @@ class Base < Module
                 if Utils::checkFlag(from, :can_give_channel_owner)
                     value = values.shift
 
-                    if !(user = thing.users[value])
+                    if !value || !(user = thing.users[value])
                         from.send :numeric, ERR_NOSUCHNICK, value
                         return
                     end
@@ -1505,7 +1511,7 @@ class Base < Module
                 if Utils::checkFlag(from, :can_give_channel_admin)
                     value = values.shift
 
-                    if !(user = thing.users[value])
+                    if !value || !(user = thing.users[value])
                         from.send :numeric, ERR_NOSUCHNICK, value
                         return
                     end
