@@ -1708,15 +1708,15 @@ class Base < Module
                 password = ''
             end
 
-            if channel.modes[:l]
-                if channel.users.length >= channel.modes[:l]
+            if channel.modes[:limit]
+                if channel.users.length >= channel.modes[:limit]
                     @joining.delete(thing)
 
-                    if channel.modes[:L]
-                        join thing, "JOIN #{channel.modes[:L]}"
-                    else
-                        thing.send :numeric, ERR_CHANNELISFULL, channel.name
+                    if channel.modes[:redirect]
+                        join thing, "JOIN #{channel.modes[:redirect]}"
                     end
+
+                    thing.send :numeric, ERR_CHANNELISFULL, channel.name
 
                     next
                 end
@@ -1970,12 +1970,12 @@ class Base < Module
 
         channel = server.channels[channel]
 
-        if !channel.modes[:i]
+        if !channel.modes[:invite_only]
             thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'Channel is not invite only!' }
             return
         end
 
-        if channel.modes[:K]
+        if channel.modes[:no_knock]
             thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'No knocks are allowed! (+K)' }
             return
         end
