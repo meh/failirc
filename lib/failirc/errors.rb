@@ -321,4 +321,9 @@ ERR_SSLREQUIRED = {
     :text => '"#{value} :Cannot join channel (SSL is required)"'
 }
 
+ERR_NONICKCHANGE = {
+    :code => 447,
+    :text => '"Can not change nickname while on #{value} (+N)"'
+}
+
 end

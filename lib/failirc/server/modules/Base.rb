@@ -49,7 +49,7 @@ class Base < Module
                 :can_change_redirect_mode, :can_change_noknock_mode,
                 :can_add_invitation, :can_channel_ban, :can_add_ban_exception,
                 :can_change_channel_password, :can_change_nocolors_mode,
-                :can_change_noctcp_mode,
+                :can_change_noctcp_mode, :can_change_no_nick_change_mode,
             ],
 
             :can_change_user_modes => [
@@ -74,6 +74,7 @@ class Base < Module
             :K => :no_knock,
             :m => :moderated,
             :n => :no_external_messages,
+            :N => :no_nick_change,
             :s => :secret,
             :t => :topic_change_needs_privileges,
             :u => :auditorium,
@@ -790,6 +791,20 @@ class Base < Module
             # try to register it
             Utils::registration(thing)
         else
+            ok = true
+
+            thing.channels.each_value {|channel|
+                if channel.modes[:no_nick_change] && !Utils::User::isLevelEnough(channel.user(thing), '+')
+                    thing.send :numeric, ERR_NONICKCHANGE, channel.name
+                    ok = false
+                    break
+                end
+            }
+
+            if !ok
+                return false
+            end
+
             server.data[:nicks].delete(nick)
 
             mask       = thing.mask.clone
@@ -1310,6 +1325,19 @@ class Base < Module
                     Utils::setFlags(thing, :n, type == '+')
 
                     output[:modes].push('n')
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'N'
+                if Utils::checkFlag(from, :can_change_no_nick_change_mode)
+                    if Utils::checkFlag(thing, :N) == (type == '+')
+                        return
+                    end
+
+                    Utils::setFlags(thing, :N, type == '+')
+
+                    output[:modes].push('N')
                 else
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
@@ -1943,7 +1971,7 @@ class Base < Module
             thing = channel.user(thing)
 
             channel.users.each_value {|user|
-                if channel.modes[:auditorium] && !Utils::User::isLevelEnough(thing, '%') && !Utils::checkFlag(thing, :operator)
+                if channel.modes[:auditorium] && !Utils::User::isLevelEnough(user, '%') && !Utils::checkFlag(thing, :operator)
                     if user.modes[:level]
                         users << " #{user}"
                     end
