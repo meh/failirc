@@ -48,6 +48,7 @@ class Base < Module
                 :can_change_anonymous_mode, :can_change_limit_mode,
                 :can_change_redirect_mode, :can_change_noknock_mode,
                 :can_add_invitation, :can_channel_ban, :can_add_ban_exception,
+                :can_change_channel_password,
             ],
 
             :can_change_user_modes => [
@@ -65,6 +66,7 @@ class Base < Module
             :i => :invite_only,
             :l => :limit,
             :L => :redirect,
+            :k => :password,
             :K => :no_knock,
             :m => :moderated,
             :n => :no_external_messages,
@@ -997,7 +999,7 @@ class Base < Module
 
             type   = match[1] || '+'
             modes  = match[2].split(//)
-            values = (match[4] || '').split(/ /)
+            values = (match[4] || '').strip.split(/ /)
 
             modes.each {|mode|
                 server.dispatcher.execute :mode, :normal, from, thing, type, mode, values, output
@@ -1165,6 +1167,26 @@ class Base < Module
                     if mask
                         output[:modes].push('I')
                         output[:values].push(mask.to_s)
+                    end
+                else
+                    from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+                end
+
+            when 'k'
+                if Utils::checkFlag(from, :can_change_channel_password)
+                    if type == '+' && (password = values.shift)
+                        Utils::setFlags(thing, :k, true)
+
+                        thing.modes[:password] = password
+                    else
+                        password = thing.modes[:password]
+
+                        Utils::setFlags(thing, :k, false)
+                    end
+
+                    if password
+                        output[:modes].push('k')
+                        output[:values].push(password)
                     end
                 else
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
