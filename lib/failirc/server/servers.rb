@@ -17,32 +17,21 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/utils'
+require 'failirc/extensions'
+require 'failirc/server/server'
 
 module IRC
 
 class Server
 
-class Link
-    attr_reader :server, :socket, :listen, :host
+class Servers < ThreadSafeHash
+    attr_reader :server
 
-    def initialize (server, socket, listen)
+    def initialize (server)
         @server = server
-        @socket = socket
-        @listen = listen
-    end
 
-    def raw (text)
-        @socket.puts text
+        super()
     end
-
-    def send (type, *args)
-        callback = @@callbacks[type]
-        callback(args)
-    end
-
-    @@callbacks = {
-    }
 end
 
 end

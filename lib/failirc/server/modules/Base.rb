@@ -854,7 +854,7 @@ class Base < Module
                 # try to register it
                 Utils::registration(thing)
             end
-        elsif thing.is_a?(Link)
+        elsif thing.is_a?(Server)
 
         end
     end

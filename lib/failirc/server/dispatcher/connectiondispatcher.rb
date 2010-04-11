@@ -47,7 +47,7 @@ class ConnectionDispatcher
             @data[:sockets] = []
             @data[:things]  = {}
             @data[:clients] = CaseInsensitiveHash.new
-            @data[:links]   = CaseInsensitiveHash.new
+            @data[:servers] = CaseInsensitiveHash.new
         end
     
         def listening
@@ -66,8 +66,8 @@ class ConnectionDispatcher
             @data[:clients]
         end
     
-        def links
-            @data[:links]
+        def servers
+            @data[:servers]
         end
     
         def empty?
@@ -88,9 +88,9 @@ class ConnectionDispatcher
             if thing.is_a?(Client)
                 @data[:clients].delete(thing.nick)
                 @data[:clients].delete(socket)
-            elsif thing.is_a?(Link)
-                @data[:links].delete(thing.host)
-                @data[:links].delete(socket)
+            elsif thing.is_a?(Server)
+                @data[:servers].delete(thing.host)
+                @data[:servers].delete(socket)
             end
     
             @data[:sockets].delete(socket)
@@ -203,8 +203,8 @@ class ConnectionDispatcher
         @connections.clients
     end
 
-    def links
-        @connections.links
+    def servers
+        @connections.servers
     end
 
     def listen (options, listen)
@@ -428,7 +428,7 @@ class ConnectionDispatcher
                     channel.users.delete(thing.nick)
                 }
             end
-        elsif thing.is_a?(Link)
+        elsif thing.is_a?(Server)
             # wat
         end
     
@@ -451,7 +451,7 @@ class ConnectionDispatcher
                 kill client, 'Good night sweet prince.'
             }
 
-            @links.each {|key, link|
+            @servers.each {|key, server|
                 kill client, 'Good night sweet prince.'
             }
         rescue Exception => e
@@ -460,7 +460,7 @@ class ConnectionDispatcher
     end
 
     def thing (identifier)
-        if identifier.is_a?(Client) || identifier.is_a?(Link)
+        if identifier.is_a?(Client) || identifier.is_a?(Server)
             return identifier
         elsif identifier.is_a?(User)
             return identifier.client
