@@ -120,6 +120,10 @@ class Cloaking < Module
     def disguise (fromRef)
         from = fromRef.value
 
+        if !from.is_a?(Client) && !from.is_a?(User)
+            return
+        end
+
         if from.modes[:operator]
             if @disguises[from].is_a?(Mask)
                 fromRef.value = Client.new(server, @disguises[from])

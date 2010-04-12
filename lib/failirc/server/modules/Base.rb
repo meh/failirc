@@ -97,7 +97,7 @@ class Base < Module
 
         :client => {
             :netadmin => [:N, :operator],
-            :operator => [:o, :can_kill, :can_give_channel_owner, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
+            :operator => [:o, :can_kill, :can_see_secrets, :can_give_channel_owner, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
         },
     }
 
@@ -2113,7 +2113,7 @@ class Base < Module
         end
 
         channels.each_value {|channel|
-            if !channel.modes[:secret] || thing.channels[channel.name]
+            if !channel.modes[:secret] || thing.channels[channel.name] || thing.modes[:can_see_secrets]
                 thing.send :numeric, RPL_LIST, channel
             end
         }
