@@ -187,7 +187,7 @@ class Base < Module
                 :kicked => self.method(:send_kick),
                 :killed => self.method(:client_quit),
 
-                :whois => self.method(:send_whois),
+                :whois => self.method(:handle_whois),
 
                 :message => [self.method(:handling_message), self.method(:send_message)],
                 :notice  => [self.method(:handling_notice), self.method(:send_notice)],
@@ -2163,7 +2163,7 @@ class Base < Module
         }
     end
 
-    def send_whois (thing, name)
+    def handle_whois (thing, name)
         if !server.clients[name]
             thing.send :numeric, ERR_NOSUCHNICK, name
             return
@@ -2172,6 +2172,11 @@ class Base < Module
         client = server.clients[name]
 
         thing.send :numeric, RPL_WHOISUSER, client
+
+        if thing.modes[:operator]
+            thing.send :numeric, RPL_WHOISMODES, client
+            thing.send :numeric, RPL_WHOISCONNECTING, client
+        end
 
         if !client.channels.empty?
             channels = ''

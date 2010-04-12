@@ -64,6 +64,16 @@ RPL_WHOISUSER = {
     :text => '"#{value.nick} #{value.user} #{value.host} * :#{value.realName}"'
 }
 
+RPL_WHOISMODES = {
+    :code => 379,
+    :text => '":is using modes #{value.modes}"'
+}
+
+RPL_WHOISCONNECTING = {
+    :code => 378,
+    :text => '":is connecting from *@#{value.ip} #{value.ip}"'
+}
+
 RPL_WHOISSERVER = {
     :code => 312,
     :text => '"#{value.nick} #{value.server.host} :#{value.server.name}"'
