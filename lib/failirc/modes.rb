@@ -52,7 +52,11 @@ class Modes < ThreadSafeHash
             end
         }
 
-        return "+#{modes.join} #{values.join ' '}"
+        if modes.length == 0
+            return ''
+        else
+            return "+#{modes.join} #{values.join ' '}"
+        end
     end
 end
 
