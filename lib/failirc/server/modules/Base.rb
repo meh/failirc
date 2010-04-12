@@ -801,7 +801,7 @@ class Base < Module
         nick = match[2].strip
 
         if thing.class == Incoming
-            if !self.check_nick(nick)
+            if !self.check_nick(thing, nick)
                 thing.data[:warned] = nick
                 return
             end
@@ -815,7 +815,7 @@ class Base < Module
         end
     end
 
-    def check_nick (nick)
+    def check_nick (thing, nick)
         if server.clients[nick] || server.data[:nicks][nick]
             thing.send :numeric, ERR_NICKNAMEINUSE, nick
             return false
@@ -832,7 +832,7 @@ class Base < Module
     end
 
     def handle_nick (thing, nick)
-        if !self.check_nick(nick)
+        if !self.check_nick(thing, nick)
             return
         end
 

@@ -175,7 +175,7 @@ class Server
 
     # kill connection with harpoons on fire
     def kill (thing, message=nil, force=false)
-        if !thing || (thing.modes[:killing] && (!force || thing.modes[:kill_forcing])) || !@dispatcher.connections.exists?(thing.socket)
+        if !thing || (thing.data[:killing] && (!force || thing.data[:kill_forcing])) || !@dispatcher.connections.exists?(thing.socket)
             return
         end
 
@@ -183,10 +183,10 @@ class Server
             thing = thing.client
         end
 
-        thing.modes[:killing] = true
+        thing.data[:killing] = true
 
         if force
-            thing.modes[:kill_forcing] = true
+            thing.data[:kill_forcing] = true
 
             tmp = @dispatcher.output[thing].drop_while {|item|
                 item != :EOC
