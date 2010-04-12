@@ -2096,7 +2096,7 @@ class Base < Module
     def list (thing, string)
         match = string.match(/LIST(\s+(.*))?$/)
 
-        channels = (match[2].strip || '').split(/,/)
+        channels = (match[2] || '').strip.split(/,/)
 
         thing.send :numeric, RPL_LISTSTART
 
