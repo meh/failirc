@@ -615,7 +615,6 @@ class Base < Module
 
         # if the client tries to do something without having registered, kill it with fire
         if !event.aliases.include?(:PASS) && !event.aliases.include?(:NICK) && !event.aliases.include?(:USER) && thing.class == Incoming
-            puts thing.class
             thing.send :numeric, ERR_NOTREGISTERED
             stop = true
         # if the client tries to reregister, kill it with fire
@@ -2578,6 +2577,10 @@ class Base < Module
     end
 
     def client_quit (thing, message)
+        if !thing.is_a?(Client)
+            return
+        end
+
         server.data[:nicks].delete(thing.nick)
 
         @toPing.delete(thing.socket)

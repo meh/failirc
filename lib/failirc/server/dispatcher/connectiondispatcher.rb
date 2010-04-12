@@ -432,6 +432,10 @@ class ConnectionDispatcher
     end
 
     def handleDisconnection (thing, message)
+        if !thing
+            return
+        end
+
         @dispatcher.execute(:kill, thing, message) rescue nil
 
         thing.data[:quitting] = true
