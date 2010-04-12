@@ -17,24 +17,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/utils'
 require 'failirc/modes'
 require 'failirc/mask'
 
+require 'failirc/server/incoming'
 require 'failirc/server/channels'
 
 module IRC
 
 class Server
 
-class Client
-    attr_reader   :server, :socket, :listen, :ip, :port, :channels, :modes, :mask, :nick, :user, :host, :connectedOn
+class Client < Incoming
+    attr_reader   :channels, :modes, :mask, :nick, :user, :host, :connectedOn
     attr_accessor :password, :realName
 
-    def initialize (server, socket, listen=nil)
-        @server = server
-        @socket = socket
-        @listen = listen
+    def initialize (server, socket=nil, config=nil)
+        super(server, socket, config)
 
         @registered = false
 
@@ -45,11 +43,9 @@ class Client
             @mask = socket
         else
             @mask     = Mask.new
-            self.host = socket.peeraddr[2]
-            @ip       = socket.peeraddr[3]
-            @port     = socket.addr[1]
+            self.host = @socket.peeraddr[2]
 
-            if socket.is_a?(OpenSSL::SSL::SSLSocket)
+            if @socket.is_a?(OpenSSL::SSL::SSLSocket)
                 @modes[:ssl] = true
             end
         end
@@ -69,21 +65,13 @@ class Client
         @mask.host = @host = value
     end
 
-    def send (symbol, *args)
-        begin
-            self.method(symbol).call(*args)
-        rescue Exception => e
-            self.debug e
-        end
-    end
-
-    def raw (text)
-        @server.dispatcher.dispatch :output, self, text
-        @server.dispatcher.connection.output.push @socket, text
-    end
-
     def numeric (response, value=nil)
-        raw ":#{server.host} #{'%03d' % response[:code]} #{nick || 'faggot'} #{eval(response[:text])}"
+        begin
+            raw ":#{server.host} #{'%03d' % response[:code]} #{nick} #{eval(response[:text])}"
+        rescue Exception => e
+            self.debug response[:text]
+            raise e
+        end
     end
 
     def to_s

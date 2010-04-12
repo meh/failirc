@@ -23,26 +23,15 @@ module IRC
 
 class Server
 
-class Server
-    attr_reader :server, :socket, :listen, :host
+class Server < Incoming
+    attr_reader :server, :servers, :socket, :listen, :host
 
     def initialize (server, socket, listen)
-        @server = server
-        @socket = socket
-        @listen = listen
+        @server  = server
+        @servers = {}
+        @socket  = socket
+        @listen  = listen
     end
-
-    def raw (text)
-        @socket.puts text
-    end
-
-    def send (type, *args)
-        callback = @@callbacks[type]
-        callback(args)
-    end
-
-    @@callbacks = {
-    }
 end
 
 end

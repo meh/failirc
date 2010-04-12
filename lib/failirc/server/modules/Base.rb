@@ -23,6 +23,8 @@ require 'failirc/responses'
 
 require 'failirc/server/module'
 
+require 'failirc/server/incoming'
+require 'failirc/server/server'
 require 'failirc/server/client'
 require 'failirc/server/channel'
 require 'failirc/server/user'
@@ -266,30 +268,30 @@ class Base < Module
         @pingInterval = server.dispatcher.setInterval Fiber.new {
             while true
                 # time to ping non active users
-                @toPing.each_value {|client|
-                    @pingedOut[client.socket] = client
+                @toPing.each_value {|thing|
+                    @pingedOut[thing.socket] = thing
 
-                    if client.modes[:registered]
-                        client.send :raw, "PING :#{server.host}"
+                    if !thing.is_a?(Incoming)
+                        thing.send :raw, "PING :#{server.host}"
                     end
                 }
 
                 # clear and refil the hash of clients to ping with all the connected clients
                 @toPing.clear
-                @toPing.merge!(Hash[server.clients.values.collect {|client| [client.socket, client]}])
+                @toPing.merge!(server.connections.things)
 
                 Fiber.yield
 
                 # people who didn't answer with a PONG has to YIFF IN HELL.
                 @pingedOut.each_value {|client|
-                    if !client.socket.closed?
-                        server.kill client, 'Ping timeout', true
+                    if !thing.socket.closed?
+                        server.kill thing, 'Ping timeout', true
                     end
                 }
 
                 @pingedOut.clear
             end
-        }, (@pingTimeout / 2)
+        }, (@pingTimeout / 2.0)
     end
 
     def rehash
@@ -303,6 +305,12 @@ class Base < Module
             @nickAllowed = tmp.text
         else
             @nickAllowed = 'nick.match(/^[\w^`-]{1,23}$/)'
+        end
+
+        if tmp = server.config.elements['config/modules/module[@name="Base"]/misc/motd']
+            @motd = tmp.text.strip
+        else
+            @motd = 'Welcome to a Fail IRC.'
         end
 
         @messages = {}
@@ -500,93 +508,16 @@ class Base < Module
             end
         end
 
-        # This method does some checks trying to register the connection, various checks
-        # for nick collisions and such.
-        def self.registration (thing)
-            if !thing.modes[:registered]
-                # additional check for nick collisions
-                if thing.nick
-                    if (thing.server.data[:nicks][thing.nick] && thing.server.data[:nicks][thing.nick] != thing) || thing.server.clients[thing.nick]
-                        if thing.modes[:__warned] != thing.nick
-                            thing.send :numeric, ERR_NICKNAMEINUSE, thing.nick
-                            thing.modes[:__warned] = thing.nick
-                        end
-
-                        return
-                    end
-
-                    thing.server.data[:nicks][thing.nick] = thing
-                end
-
-                # if the client isn't registered but has all the needed attributes, register it
-                if thing.user && thing.nick
-                    if thing.listen.attributes['password'] && thing.listen.attributes['password'] != thing.password
-                        return false
-                    end
-
-                    thing.modes[:registered] = true
-    
-                    # clean the temporary hash value and use the nick as key
-                    thing.server.clients.delete(thing.socket)
-                    thing.server.clients[thing.nick] = thing
-
-                    thing.server.data[:nicks].delete(thing.nick)
-                    thing.modes.delete(:__warned)
-    
-                    thing.server.dispatcher.execute(:registration, thing)
-    
-                    thing.send :numeric, RPL_WELCOME, thing
-                    thing.send :numeric, RPL_HOSTEDBY, thing
-                    thing.send :numeric, RPL_SERVCREATEDON
-                    thing.send :numeric, RPL_SERVINFO, {
-                        :user    => Base.supportedModes[:client].join(''),
-                        :channel => Base.supportedModes[:channel].join(''),
-                    }
-
-                    supported = String.new
-
-                    Base.support.each {|key, value|
-                        if value != true
-                            supported << " #{key}=#{value}"
-                        else
-                            supported << " #{key}"
-                        end
-                    }
-
-                    supported = supported[1, supported.length]
-
-                    thing.send :numeric, RPL_ISUPPORT, supported
-    
-                    motd(thing)
-                end
-            end
-        end
-
-        # This method sends the MOTD 80 chars per line.
-        def self.motd (user)
-            user.send :numeric, RPL_MOTDSTART
-    
-            offset = 0
-            motd   = user.server.config.elements['config/server/motd'].text.strip
-    
-            while line = motd[offset, 80]
-                user.send :numeric, RPL_MOTD, line
-                offset += 80
-            end
-    
-            user.send :numeric, RPL_ENDOFMOTD
-        end
-
         # This method assigns flags recursively using groups of flags
         def self.setFlags (thing, type, value, inherited=false, forceFalse=false)
             if Base.modes[:groups][type]
                 main = Base.modes[:groups]
             else
-                if thing.is_a?(Server::Channel)
+                if thing.is_a?(IRC::Server::Channel)
                     main = Base.modes[:channel]
-                elsif thing.is_a?(Server::User)
+                elsif thing.is_a?(IRC::Server::User)
                     main = Base.modes[:user]
-                elsif thing.is_a?(Server::Client)
+                elsif thing.is_a?(IRC::Server::Client)
                     main = Base.modes[:client]
                 else
                     raise 'What sould I do?'
@@ -632,7 +563,7 @@ class Base < Module
 
             result = thing.modes[type]
 
-            if !result && thing.is_a?(Server::User)
+            if !result && thing.is_a?(User)
                 result = thing.client.modes[type]
             end
 
@@ -644,7 +575,7 @@ class Base < Module
         end
 
         def self.dispatchMessage (kind, from, to, message, level=nil)
-            if from.is_a?(Server::User)
+            if from.is_a?(User)
                 from = from.client
             end
 
@@ -673,17 +604,18 @@ class Base < Module
         @pingedOut.delete(thing.socket)
 
         if !event.aliases.include?(:PING) && !event.aliases.include?(:PONG) && !event.aliases.include?(:WHO) && !event.aliases.include?(:MODE)
-            thing.modes[:last_action] = Utils::Client::Action.new(thing, event, string)
+            thing.data[:last_action] = Utils::Client::Action.new(thing, event, string)
         end
 
         stop = false
 
         # if the client tries to do something without having registered, kill it with fire
-        if !event.aliases.include?(:PASS) && !event.aliases.include?(:NICK) && !event.aliases.include?(:USER) && !thing.modes[:registered]
+        if !event.aliases.include?(:PASS) && !event.aliases.include?(:NICK) && !event.aliases.include?(:USER) && thing.class == Incoming
+            puts thing.class
             thing.send :numeric, ERR_NOTREGISTERED
             stop = true
         # if the client tries to reregister, kill it with fire
-        elsif (event.aliases.include?(:PASS) || event.aliases.include?(:USER)) && thing.modes[:registered]
+        elsif (event.aliases.include?(:PASS) || event.aliases.include?(:USER)) && thing.class != Incoming
             thing.send :numeric, ERR_ALREADYREGISTRED
             stop = true
         end
@@ -697,8 +629,8 @@ class Base < Module
         end
 
         begin
-            if thing.modes[:encoding]
-                string.force_encoding(thing.modes[:encoding])
+            if thing.data[:encoding]
+                string.force_encoding(thing.data[:encoding])
                 string.encode!('UTF-8')
             else
                 string.force_encoding('UTF-8')
@@ -708,7 +640,7 @@ class Base < Module
                 end
             end
         rescue
-            if thing.modes[:encoding]
+            if thing.data[:encoding]
                 server.dispatcher.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
             else
                 server.dispatcher.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
@@ -728,8 +660,8 @@ class Base < Module
             return
         end
 
-        if thing.modes[:encoding]
-            string.encode!(thing.modes[:encoding],
+        if thing.data[:encoding]
+            string.encode!(thing.data[:encoding],
                 :invalid => :replace,
                 :undef   => :replace
             )
@@ -744,16 +676,102 @@ class Base < Module
         end
     end
 
+    # This method does some checks trying to register the connection, various checks
+    # for nick collisions and such.
+    def registration (thing)
+        if !thing.is_a?(Incoming)
+            return
+        end
+
+        # additional check for nick collisions
+        if thing.data[:nick]
+            if (thing.server.data[:nicks][thing.data[:nick]] && thing.server.data[:nicks][thing.data[:nick]] != thing) || thing.server.clients[thing.data[:nick]]
+                if thing.data[:warned] != thing.data[:nick]
+                    thing.send :numeric, ERR_NICKNAMEINUSE, thing.data[:nick]
+                    thing.data[:warned] = thing.data[:nick]
+                end
+
+                return
+            end
+
+            thing.server.data[:nicks][thing.data[:nick]] = thing
+        end
+
+        # if the client isn't registered but has all the needed attributes, register it
+        if thing.data[:user] && thing.data[:nick]
+            if thing.config.attributes['password'] && thing.config.attributes['password'] != thing.data[:password]
+                return false
+            end
+
+            client = thing.server.connections.things[thing.socket] = Client.new(thing)
+
+            client.nick     = thing.data[:nick]
+            client.user     = thing.data[:user]
+            client.realName = thing.data[:realName]
+
+            # clean the temporary hash value and use the nick as key
+            thing.server.connections.clients[:byName][client.nick]     = client
+            thing.server.connections.clients[:bySocket][client.socket] = client
+
+            thing.server.data[:nicks].delete(client.nick)
+
+            thing.server.dispatcher.execute(:registration, client)
+
+            client.send :numeric, RPL_WELCOME, client
+            client.send :numeric, RPL_HOSTEDBY, client
+            client.send :numeric, RPL_SERVCREATEDON
+            client.send :numeric, RPL_SERVINFO, {
+                :client  => Base.supportedModes[:client].join(''),
+                :channel => Base.supportedModes[:channel].join(''),
+            }
+
+            supported = String.new
+
+            Base.support.each {|key, value|
+                if value != true
+                    supported << " #{key}=#{value}"
+                else
+                    supported << " #{key}"
+                end
+            }
+
+            supported = supported[1, supported.length]
+
+            client.send :numeric, RPL_ISUPPORT, supported
+
+            motd(client)
+        end
+    end
+
+    # This method sends the MOTD 80 chars per line.
+    def motd (thing)
+        thing.send :numeric, RPL_MOTDSTART
+
+        offset = 0
+        motd   = @motd
+
+        while line = motd[offset, 80]
+            thing.send :numeric, RPL_MOTD, line
+            offset += 80
+        end
+
+        thing.send :numeric, RPL_ENDOFMOTD
+    end
+
     def pass (thing, string)
+        if !thing.is_a?(Incoming)
+            return
+        end
+
         match = string.match(/PASS\s+(:)?(.+)$/i)
 
         if !match
             thing.send :numeric, ERR_NEEDMOREPARAMS, 'PASS'
         else
-            thing.password = match[2]
+            thing.data[:password] = match[2]
 
-            if thing.listen.attributes['password']
-                if thing.password != thing.listen.attributes['password']
+            if thing.config.attributes['password']
+                if thing.data[:password] != thing.config.attributes['password']
                     server.dispatcher.execute(:error, thing, :close, 'Password mismatch')
                     server.kill thing, 'Password mismatch'
                     return
@@ -761,15 +779,11 @@ class Base < Module
             end
 
             # try to register it
-            Utils::registration(thing)
+            registration(thing)
         end
     end
 
     def nick (thing, string)
-        if !thing.is_a?(Client)
-            return
-        end
-
         match = string.match(/NICK\s+(:)?(.+)$/i)
 
         # no nickname was passed, so tell the user is a faggot
@@ -781,18 +795,18 @@ class Base < Module
         nick = match[2].strip
 
         if server.dispatcher.execute(:client_nick_change, thing, nick) == false
-            if !thing.modes[:registered]
-                thing.modes[:__warned] = nick
+            if thing.is_a?(Incoming)
+                thing.data[:warned] = nick
             end
 
             return
         end
 
-        if !thing.modes[:registered]
-            thing.nick = nick
+        if thing.is_a?(Incoming)
+            thing.data[:nick] = nick
 
             # try to register it
-            Utils::registration(thing)
+            registration(thing)
         else
             ok = true
 
@@ -807,8 +821,6 @@ class Base < Module
             if !ok
                 return false
             end
-
-            server.data[:nicks].delete(nick)
 
             mask       = thing.mask.clone
             thing.nick = nick
@@ -842,20 +854,20 @@ class Base < Module
     end
 
     def user (thing, string)
-        if thing.is_a?(Client)
-            match = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.+)$/i)
+        if !thing.is_a?(Incoming)
+            return
+        end
 
-            if !match
-                thing.send :numeric, ERR_NEEDMOREPARAMS, 'USER'
-            else
-                thing.user     = match[1]
-                thing.realName = match[2]
+        match = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.+)$/i)
 
-                # try to register it
-                Utils::registration(thing)
-            end
-        elsif thing.is_a?(Server)
+        if !match
+            thing.send :numeric, ERR_NEEDMOREPARAMS, 'USER'
+        else
+            thing.data[:user]     = match[1]
+            thing.data[:realName] = match[2]
 
+            # try to register it
+            registration(thing)
         end
     end
 
@@ -1027,7 +1039,7 @@ class Base < Module
                 server.dispatcher.execute :mode, :normal, from, thing, type, mode, values, output
             }
 
-            if from.is_a?(Server::Client) || from.is_a?(Server::User)
+            if from.is_a?(Client) || from.is_a?(User)
                 from = from.mask
             end
 
@@ -1038,7 +1050,7 @@ class Base < Module
                     string << " #{output[:values].join(' ')}"
                 end
 
-                thing.send :raw, ":#{from} MODE #{thing.is_a?(Server::Channel) ? thing.name : thing.nick} #{string}"
+                thing.send :raw, ":#{from} MODE #{thing.is_a?(Channel) ? thing.name : thing.nick} #{string}"
             end
 
         end
@@ -1049,7 +1061,7 @@ class Base < Module
             return
         end
 
-        if thing.is_a?(Server::Channel)
+        if thing.is_a?(Channel)
             case mode
 
             when 'a'
@@ -1560,7 +1572,7 @@ class Base < Module
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
             end
-        elsif thing.is_a?(Server::Client)
+        elsif thing.is_a?(Client)
         end
     end
 
@@ -1569,23 +1581,23 @@ class Base < Module
             return
         end
 
-        if thing.is_a?(Server::Channel) && !Utils::checkFlag(from, :can_change_channel_extended_modes)
+        if thing.is_a?(Channel) && !Utils::checkFlag(from, :can_change_channel_extended_modes)
             from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
             return
-        elsif thing.is_a?(Server::User) && !Utils::checkFlag(from, :can_change_user_extended_modes)
+        elsif thing.is_a?(User) && !Utils::checkFlag(from, :can_change_user_extended_modes)
             from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.channel.name
             return
-        elsif thing.is_a?(Server::Client) && from.nick != thing.nick && !Utils::checkFlag(from, :can_change_client_extended_modes) && !Utils::checkFlag(from, :frozen)
+        elsif thing.is_a?(Client) && from.nick != thing.nick && !Utils::checkFlag(from, :can_change_client_extended_modes) && !Utils::checkFlag(from, :frozen)
             from.send :numeric, ERR_NOPRIVILEGES
             return
         end
 
         if type == '?'
-            if thing.is_a?(Server::Channel)
+            if thing.is_a?(Channel)
                 name = thing.name
-            elsif thing.is_a?(Server::User)
+            elsif thing.is_a?(User)
                 name = "#{thing.nick}@#{thing.channel.name}"
-            elsif thing.is_a?(Server::Client)
+            elsif thing.is_a?(Client)
                 name = thing.nick
             end
 
@@ -1628,7 +1640,7 @@ class Base < Module
             if nick
                 if Utils::checkFlag(thing, :operator)
                     if client = server.clients[nick]
-                        client.modes[:encoding] = name
+                        client.data[:encoding] = name
                     else
                         thing.send :numeric, ERR_NOSUCHNICK, nick
                     end
@@ -1636,7 +1648,7 @@ class Base < Module
                     thing.send :numeric, ERR_NOPRIVILEGES
                 end
             else
-                thing.modes[:encoding] = name
+                thing.data[:encoding] = name
             end
         rescue Encoding::ConverterNotFoundError
             server.dispatcher.execute(:error, thing, "#{name} is not a valid encoding.")
@@ -2242,7 +2254,7 @@ class Base < Module
                 return
             end
 
-            if thing.is_a?(Server::User)
+            if thing.is_a?(User)
                 Utils::dispatchMessage(:message, thing, channel, message)
             else
                 if server.channels[receiver].modes[:no_external_messages]
@@ -2298,13 +2310,13 @@ class Base < Module
         from = fromRef.value
         to   = toRef.value
 
-        if to.is_a?(Server::User)
+        if to.is_a?(User)
             name = to.channel.name
 
             if to.channel.modes[:anonymous]
                 from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
             end
-        elsif to.is_a?(Server::Client)
+        elsif to.is_a?(Client)
             name = to.nick
         else
             return
@@ -2374,13 +2386,13 @@ class Base < Module
         from = fromRef.value
         to   = toRef.value
 
-        if to.is_a?(Server::User)
+        if to.is_a?(User)
             name = to.channel.name
 
             if to.channel.modes[:anonymous]
                 from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
             end
-        elsif to.is_a?(Server::Client)
+        elsif to.is_a?(Client)
             name = to.nick
         else
             return
@@ -2421,13 +2433,13 @@ class Base < Module
         from = fromRef.value
         to   = toRef.value
 
-        if to.is_a?(Server::User)
+        if to.is_a?(User)
             name = to.channel.name
 
             if to.channel.modes[:anonymous]
                 from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
             end
-        elsif to.is_a?(Server::Client)
+        elsif to.is_a?(Client)
             name = to.nick
         else
             return

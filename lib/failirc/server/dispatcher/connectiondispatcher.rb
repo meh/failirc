@@ -24,6 +24,8 @@ require 'openssl/nonblock'
 require 'failirc/utils'
 require 'failirc/sslutils'
 
+require 'failirc/server/incoming'
+
 module IRC
 
 class Server
@@ -46,8 +48,16 @@ class ConnectionDispatcher
     
             @data[:sockets] = []
             @data[:things]  = {}
-            @data[:clients] = CaseInsensitiveHash.new
-            @data[:servers] = CaseInsensitiveHash.new
+
+            @data[:clients] = {
+                :byName   => CaseInsensitiveHash.new,
+                :bySocket => {},
+            }
+
+            @data[:servers] = {
+                :byName   => CaseInsensitiveHash.new,
+                :bySocket => {},
+            }
         end
     
         def listening
@@ -86,11 +96,11 @@ class ConnectionDispatcher
             thing = @data[:things][socket]
     
             if thing.is_a?(Client)
-                @data[:clients].delete(thing.nick)
-                @data[:clients].delete(socket)
+                @data[:clients][:byName].delete(thing.nick)
+                @data[:clients][:bySocket].delete(socket)
             elsif thing.is_a?(Server)
-                @data[:servers].delete(thing.host)
-                @data[:servers].delete(socket)
+                @data[:servers][:byName].delete(thing.name)
+                @data[:servers][:bySocket].delete(socket)
             end
     
             @data[:sockets].delete(socket)
@@ -207,6 +217,10 @@ class ConnectionDispatcher
         @connections.servers
     end
 
+    def things
+        @connections.things
+    end
+
     def listen (options, listen)
         server  = TCPServer.new(options[:bind], options[:port])
         context = nil
@@ -267,7 +281,7 @@ class ConnectionDispatcher
                     socket = ssl
                 end
 
-                @connections.things[socket] = @connections.clients[socket] = Server::Client.new(server, socket, listen)
+                @connections.things[socket] = Incoming.new(server, socket, listen)
                 @connections.sockets.push(socket)
 
                 @input[socket]

@@ -33,7 +33,7 @@ require 'failirc/server/dispatcher'
 module IRC
 
 class Server
-    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :connections, :config, :data
+    attr_reader :version, :createdOn, :verbose, :dispatcher, :modules, :channels, :config, :data
 
     def initialize (conf, verbose)
         @version   = IRC::VERSION
@@ -51,12 +51,16 @@ class Server
         self.config = conf
     end
 
-    def clients
-        dispatcher.connection.clients
+    def connections
+        dispatcher.connection.connections
     end
 
-    def links
-        dispatcher.connection.links
+    def clients
+        dispatcher.connection.clients[:byName]
+    end
+
+    def servers
+        dispatcher.connection.servers[:byName]
     end
 
     def comments

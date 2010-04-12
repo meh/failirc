@@ -76,7 +76,7 @@ RPL_WHOISOPERATOR = {
 
 RPL_WHOISIDLE = {
     :code => 317,
-    :text => '"#{value.nick} #{Time.now.tv_sec - value.modes[:last_action].on.tv_sec} #{value.connectedOn.tv_sec} :seconds idle, signon time"'
+    :text => '"#{value.nick} #{Time.now.tv_sec - value.data[:last_action].on.tv_sec} #{value.connectedOn.tv_sec} :seconds idle, signon time"'
 }
 
 RPL_ENDOFWHOIS = {
@@ -344,7 +344,7 @@ RPL_WELCOME = {
 
 RPL_HOSTEDBY = {
     :code => 2,
-    :text => '":Your host is #{server.host}[#{server.ip}/#{value.listen.attributes[\'port\']}], running version failirc-#{server.version}"'
+    :text => '":Your host is #{server.host}[#{server.ip}/#{value.port}], running version failirc-#{server.version}"'
 }
 
 RPL_SERVCREATEDON = {
@@ -354,7 +354,7 @@ RPL_SERVCREATEDON = {
 
 RPL_SERVINFO = {
     :code => 4,
-    :text => '"#{server.host} failirc-#{server.version} #{value[:user]} #{value[:channel]}"'
+    :text => '"#{server.host} failirc-#{server.version} #{value[:client]} #{value[:channel]}"'
 }
 
 RPL_ISUPPORT = {
