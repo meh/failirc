@@ -179,10 +179,14 @@ class Base < Module
 
                 :kill => self.method(:client_quit),
 
-                :join   => self.method(:client_join),
-                :part   => self.method(:user_part),
-                :kick   => self.method(:send_kick),
+                :join   => self.method(:handle_join),
+                :part   => self.method(:handle_part),
+                :kick   => self.method(:handle_kick),
                 :invite => self.method(:client_invite),
+
+                :joined => self.method(:client_join),
+                :parted => self.method(:user_part),
+                :kicked => self.method(:send_kick),
 
                 :whois => self.method(:send_whois),
 
@@ -283,7 +287,7 @@ class Base < Module
                 Fiber.yield
 
                 # people who didn't answer with a PONG has to YIFF IN HELL.
-                @pingedOut.each_value {|client|
+                @pingedOut.each_value {|thing|
                     if !thing.socket.closed?
                         server.kill thing, 'Ping timeout', true
                     end
@@ -580,12 +584,12 @@ class Base < Module
             end
 
             if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-                from.server.dispatcher.execute :ctcp, :input, kind, ref{:from}, ref{:to}, match[1], match[3], level
+                from.server.execute :ctcp, :input, kind, ref{:from}, ref{:to}, match[1], match[3], level
             else
                 if kind == :notice
-                    from.server.dispatcher.execute :notice, :input, ref{:from}, ref{:to}, message, level
+                    from.server.execute :notice, :input, ref{:from}, ref{:to}, message, level
                 elsif kind == :message
-                     from.server.dispatcher.execute :message, :input, ref{:from}, ref{:to}, message
+                     from.server.execute :message, :input, ref{:from}, ref{:to}, message
                 end
             end
         end
@@ -641,9 +645,9 @@ class Base < Module
             end
         rescue
             if thing.data[:encoding]
-                server.dispatcher.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
+                server.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
             else
-                server.dispatcher.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
+                server.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
             end
 
             string.force_encoding('ASCII-8BIT')
@@ -715,7 +719,7 @@ class Base < Module
 
             thing.server.data[:nicks].delete(client.nick)
 
-            thing.server.dispatcher.execute(:registration, client)
+            thing.server.execute(:registration, client)
 
             client.send :numeric, RPL_WELCOME, client
             client.send :numeric, RPL_HOSTEDBY, client
@@ -740,6 +744,8 @@ class Base < Module
             client.send :numeric, RPL_ISUPPORT, supported
 
             motd(client)
+
+            server.execute :connected, client
         end
     end
 
@@ -772,7 +778,7 @@ class Base < Module
 
             if thing.config.attributes['password']
                 if thing.data[:password] != thing.config.attributes['password']
-                    server.dispatcher.execute(:error, thing, :close, 'Password mismatch')
+                    server.execute(:error, thing, :close, 'Password mismatch')
                     server.kill thing, 'Password mismatch'
                     return
                 end
@@ -794,7 +800,7 @@ class Base < Module
 
         nick = match[2].strip
 
-        if server.dispatcher.execute(:client_nick_change, thing, nick) == false
+        if server.execute(:client_nick_change, thing, nick) == false
             if thing.is_a?(Incoming)
                 thing.data[:warned] = nick
             end
@@ -1001,7 +1007,7 @@ class Base < Module
             value = match[1].strip
 
             if value == '?'
-                server.dispatcher.execute :mode, :extended, from, thing, '?', nil, nil, nil
+                server.execute :mode, :extended, from, thing, '?', nil, nil, nil
             else
                 modes = value.split(/[^\\],/)
     
@@ -1016,7 +1022,7 @@ class Base < Module
     
                     mode = mode.split(/=/)
     
-                    server.dispatcher.execute :mode, :extended, from, thing, type, *mode, nil
+                    server.execute :mode, :extended, from, thing, type, *mode, nil
                 }
             end
         else
@@ -1036,7 +1042,7 @@ class Base < Module
             values = (match[4] || '').strip.split(/ /)
 
             modes.each {|mode|
-                server.dispatcher.execute :mode, :normal, from, thing, type, mode, values, output
+                server.execute :mode, :normal, from, thing, type, mode, values, output
             }
 
             if from.is_a?(Client) || from.is_a?(User)
@@ -1066,7 +1072,7 @@ class Base < Module
 
             when 'a'
                 if thing.type != '&' && thing.type != '!'
-                    server.dispatcher.execute :error, from, 'Only & and ! channels can use this mode.'
+                    server.execute :error, from, 'Only & and ! channels can use this mode.'
                 end
 
                 if Utils::checkFlag(from, :can_change_anonymous_mode)
@@ -1602,11 +1608,11 @@ class Base < Module
             end
 
             thing.modes[:extended].each {|key, value|
-                from.server.dispatcher.execute :notice, :output, ref{:server}, ref{:from}, "#{name} #{key} = #{value}"
+                from.server.execute :notice, :output, ref{:server}, ref{:from}, "#{name} #{key} = #{value}"
             }
         else
             if !mode.match(/^\w+$/)
-                from.server.dispatcher.execute :error, from, "#{mode} is not a valid extended mode."
+                from.server.execute :error, from, "#{mode} is not a valid extended mode."
                 return
             end
 
@@ -1651,7 +1657,7 @@ class Base < Module
                 thing.data[:encoding] = name
             end
         rescue Encoding::ConverterNotFoundError
-            server.dispatcher.execute(:error, thing, "#{name} is not a valid encoding.")
+            server.execute(:error, thing, "#{name} is not a valid encoding.")
         end
     end
 
@@ -1665,7 +1671,7 @@ class Base < Module
 
         if match[1] == '0'
             thing.channels.each_value {|channel|
-                server.dispatcher.execute :part, channel[thing.nick], 'Left all channels'
+                server.execute :part, channel[thing.nick], 'Left all channels'
             }
 
             return
@@ -1677,91 +1683,94 @@ class Base < Module
         channels.each {|channel|
             channel.strip!
 
-            if !Utils::Channel::type(channel)
-                channel = "##{channel}"
-            end
-
-            if !Utils::Channel::isValid(channel)
-                thing.send :numeric, ERR_BADCHANMASK, channel
-                next
-            end
-
-            jump = false
-
-            @semaphore.synchronize {
-                if thing.channels[channel] || @joining[thing]
-                    jump = true
-                    break
-                end
-
-                @joining[thing] = true
-
-                if !server.channels[channel]
-                    channel = server.channels[channel] = Channel.new(server, channel)
-                else
-                    channel = server.channels[channel]
-                end
-            }
-
-            if jump
-                next
-            end
-
-            if !channel.modes[:bans]
-                channel.modes[:bans]       = []
-                channel.modes[:exceptions] = []
-                channel.modes[:invites]    = []
-                channel.modes[:invited]    = ThreadSafeHash.new
-            end
-
-            if channel.modes[:password]
+            if server.channels[channel] && server.channels[channel].password
                 password = passwords.shift
             else
-                password = ''
+                password = nil
             end
 
-            if channel.modes[:limit]
-                if channel.users.length >= channel.modes[:limit]
-                    @joining.delete(thing)
-
-                    if channel.modes[:redirect]
-                        join thing, "JOIN #{channel.modes[:redirect]}"
-                    end
-
-                    thing.send :numeric, ERR_CHANNELISFULL, channel.name
-
-                    next
-                end
-            end
-
-            if channel.modes[:ssl_only] && !thing.modes[:ssl]
-                thing.send :numeric, ERR_SSLREQUIRED, channel.name
-                @joining.delete(thing)
-                next
-            end
-
-            if channel.modes[:password] && password != channel.modes[:password]
-                thing.send :numeric, ERR_BADCHANNELKEY, channel.name
-                @joining.delete(thing)
-                next
-            end
-
-            if channel.modes[:invite_only] && !Utils::Channel::invited?(channel, thing, true)
-                thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
-                @joining.delete(thing)
-                next
-            end
-
-            if Utils::Channel::banned?(channel, thing) && !Utils::Channel::exception?(channel, thing) && !Utils::Channel::invited?(channel, thing)
-                thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
-                @joining.delete(thing)
-                next
-            end
-
-            server.dispatcher.execute(:join, thing, channel)
-
-            @joining.delete(thing)
+            server.execute :join, thing, channel, password
         }
+    end
+
+    def handle_join (thing, channel, password=nil)
+        if !Utils::Channel::type(channel)
+            channel = "##{channel}"
+        end
+
+        if !Utils::Channel::isValid(channel)
+            thing.send :numeric, ERR_BADCHANMASK, channel
+            return
+        end
+
+        @semaphore.synchronize {
+            if thing.channels[channel] || @joining[thing]
+                return
+            end
+
+            @joining[thing] = true
+
+            if !server.channels[channel]
+                channel = server.channels[channel] = Channel.new(server, channel)
+            else
+                channel = server.channels[channel]
+            end
+        }
+
+        if !channel.modes[:bans]
+            channel.modes[:bans]       = []
+            channel.modes[:exceptions] = []
+            channel.modes[:invites]    = []
+            channel.modes[:invited]    = ThreadSafeHash.new
+        end
+
+        if channel.modes[:password]
+            password = passwords.shift
+        else
+            password = ''
+        end
+
+        if channel.modes[:limit]
+            if channel.users.length >= channel.modes[:limit]
+                @joining.delete(thing)
+
+                if channel.modes[:redirect]
+                    join thing, "JOIN #{channel.modes[:redirect]}"
+                end
+
+                thing.send :numeric, ERR_CHANNELISFULL, channel.name
+
+                return
+            end
+        end
+
+        if channel.modes[:ssl_only] && !thing.modes[:ssl]
+            thing.send :numeric, ERR_SSLREQUIRED, channel.name
+            @joining.delete(thing)
+            return
+        end
+
+        if channel.modes[:password] && password != channel.modes[:password]
+            thing.send :numeric, ERR_BADCHANNELKEY, channel.name
+            @joining.delete(thing)
+            return
+        end
+
+        if channel.modes[:invite_only] && !Utils::Channel::invited?(channel, thing, true)
+            thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
+            @joining.delete(thing)
+            return
+        end
+
+        if Utils::Channel::banned?(channel, thing) && !Utils::Channel::exception?(channel, thing) && !Utils::Channel::invited?(channel, thing)
+            thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
+            @joining.delete(thing)
+            return
+        end
+
+        server.execute(:joined, thing, channel)
+
+        @joining.delete(thing)
     end
 
     def client_join (client, channel)
@@ -1788,7 +1797,7 @@ class Base < Module
             topic user.client, "TOPIC #{user.channel}"
         end
 
-        names user.client, "NAMES #{user.channel}"
+        self.names user.client, "NAMES #{user.channel}"
     end
 
     def part (thing, string)
@@ -1803,20 +1812,24 @@ class Base < Module
         message = match[3]
 
         names.each {|name|
-            if !Utils::Channel::type(name)
-                name = "##{name}"
-            end
-
-            channel = server.channels[name]
-
-            if !channel
-                thing.send :numeric, ERR_NOSUCHCHANNEL, name
-            elsif !thing.channels[name]
-                thing.send :numeric, ERR_NOTONCHANNEL, name
-            else
-                server.dispatcher.execute(:part, channel.user(thing), message)
-            end
+            server.execute :part, thing, name, message
         }
+    end
+
+    def handle_part (thing, name, message)
+        if !Utils::Channel::type(name)
+            name = "##{name}"
+        end
+
+        channel = server.channels[name]
+
+        if !channel
+            thing.send :numeric, ERR_NOSUCHCHANNEL, name
+        elsif !thing.channels[name]
+            thing.send :numeric, ERR_NOTONCHANNEL, name
+        else
+            server.execute(:parted, channel.user(thing), message)
+        end
     end
 
     def user_part (user, message)
@@ -1850,18 +1863,22 @@ class Base < Module
         user    = match[2]
         message = match[4]
 
+        server.execute :kick, thing, channel, user, message
+    end
+
+    def handle_kick (kicker, channel, user, message)
         if !Utils::Channel::isValid(channel)
-            thing.send :numeric, ERR_BADCHANMASK, channel
+            kicker.send :numeric, ERR_BADCHANMASK, channel
             return
         end
 
         if !server.channels[channel]
-            thing.send :numeric, ERR_NOSUCHCHANNEL, channel
+            kicker.send :numeric, ERR_NOSUCHCHANNEL, channel
             return
         end
 
         if !server.clients[user]
-            thing.send :numeric, ERR_NOSUCHNICK, user
+            kicker.send :numeric, ERR_NOSUCHNICK, user
             return
         end
 
@@ -1869,22 +1886,22 @@ class Base < Module
         user    = channel[user]
 
         if !user
-            thing.send :numeric, ERR_NOTONCHANNEL, channel.name
+            kicker.send :numeric, ERR_NOTONCHANNEL, channel.name
             return
         end
 
-        if thing.channels[channel.name]
-            thing = thing.channels[channel.name].user(thing)
+        if kicker.channels[channel.name]
+            kicker = kicker.channels[channel.name].user(kicker)
         end
 
-        if Utils::checkFlag(thing, :can_kick)
+        if Utils::checkFlag(kicker, :can_kick)
             if channel.modes[:no_kicks]
-                thing.send :numeric, ERR_NOKICKS
+                kicker.send :numeric, ERR_NOKICKS
             else
-                server.dispatcher.execute(:kick, thing, user, message)
+                server.execute(:kicked, kicker, user, message)
             end
         else
-            thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+            kicker.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
     end
 
@@ -1945,7 +1962,7 @@ class Base < Module
             thing.send :numeric, RPL_AWAY, client
         end
 
-        server.dispatcher.execute :invite, thing, client, channel
+        server.execute :invite, thing, client, channel
     end
 
     def client_invite (from, to, channel)
@@ -1958,7 +1975,7 @@ class Base < Module
 
         if channel = server.channels[target]
             channel.modes[:invited][to.nick] = true
-            server.dispatcher.execute :notice, :input, ref{:server}, ref{:channel}, "#{from.nick} invited #{to.nick} into the channel.", '@'
+            server.execute :notice, :input, ref{:server}, ref{:channel}, "#{from.nick} invited #{to.nick} into the channel.", '@'
         end
 
         to.send :raw, ":#{from.mask} INVITE #{to.nick} :#{target}"
@@ -1992,8 +2009,8 @@ class Base < Module
             return
         end
 
-        server.dispatcher.execute :notice, :input, ref{:server}, ref{:channel}, "[Knock] by #{thing.mask} (#{message ? message : 'no reason specified'})", '@'
-        server.dispatcher.execute :notice, :input, ref{:server}, ref{:thing}, "Knocked on #{channel.name}"
+        server.execute :notice, :input, ref{:server}, ref{:channel}, "[Knock] by #{thing.mask} (#{message ? message : 'no reason specified'})", '@'
+        server.execute :notice, :input, ref{:server}, ref{:thing}, "Knocked on #{channel.name}"
     end
 
     def topic (thing, string)
@@ -2022,7 +2039,7 @@ class Base < Module
                 if channel.modes[:t] && !Utils::checkFlag(channel.user(thing), :can_change_topic)
                     thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
                 else
-                    server.dispatcher.execute :topic_change, channel, topic, ref{:thing}
+                    server.execute :topic_change, channel, topic, ref{:thing}
                 end
             else
                 if !channel.topic
@@ -2144,7 +2161,7 @@ class Base < Module
         server = match[3] ? match[1].strip : nil
 
         names.each {|name|
-            thing.server.dispatcher.execute(:whois, thing, name)
+            thing.server.execute(:whois, thing, name)
         }
     end
 
@@ -2294,11 +2311,11 @@ class Base < Module
 
             to.users.each_value {|user|
                 if user.client != from
-                    server.dispatcher.execute :message, :output, fromRef, ref{:user}, message
+                    server.execute :message, :output, fromRef, ref{:user}, message
                 end
             }
         elsif to.is_a?(Client)
-            server.dispatcher.execute :message, :output, fromRef, toRef, message
+            server.execute :message, :output, fromRef, toRef, message
         end
     end
 
@@ -2370,11 +2387,11 @@ class Base < Module
         if to.is_a?(Channel)
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :notice, :output, fromRef, ref{:user}, message, level
+                    server.execute :notice, :output, fromRef, ref{:user}, message, level
                 end
             }
         elsif to.is_a?(Client)
-            server.dispatcher.execute :notice, :output, fromRef, toRef, message, level
+            server.execute :notice, :output, fromRef, toRef, message, level
         end
     end
 
@@ -2417,11 +2434,11 @@ class Base < Module
 
             to.users.each_value {|user|
                 if user.client != from && Utils::User::isLevelEnough(user, level)
-                    server.dispatcher.execute :ctcp, :output, kind, fromRef, ref{:user}, type, message, level
+                    server.execute :ctcp, :output, kind, fromRef, ref{:user}, type, message, level
                 end
             }
         elsif to.is_a?(Client) || to.is_a?(User)
-            server.dispatcher.execute :ctcp, :output, kind, fromRef, toRef, type, message, level
+            server.execute :ctcp, :output, kind, fromRef, toRef, type, message, level
         end
     end
 
@@ -2473,7 +2490,7 @@ class Base < Module
     end
 
     def map (thing, string)
-        server.dispatcher.execute :notice, :input, ref{:server}, ref{:thing}, 'The X tells the point.'
+        server.execute :notice, :input, ref{:server}, ref{:thing}, 'The X tells the point.'
     end
 
     def version (thing, string)
@@ -2509,11 +2526,14 @@ class Base < Module
 
                 thing.send :numeric, RPL_YOUREOPER
                 thing.send :raw, ":#{server} MODE #{thing.nick} #{thing.modes}"
+
+                thing.server.execute :oper, true, thing, name, password
                 return
             end
         }
 
         thing.send :numeric, ERR_NOOPERHOST
+        thing.server.execute :oper, false, thing, name, password
     end
 
     def kill (thing, string)
@@ -2564,7 +2584,7 @@ class Base < Module
         @pingedOut.delete(thing.socket)
 
         thing.channels.select {|name, channel| channel.modes[:anonymous]}.each_value {|channel|
-            server.dispatcher.execute :part, channel.user(thing).clone, message
+            server.execute :part, channel.user(thing).clone, message
         }
 
         thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"

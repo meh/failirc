@@ -51,6 +51,10 @@ class Server
         self.config = conf
     end
 
+    def execute (*args)
+        dispatcher.execute(*args)
+    end
+
     def connections
         dispatcher.connection.connections
     end
