@@ -434,14 +434,12 @@ class ConnectionDispatcher
     def handleDisconnection (thing, message)
         @dispatcher.execute(:kill, thing, message) rescue nil
 
-        if thing.is_a?(Client)
-            thing.modes[:quitting] = true
+        thing.data[:quitting] = true
 
-            if thing.modes[:registered]
-                thing.channels.each_value {|channel|
-                    channel.users.delete(thing.nick)
-                }
-            end
+        if thing.class == Client
+            thing.channels.each_value {|channel|
+                channel.users.delete(thing.nick)
+            }
         elsif thing.is_a?(Server)
             # wat
         end
