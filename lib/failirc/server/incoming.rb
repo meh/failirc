@@ -65,4 +65,8 @@ class Incoming
     def to_s
         "#{@ip}[#{@port}]"
     end
+
+    def inspect
+        to_s
+    end
 end

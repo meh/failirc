@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'digest/md5'
+
 require 'failirc/server/module'
 
 module IRC
@@ -44,6 +46,8 @@ class Cloaking < Module
                 :ctcp    => Event::Callback.new(self.method(:received_ctcp), -100),
 
                 :topic_change => Event::Callback.new(self.method(:topic_change), -100),
+
+                :registered => self.method(:registered),
             },
 
             :output => {
@@ -58,6 +62,38 @@ class Cloaking < Module
         @disguises = {}
 
         super(server)
+    end
+
+    def rehash
+        @keys = []
+
+        @server.config.elements.each('config/modules/module[@name="Cloaking"]/keys/key') {|key|
+            @keys.push(key.text)
+        }
+    end
+
+    def cloakHost (ip)
+        result = []
+
+        ip = ip.split(/\./).map {|ip| ip.to_i}
+
+        ip.each {|block|
+            @keys.each {|key|
+                key.each_byte {|key|
+                    block ^= key
+                }
+            }
+
+            result.push(block.to_s)
+        }
+
+        return result.map {|ip| ip[0, 5]}.join('.')
+    end
+
+    def registered (thing)
+        if thing.is_a?(Client)
+            thing.host = cloakHost(thing.ip)
+        end
     end
 
     def disguiseas (thing, string)

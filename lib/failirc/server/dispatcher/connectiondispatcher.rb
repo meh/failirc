@@ -131,16 +131,16 @@ class ConnectionDispatcher
         end
 
         def push (socket, string)
-            if string.is_a?(String)
-                string.lstrip!
-            end
-
             if string == :EOC
-                if socket.is_a?(Client) || socket.is_a?(User)
-                    socket = socket.socket
+                if !socket.is_a?(TCPSocket) && !socket.is_a?(OpenSSL::SSL::SSLSocket)
+                    socket = socket.socket rescue nil
                 end
 
-                dispatcher.disconnecting.push({ :thing => dispatcher.connections.things[socket], :output => self[socket] })
+                if socket
+                    dispatcher.disconnecting.push({ :thing => dispatcher.connections.things[socket], :output => self[socket] })
+                end
+            else
+                string.lstrip!
             end
 
             if (string && !string.empty?) || self[socket].last == :EOC
@@ -436,7 +436,7 @@ class ConnectionDispatcher
             return
         end
 
-        @dispatcher.execute(:kill, thing, message) rescue nil
+        @dispatcher.execute(:killed, thing, message) rescue nil
 
         thing.data[:quitting] = true
 
@@ -452,7 +452,7 @@ class ConnectionDispatcher
         @output.delete(thing.socket)
         connections.delete(thing.socket)
 
-        self.debug "#{thing.mask}[#{thing.ip}/#{thing.port}] disconnected."
+        self.debug "#{thing.inspect} disconnected."
 
         thing.socket.close rescue nil
     end

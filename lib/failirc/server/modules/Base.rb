@@ -177,8 +177,6 @@ class Base < Module
             :custom => {
                 :nick => self.method(:handle_nick),
 
-                :kill => self.method(:client_quit),
-
                 :join   => self.method(:handle_join),
                 :part   => self.method(:handle_part),
                 :kick   => self.method(:handle_kick),
@@ -187,6 +185,7 @@ class Base < Module
                 :joined => self.method(:client_join),
                 :parted => self.method(:user_part),
                 :kicked => self.method(:send_kick),
+                :killed => self.method(:client_quit),
 
                 :whois => self.method(:send_whois),
 
@@ -674,7 +673,7 @@ class Base < Module
     def unknown_command (event, thing, string)
         match = string.match(/^([^ ]+)/)
 
-        if match && thing.modes[:registered]
+        if match && thing.class != Incoming
             thing.send :numeric, ERR_UNKNOWNCOMMAND, match[1]
         end
     end
@@ -718,7 +717,7 @@ class Base < Module
 
             thing.server.data[:nicks].delete(client.nick)
 
-            thing.server.execute(:registration, client)
+            thing.server.execute(:registered, client)
 
             client.send :numeric, RPL_WELCOME, client
             client.send :numeric, RPL_HOSTEDBY, client

@@ -79,7 +79,7 @@ class Client < Incoming
     end
 
     def inspect
-        return "#<Client: #{mask} #{modes}#{(modes[:registered]) ? ' registered' : ''}>"
+        "#{mask}[#{ip}/#{port}]"
     end
 end
 

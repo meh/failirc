@@ -27,10 +27,17 @@ class Server < Incoming
     attr_reader :server, :servers, :socket, :listen, :host
 
     def initialize (server, socket, listen)
-        @server  = server
+        super(server, socket, listen)
+
         @servers = {}
-        @socket  = socket
-        @listen  = listen
+    end
+
+    def to_s
+        host
+    end
+
+    def inspect
+        "#{host}[#{ip}/#{port}]"
     end
 end
 
