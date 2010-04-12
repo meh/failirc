@@ -752,7 +752,7 @@ class Base < Module
     end
 
     # This method sends the MOTD 80 chars per line.
-    def motd (thing, string)
+    def motd (thing, string=nil)
         thing.send :numeric, RPL_MOTDSTART
 
         offset = 0
