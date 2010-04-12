@@ -329,7 +329,6 @@ class ConnectionDispatcher
                 end
 
                 input.split(/[\r\n]+/).each {|string|
-                    puts string
                     @input.push(socket, string)
                 }
             rescue IOError
