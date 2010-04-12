@@ -203,6 +203,8 @@ class ConnectionDispatcher
         @input         = Data.new(dispatcher)
         @output        = Data.new(dispatcher)
         @disconnecting = []
+
+        @handling = ThreadSafeHash.new
     end
 
     def sockets
@@ -327,6 +329,7 @@ class ConnectionDispatcher
                 end
 
                 input.split(/[\r\n]+/).each {|string|
+                    puts string
                     @input.push(socket, string)
                 }
             rescue IOError
@@ -366,6 +369,12 @@ class ConnectionDispatcher
             end
 
             Thread.new {
+                if @handling[socket]
+                    return
+                end
+
+                @handling[socket] = true
+
                 begin
                     if string = @input.pop(socket)
                         dispatcher.dispatch(:input, thing(socket), string)
@@ -373,6 +382,8 @@ class ConnectionDispatcher
                 rescue Exception => e
                     self.debug e
                 end
+
+                @handling.delete(socket)
             }
         }
     end

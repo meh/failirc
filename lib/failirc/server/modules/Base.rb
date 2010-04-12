@@ -135,6 +135,8 @@ class Base < Module
                 :NICK => /^(:[^ ] )?NICK( |$)/i,
                 :USER => /^(:[^ ] )?USER( |$)/i,
 
+                :MOTD => /^MOTD( |$)/i,
+
                 :PING => /^PING( |$)/i,
                 :PONG => /^PONG( |$)/i,
 
@@ -202,16 +204,18 @@ class Base < Module
             :default => self.method(:unknown_command),
 
             :input => {
+                :PASS => self.method(:pass),
+                :NICK => self.method(:nick),
+                :USER => self.method(:user),
+
+                :MOTD => self.method(:motd),
+
                 :PING => self.method(:ping),
                 :PONG => self.method(:pong),
 
                 :AWAY     => self.method(:away),
                 :MODE     => self.method(:mode),
                 :ENCODING => self.method(:encoding),
-
-                :PASS => self.method(:pass),
-                :NICK => self.method(:nick),
-                :USER => self.method(:user),
 
                 :JOIN   => self.method(:join),
                 :PART   => self.method(:part),
@@ -748,7 +752,7 @@ class Base < Module
     end
 
     # This method sends the MOTD 80 chars per line.
-    def motd (thing)
+    def motd (thing, string)
         thing.send :numeric, RPL_MOTDSTART
 
         offset = 0
