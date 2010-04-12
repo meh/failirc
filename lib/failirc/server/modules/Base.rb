@@ -175,7 +175,7 @@ class Base < Module
             :post => [Event::Callback.new(self.method(:output_encoding), 1234567890)],
 
             :custom => {
-                :client_nick_change => self.method(:client_nick_change),
+                :nick => self.method(:handle_nick),
 
                 :kill => self.method(:client_quit),
 
@@ -275,7 +275,7 @@ class Base < Module
                 @toPing.each_value {|thing|
                     @pingedOut[thing.socket] = thing
 
-                    if !thing.is_a?(Incoming)
+                    if thing.class != Incoming
                         thing.send :raw, "PING :#{server.host}"
                     end
                 }
@@ -683,7 +683,7 @@ class Base < Module
     # This method does some checks trying to register the connection, various checks
     # for nick collisions and such.
     def registration (thing)
-        if !thing.is_a?(Incoming)
+        if thing.class != Incoming
             return
         end
 
@@ -765,7 +765,7 @@ class Base < Module
     end
 
     def pass (thing, string)
-        if !thing.is_a?(Incoming)
+        if thing.class != Incoming
             return
         end
 
@@ -800,52 +800,22 @@ class Base < Module
 
         nick = match[2].strip
 
-        if server.execute(:client_nick_change, thing, nick) == false
-            if thing.is_a?(Incoming)
+        if thing.class == Incoming
+            if !self.check_nick(nick)
                 thing.data[:warned] = nick
+                return
             end
 
-            return
-        end
-
-        if thing.is_a?(Incoming)
             thing.data[:nick] = nick
 
             # try to register it
             registration(thing)
         else
-            ok = true
-
-            thing.channels.each_value {|channel|
-                if channel.modes[:no_nick_change] && !Utils::User::isLevelEnough(channel.user(thing), '+')
-                    thing.send :numeric, ERR_NONICKCHANGE, channel.name
-                    ok = false
-                    break
-                end
-            }
-
-            if !ok
-                return false
-            end
-
-            mask       = thing.mask.clone
-            thing.nick = nick
-
-            server.clients[thing.nick] = server.clients.delete(mask.nick)
-
-            thing.channels.each_value {|channel|
-                channel.users.add(channel.users.delete(mask.nick))
-            }
-
-            if thing.channels.empty?
-                thing.send :raw, ":#{mask} NICK :#{nick}"
-            else
-                thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
-            end
+            server.execute :nick, thing, nick
         end
     end
 
-    def client_nick_change (thing, nick)
+    def check_nick (nick)
         if server.clients[nick] || server.data[:nicks][nick]
             thing.send :numeric, ERR_NICKNAMEINUSE, nick
             return false
@@ -857,10 +827,40 @@ class Base < Module
             thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
             return false
         end
+
+        return true
+    end
+
+    def handle_nick (thing, nick)
+        if !self.check_nick(nick)
+            return
+        end
+
+        thing.channels.each_value {|channel|
+            if channel.modes[:no_nick_change] && !Utils::User::isLevelEnough(channel.user(thing), '+')
+                thing.send :numeric, ERR_NONICKCHANGE, channel.name
+                return false
+            end
+        }
+
+        mask       = thing.mask.clone
+        thing.nick = nick
+
+        server.clients[thing.nick] = server.clients.delete(mask.nick)
+
+        thing.channels.each_value {|channel|
+            channel.users.add(channel.users.delete(mask.nick))
+        }
+
+        if thing.channels.empty?
+            thing.send :raw, ":#{mask} NICK :#{nick}"
+        else
+            thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
+        end
     end
 
     def user (thing, string)
-        if !thing.is_a?(Incoming)
+        if thing.class != Incoming
             return
         end
 
@@ -1683,7 +1683,7 @@ class Base < Module
         channels.each {|channel|
             channel.strip!
 
-            if server.channels[channel] && server.channels[channel].password
+            if server.channels[channel] && server.channels[channel].modes[:password]
                 password = passwords.shift
             else
                 password = nil
