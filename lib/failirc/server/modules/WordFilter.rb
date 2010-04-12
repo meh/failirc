@@ -20,7 +20,7 @@
 require 'failirc/extensions'
 require 'failirc/modes'
 
-require 'failirc/server/module'
+require 'failirc/module'
 
 module IRC
 

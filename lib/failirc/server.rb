@@ -30,6 +30,8 @@ require 'failirc/server/servers'
 require 'failirc/server/channels'
 require 'failirc/server/dispatcher'
 
+require 'failirc/modules'
+
 module IRC
 
 class Server
@@ -42,7 +44,7 @@ class Server
 
         @dispatcher = Dispatcher.new(self)
 
-        @modules = {}
+        @modules = Modules.new
 
         @data = ThreadSafeHash.new
 

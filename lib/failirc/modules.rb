@@ -17,46 +17,24 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/module'
-
 module IRC
 
-class Server
+class Modules < Hash
+    def initialize (*args)
+        super(*args)
+    end
+    
+    def to_s
+        result = String.new
 
-module Modules
-
-class Translate < Module
-    def initialize (server)
-        @aliases = {
-            :input => {
-                :TRANSLATE => /^TRANSLATE( |$)/i,
-            },
+        self.each_value {|mod|
+            if (mod.method(:description) rescue nil)
+                result << " #{mod.description}"
+            end
         }
 
-        @events = {
-            :custom => {
-                :message => Event::Callback.new(self.method(:netlog), -50),
-            },
-
-            :input => {
-                :TRANSLATE => self.method(:set),
-            },
-        }
-
-        super(server)
+        return result[1, result.length]
     end
-
-    def translate (chain, from, to, message, level)
-        if chain == :input
-
-        elsif chain == :output
-
-        end
-    end
-end
-
-end
-
 end
 
 end

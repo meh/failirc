@@ -22,7 +22,7 @@ require 'uri'
 require 'timeout'
 
 require 'failirc/extensions'
-require 'failirc/server/module'
+require 'failirc/module'
 
 module IRC
 

@@ -21,7 +21,7 @@ require 'failirc/utils'
 require 'failirc/errors'
 require 'failirc/responses'
 
-require 'failirc/server/module'
+require 'failirc/module'
 
 require 'failirc/server/incoming'
 require 'failirc/server/server'
@@ -566,7 +566,7 @@ class Base < Module
 
             result = thing.modes[type]
 
-            if !result && thing.is_a?(User)
+            if !result && thing.is_a?(IRC::Server::User)
                 result = thing.client.modes[type]
             end
 
@@ -2499,7 +2499,7 @@ class Base < Module
     def version (thing, string)
         comments = eval(Utils::escapeMessage(@messages[:version]))
 
-        thing.send :numeric, RPL_VERSION
+        thing.send :numeric, RPL_VERSION, comments
     end
 
     def oper (thing, string)

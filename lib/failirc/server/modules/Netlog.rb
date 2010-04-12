@@ -19,7 +19,7 @@
 
 require 'uri'
 
-require 'failirc/server/module'
+require 'failirc/module'
 
 module IRC
 

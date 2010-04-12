@@ -19,7 +19,7 @@
 
 require 'digest/md5'
 
-require 'failirc/server/module'
+require 'failirc/module'
 
 module IRC
 
