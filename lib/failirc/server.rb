@@ -26,7 +26,7 @@ require 'failirc'
 require 'failirc/utils'
 
 require 'failirc/server/clients'
-require 'failirc/server/links'
+require 'failirc/server/servers'
 require 'failirc/server/channels'
 require 'failirc/server/dispatcher'
 
