@@ -575,7 +575,7 @@ class Base < Module
         end
 
         def self.dispatchMessage (kind, from, to, message, level=nil)
-            if from.is_a?(User)
+            if from.is_a?(IRC::Server::User)
                 from = from.client
             end
 
