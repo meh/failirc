@@ -40,7 +40,7 @@ module SSLUtils
   
         cert.extensions = [
             ef.create_extension('basicConstraints', 'CA:FALSE'),
-            ef.create_extension('keyUsage', 'keyEncipherment'),
+            ef.create_extension('keyUsage', 'keyEncipherment, digitalSignature'),
             ef.create_extension('subjectKeyIdentifier', 'hash'),
             ef.create_extension('extendedKeyUsage', 'serverAuth'),
             ef.create_extension('nsComment', comment),

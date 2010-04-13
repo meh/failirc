@@ -60,7 +60,7 @@ ERR_YOUAREBANNED = {
 
 ERR_NOCTCPS = {
     :code => 404,
-    :text => '"#{value} :CTCPs are not permtted in this channel (#{value})"'
+    :text => '"#{value} :CTCPs are not permitted in this channel (#{value})"'
 }
 
 ERR_NOCOLORS = {

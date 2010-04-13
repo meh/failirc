@@ -59,6 +59,7 @@ class Base < Module
                 :PING => /^PING( |$)/i,
 
                 :JOIN => /^:.+?\s+JOIN\s+:./i,
+                :PART => /^:.+?\s+PART\s+:./i
 
                 :PRIVMSG => /^:.+?\s+PRIVMSG\s+.+?\s+:/i,
             },

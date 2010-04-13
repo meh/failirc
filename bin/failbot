@@ -61,9 +61,16 @@ end
 trap('INT') { stop $client }
 trap('KILL') { stop $client }
 
-$urls = {}
+$urls       = {}
+$authorized = {}
 
 module Commands
+    def self.auth (server, from, to, string)
+        if string == $client.config.elements['config/informations/password'].text
+            $authorized[from.nick] = from
+        end
+    end
+
     def self.quit (server, from, to, string)
         $client.servers.each_value {|server|
             $client.fire :quit, server, string
@@ -166,6 +173,10 @@ $client.observe :message, lambda {|server, chain, from, to, message|
             self.debug e
         end
     end
+}
+
+$client.observe :parted, lambda {|server, user, channel|
+
 }
 
 $client.start
