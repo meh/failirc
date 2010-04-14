@@ -20,6 +20,7 @@
 require 'thread'
 require 'socket'
 require 'openssl/nonblock'
+require 'timeout'
 
 require 'failirc/utils'
 require 'failirc/sslutils'
@@ -204,7 +205,7 @@ class ConnectionDispatcher
         @output        = Data.new(dispatcher)
         @disconnecting = []
 
-        @handling = ThreadSafeHash.new
+        @handling = {}
     end
 
     def sockets
@@ -279,7 +280,10 @@ class ConnectionDispatcher
                 if listen.attributes['ssl'] != 'disabled'
                     ssl = OpenSSL::SSL::SSLSocket.new socket, context
 
-                    ssl.accept
+                    timeout 15 do
+                        ssl.accept
+                    end
+
                     socket = ssl
                 end
 
@@ -287,7 +291,7 @@ class ConnectionDispatcher
                 @connections.sockets.push(socket)
 
                 @input[socket]
-            rescue OpenSSL::SSL::SSLError
+            rescue OpenSSL::SSL::SSLError, Timeout::Error
                 socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
                 self.debug "#{host}[#{ip}/#{port}] tried to connect to a SSL connection and failed the handshake."
                 socket.close rescue nil
@@ -363,17 +367,13 @@ class ConnectionDispatcher
 
     def handle
         @input.each {|socket|
-            if dispatcher.event.handling[socket] || @input.empty?(socket)
+            if dispatcher.event.handling[socket] || @input.empty?(socket) || @handling[socket]
                 next
             end
 
+            @handling[socket] = true
+
             Thread.new {
-                if @handling[socket]
-                    return
-                end
-
-                @handling[socket] = true
-
                 begin
                     if string = @input.pop(socket)
                         dispatcher.dispatch(:input, thing(socket), string)
