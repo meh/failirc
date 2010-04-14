@@ -86,7 +86,7 @@ class Dispatcher
             end
         }
 
-        @defaults = [@listening, @cleaning, @reading, @handling, @writing]
+        @defaults = [@listening, @cleaning, @writing, @reading, @handling]
         
         self.loop
     end

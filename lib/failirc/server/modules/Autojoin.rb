@@ -43,12 +43,14 @@ class Autojoin < Module
         if tmp = server.config.elements['config/modules/module[@name="Autojoin"]/channel']
             @channel = tmp.text
         else
-            @channel = '#fail'
+            @channel = nil
         end
     end
 
     def connected (thing)
-        server.execute :join, thing, @channel
+        if @channel
+            server.execute :join, thing, @channel
+        end
     end
 end
 
