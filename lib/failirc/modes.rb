@@ -52,11 +52,17 @@ class Modes < ThreadSafeHash
             end
         }
 
-        if modes.length == 0
-            return ''
-        else
-            return "+#{modes.join} #{values.join ' '}"
+        result = String.new
+
+        if modes.length > 0
+            result = "+#{modes.join}"
+
+            if values.length > 1
+                result << " #{values.join(' ')}"
+            end
         end
+
+        return result
     end
 end
 

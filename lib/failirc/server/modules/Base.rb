@@ -629,21 +629,48 @@ class Base < Module
         return !stop
     end
 
+    def check_encoding (thing, string)
+        string = string.clone
+
+        ['UTF-8', 'ISO-8859-1'].concat(Encoding.name_list).each {|encoding|
+            if encoding.upcase.include?('ASCII')
+                next
+            end
+
+            string.force_encoding(encoding)
+
+            if string.valid_encoding?
+                return encoding
+            end
+        }
+    end
+
     def input_encoding (event, thing, string)
         if event.chain != :input
             return
         end
 
         begin
+            if !thing.data[:encoding_test_first]
+                thing.data[:encoding] = check_encoding(thing, string)
+
+                thing.data[:encoding_test_first] = true
+            end
+
             if thing.data[:encoding]
                 string.force_encoding(thing.data[:encoding])
-                string.encode!('UTF-8')
-            else
-                string.force_encoding('UTF-8')
 
                 if !string.valid_encoding?
-                    raise Encoding::InvalidByteSequenceError
+                    if !thing.data[:encoding_test_last] && (thing.data[:encoding] = check_encoding(thing, string))
+                        string.force_encoding(thing.data[:encoding])
+
+                        thing.data[:encoding_test_last] = true
+                    else
+                        raise Encoding::InvalidByteSequenceError
+                    end
                 end
+
+                string.encode!('UTF-8')
             end
         rescue
             if thing.data[:encoding]
