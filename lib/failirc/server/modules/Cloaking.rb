@@ -122,14 +122,18 @@ class Cloaking < Module
 
         if !from.is_a?(Client) && !from.is_a?(User)
             return
+        elsif from.is_a?(User)
+            from = from.client
         end
 
         if from.modes[:operator]
             if @disguises[from].is_a?(Mask)
                 fromRef.value = Client.new(server, @disguises[from])
             elsif tmp = server.clients[@disguises[from]]
-                fromRef.value = tmp
+                fromRef.value = tmp.clone
             end
+
+            fromRef.value.modes = from.modes
         end
     end
 

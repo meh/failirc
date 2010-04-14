@@ -198,7 +198,8 @@ class Base < Module
 
                 :topic_change => self.method(:topic_change),
 
-                :mode => [self.method(:normal_mode), self.method(:extended_mode)],
+                :mode => self.method(:handle_mode),
+                :set_mode => [self.method(:normal_mode), self.method(:extended_mode)],
             },
 
             :default => self.method(:unknown_command),
@@ -562,16 +563,16 @@ class Base < Module
             }
         end
 
-        def self.checkFlag (thing, type)
+        def self.checkFlag (thing, type, limited=false)
             # servers can do everything
             if thing.is_a?(IRC::Server)
                 return true
             end
 
-            result = thing.modes[type]
+            result = thing.modes[type] || thing.modes[:extended][type]
 
-            if !result && thing.is_a?(IRC::Server::User)
-                result = thing.client.modes[type]
+            if !result && thing.is_a?(IRC::Server::User) && !limited
+                result = thing.client.modes[type] || thing.client.modes[:extended][type]
             end
 
             if result.nil?
@@ -1036,7 +1037,7 @@ class Base < Module
             value = match[1].strip
 
             if value == '?'
-                server.execute :mode, :extended, from, thing, '?', nil, nil, nil
+                server.execute :set_mode, :extended, from, thing, '?', nil, nil, nil
             else
                 modes = value.split(/[^\\],/)
     
@@ -1051,7 +1052,7 @@ class Base < Module
     
                     mode = mode.split(/=/)
     
-                    server.execute :mode, :extended, from, thing, type, *mode, nil
+                    server.execute :set_mode, :extended, from, thing, type, *mode, nil
                 }
             end
         else
@@ -1071,7 +1072,7 @@ class Base < Module
             values = (match[4] || '').strip.split(/ /)
 
             modes.each {|mode|
-                server.execute :mode, :normal, from, thing, type, mode, values, output
+                server.execute :set_mode, :normal, from, thing, type, mode, values, output
             }
 
             if from.is_a?(Client) || from.is_a?(User)
@@ -1223,7 +1224,7 @@ class Base < Module
                         return
                     end
 
-                    if Utils::checkFlag(user, :h) == (type == '+')
+                    if Utils::checkFlag(user, :h, true) == (type == '+')
                         return
                     end
 
@@ -1423,7 +1424,7 @@ class Base < Module
                         return
                     end
 
-                    if Utils::checkFlag(user, :o) == (type == '+')
+                    if Utils::checkFlag(user, :o, true) == (type == '+')
                         return
                     end
 
@@ -1509,7 +1510,7 @@ class Base < Module
                         return
                     end
 
-                    if Utils::checkFlag(user, :v) == (type == '+')
+                    if Utils::checkFlag(user, :v, true) == (type == '+')
                         return
                     end
 
@@ -1543,7 +1544,7 @@ class Base < Module
                         return
                     end
 
-                    if Utils::checkFlag(user, :x) == (type == '+')
+                    if Utils::checkFlag(user, :x, true) == (type == '+')
                         return
                     end
 
@@ -1564,7 +1565,7 @@ class Base < Module
                         return
                     end
 
-                    if Utils::checkFlag(user, :y) == (type == '+')
+                    if Utils::checkFlag(user, :y, true) == (type == '+')
                         return
                     end
 
@@ -1669,24 +1670,23 @@ class Base < Module
             name = match[1].strip
         end
 
-        begin
-            "".encode(name)
+        if !Encoding.name_list.include?(name)
+            server.execute(:error, thing, "#{name} is not a valid encoding.")
+            return
+        end
 
-            if nick
-                if Utils::checkFlag(thing, :operator)
-                    if client = server.clients[nick]
-                        client.data[:encoding] = name
-                    else
-                        thing.send :numeric, ERR_NOSUCHNICK, nick
-                    end
+        if nick
+            if Utils::checkFlag(thing, :operator)
+                if client = server.clients[nick]
+                    client.data[:encoding] = name
                 else
-                    thing.send :numeric, ERR_NOPRIVILEGES
+                    thing.send :numeric, ERR_NOSUCHNICK, nick
                 end
             else
-                thing.data[:encoding] = name
+                thing.send :numeric, ERR_NOPRIVILEGES
             end
-        rescue Encoding::ConverterNotFoundError
-            server.execute(:error, thing, "#{name} is not a valid encoding.")
+        else
+            thing.data[:encoding] = name
         end
     end
 
@@ -1807,12 +1807,12 @@ class Base < Module
         user  = channel.add(client)
 
         if empty
-            handle_mode server, channel, "+o #{user.nick}", true
+            server.execute :mode, server, channel, "+o #{user.nick}", true
         else
-            channel.modes[:invited].delete(client.nick)
+            channel.modes[:invited].delete(user.nick)
         end
 
-        user.client.channels.add(channel)
+        client.channels.add(channel)
 
         if user.channel.modes[:anonymous]
             mask = Mask.new 'anonymous', 'anonymous', 'anonymous.'
@@ -2345,7 +2345,7 @@ class Base < Module
 
             to.users.each_value {|user|
                 if user.client != from
-                    server.execute :message, :output, fromRef, ref{:user}, message
+                    server.execute :message, :output, fromRef, ref{:user}, message.clone
                 end
             }
         elsif to.is_a?(Client)

@@ -24,6 +24,8 @@ require 'timeout'
 require 'failirc/extensions'
 require 'failirc/module'
 
+require 'failirc/server/modules/Base'
+
 module IRC
 
 class Server
@@ -56,22 +58,28 @@ class TinyURL < Module
     end
 
     def tinyurl (chain, fromRef, toRef, message, level=nil)
-        if chain != :input
-            return
-        end
-
         from = fromRef.value
         to   = toRef.value
 
-        URI.extract(message).each {|uri|
-            if uri.length <= @length
-                next
+        case chain
+        
+        when :input
+            URI.extract(message).each {|uri|
+                if uri.length <= @length
+                    next
+                end
+
+                if tiny = tinyurlify(uri) rescue nil
+                    message.gsub!(/#{Regexp.escape(uri)}/, tiny)
+                end
+            }
+        
+        when :output
+            if Base::Utils::checkFlag(to, :tinyurl_preview)
+                message.gsub!('http://tinyurl.com', 'http://preview.tinyurl.com')
             end
 
-            if tiny = tinyurlify(uri) rescue nil
-                message.gsub!(/#{Regexp.escape(uri)}/, tiny)
-            end
-        }
+        end
     end
 
     def tinyurlify (url)

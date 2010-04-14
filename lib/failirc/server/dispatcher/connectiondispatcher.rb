@@ -280,7 +280,7 @@ class ConnectionDispatcher
                 if listen.attributes['ssl'] != 'disabled'
                     ssl = OpenSSL::SSL::SSLSocket.new socket, context
 
-                    timeout 15 do
+                    timeout server.config.elements['config/server/timeout'].text.to_i do
                         ssl.accept
                     end
 

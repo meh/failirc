@@ -105,7 +105,7 @@ class Channel
     end
 
     def empty?
-        return @users.empty?
+        @users.empty?
     end
 
     def send (*args)

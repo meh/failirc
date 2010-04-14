@@ -223,8 +223,8 @@ class Server
             @config.elements['config/server'].add(Element.new('host')).text = Socket.gethostname
         end
 
-        if !@config.elements['config/server/pingTimeout']
-            @config.elements['config/server'].add(Element.new('pingTimeout')).text = '60'
+        if !@config.elements['config/server/timeout']
+            @config.elements['config/server'].add(Element.new('timeout')).text = '15'
         end
 
         if !@config.elements['config/server/listen']
