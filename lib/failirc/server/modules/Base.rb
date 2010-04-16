@@ -847,7 +847,7 @@ class Base < Module
             if thing.nick == nick
                 return false
             end
-    
+
             if thing.nick.downcase == nick.downcase
                 return true
             end
@@ -891,6 +891,7 @@ class Base < Module
 
         if thing.channels.empty?
             thing.send :raw, ":#{mask} NICK :#{nick}"
+        else
             thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
         end
     end
