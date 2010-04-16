@@ -26,18 +26,19 @@ class Incoming
         if server.is_a?(Incoming)
             tmp = server
 
-            server = tmp.server
-            socket = tmp.socket
-            config = tmp.config
+            @server = tmp.server
+            @socket = tmp.socket
+            @config = tmp.config
+            @data   = tmp.data
+        else
+            @server = server
+            @socket = socket
+            @config = config
+            @data   = {}
         end
 
-        @server = server
-        @socket = socket
-        @config = config
-        @data   = {}
-
-        @ip   = socket.peeraddr[3] rescue nil
-        @port = socket.addr[1] rescue nil
+        @ip   = @socket.peeraddr[3] rescue nil
+        @port = @socket.addr[1] rescue nil
     end
 
     def send (symbol, *args)

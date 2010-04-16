@@ -177,6 +177,8 @@ class Base < Module
             :post => [Event::Callback.new(self.method(:output_encoding), 1234567890)],
 
             :custom => {
+                :new_connection => self.method(:new_connection),
+
                 :nick => self.method(:handle_nick),
 
                 :join   => self.method(:handle_join),
@@ -603,6 +605,10 @@ class Base < Module
         end
     end
 
+    def new_connection (thing)
+        thing.data[:encoding] = 'UTF-8'
+    end
+
     def check (event, thing, string)
         if event.chain != :input || !thing || !string
             return
@@ -633,17 +639,15 @@ class Base < Module
     def check_encoding (thing, string)
         string = string.clone
 
-        ['UTF-8', 'ISO-8859-1'].concat(Encoding.name_list).each {|encoding|
-            if encoding.upcase.include?('ASCII')
-                next
-            end
-
+        ['UTF-8', 'ISO-8859-1'].each {|encoding|
             string.force_encoding(encoding)
 
             if string.valid_encoding?
                 return encoding
             end
         }
+
+        return false
     end
 
     def input_encoding (event, thing, string)
@@ -652,27 +656,20 @@ class Base < Module
         end
 
         begin
-            if !thing.data[:encoding_test_first]
-                thing.data[:encoding] = check_encoding(thing, string)
+            string.force_encoding(thing.data[:encoding])
 
-                thing.data[:encoding_test_first] = true
-            end
+            if !string.valid_encoding?
+                if !thing.data[:encoding_tested] && (tmp = check_encoding(thing, string))
+                    thing.data[:encoding_tested] = true
+                    thing.data[:encoding]        = tmp
 
-            if thing.data[:encoding]
-                string.force_encoding(thing.data[:encoding])
-
-                if !string.valid_encoding?
-                    if !thing.data[:encoding_test_last] && (thing.data[:encoding] = check_encoding(thing, string))
-                        string.force_encoding(thing.data[:encoding])
-
-                        thing.data[:encoding_test_last] = true
-                    else
-                        raise Encoding::InvalidByteSequenceError
-                    end
+                    string.force_encoding(tmp)
+                else
+                    raise Encoding::InvalidByteSequenceError
                 end
-
-                string.encode!('UTF-8')
             end
+
+            string.encode!('UTF-8')
         rescue
             if thing.data[:encoding]
                 server.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
@@ -846,6 +843,16 @@ class Base < Module
     end
 
     def check_nick (thing, nick)
+        if thing.is_a?(Client)
+            if thing.nick == nick
+                return false
+            end
+    
+            if thing.nick.downcase == nick.downcase
+                return true
+            end
+        end
+
         if server.clients[nick] || server.data[:nicks][nick]
             thing.send :numeric, ERR_NICKNAMEINUSE, nick
             return false
@@ -884,7 +891,6 @@ class Base < Module
 
         if thing.channels.empty?
             thing.send :raw, ":#{mask} NICK :#{nick}"
-        else
             thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
         end
     end
@@ -1678,7 +1684,8 @@ class Base < Module
         if nick
             if Utils::checkFlag(thing, :operator)
                 if client = server.clients[nick]
-                    client.data[:encoding] = name
+                    client.data[:encoding]        = name
+                    client.data[:encoding_tested] = false
                 else
                     thing.send :numeric, ERR_NOSUCHNICK, nick
                 end
@@ -1686,7 +1693,8 @@ class Base < Module
                 thing.send :numeric, ERR_NOPRIVILEGES
             end
         else
-            thing.data[:encoding] = name
+            thing.data[:encoding]        = name
+            thing.data[:encoding_tested] = false
         end
     end
 

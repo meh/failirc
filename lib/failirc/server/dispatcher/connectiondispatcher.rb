@@ -287,7 +287,7 @@ class ConnectionDispatcher
                     socket = ssl
                 end
 
-                @connections.things[socket] = Incoming.new(server, socket, listen)
+                server.execute(:new_connection, (@connections.things[socket] = Incoming.new(server, socket, listen)))
                 @connections.sockets.push(socket)
 
                 @input[socket]
