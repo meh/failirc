@@ -2068,10 +2068,12 @@ class Base < Module
         channel = match[1].strip
         topic   = match[3]
 
-        server.execute :topic, channel, topic, ref{:thing}
+        server.execute :topic, ref{:thing}, channel, topic
     end
 
-    def handle_topic (channel, topic, fromRef)
+    def handle_topic (thingRef, channel, topic)
+        thing = thingRef.value
+
         if !server.channels[channel]
             thing.send :numeric, ERR_NOSUCHCHANNEL, channel
             return
@@ -2088,7 +2090,7 @@ class Base < Module
             if channel.modes[:t] && !Utils::checkFlag(channel.user(thing), :can_change_topic)
                 thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
             else
-                channel.topic = [fromRef.value, topic]
+                channel.topic = [thing, topic]
                 
                 channel.send :raw, ":#{channel.topic.setBy} TOPIC #{channel} :#{channel.topic}"
             end
