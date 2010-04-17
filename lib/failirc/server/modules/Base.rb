@@ -132,8 +132,8 @@ class Base < Module
         @aliases = {
             :input => {
                 :PASS => /^PASS( |$)/i,
-                :NICK => /^(:[^ ] )?NICK( |$)/i,
-                :USER => /^(:[^ ] )?USER( |$)/i,
+                :NICK => /^(:[^ ]\s+)?NICK( |$)/i,
+                :USER => /^(:[^ ]\s+)?USER( |$)/i,
 
                 :MOTD => /^MOTD( |$)/i,
 
@@ -198,7 +198,7 @@ class Base < Module
                 :ctcp    => [self.method(:handling_ctcp), self.method(:send_ctcp)],
                 :error   => self.method(:send_error),
 
-                :topic_change => self.method(:topic_change),
+                :topic => self.method(:handle_topic),
 
                 :mode => self.method(:handle_mode),
                 :set_mode => [self.method(:normal_mode), self.method(:extended_mode)],
@@ -817,7 +817,7 @@ class Base < Module
     end
 
     def nick (thing, string)
-        match = string.match(/NICK\s+(:)?(.+)$/i)
+        match = string.match(/^(:(.+?)\s+)?NICK\s+(:)?(.+)$/i)
 
         # no nickname was passed, so tell the user is a faggot
         if !match
@@ -825,9 +825,16 @@ class Base < Module
             return
         end
 
-        nick = match[2].strip
+        nick = match[4].strip
 
-        if thing.class == Incoming
+        case thing
+
+        when Client
+            server.execute :nick, thing, nick
+
+        when Server
+
+        when Incoming
             if !self.check_nick(thing, nick)
                 thing.data[:warned] = nick
                 return
@@ -837,8 +844,7 @@ class Base < Module
 
             # try to register it
             registration(thing)
-        else
-            server.execute :nick, thing, nick
+
         end
     end
 
@@ -2060,7 +2066,12 @@ class Base < Module
         end
 
         channel = match[1].strip
+        topic   = match[3]
 
+        server.execute :topic, channel, topic, ref{:thing}
+    end
+
+    def handle_topic (channel, topic, fromRef)
         if !server.channels[channel]
             thing.send :numeric, ERR_NOSUCHCHANNEL, channel
             return
@@ -2070,30 +2081,25 @@ class Base < Module
 
         if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel.name] && !Utils::checkFlag(thing, :operator)
             thing.send :numeric, ERR_NOTONCHANNEL, channel
-        else
-            if match[2]
-                topic = match[3].to_s
+            return
+        end
 
-                if channel.modes[:t] && !Utils::checkFlag(channel.user(thing), :can_change_topic)
-                    thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
-                else
-                    server.execute :topic_change, channel, topic, ref{:thing}
-                end
+        if topic
+            if channel.modes[:t] && !Utils::checkFlag(channel.user(thing), :can_change_topic)
+                thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
             else
-                if !channel.topic
-                    thing.send :numeric, RPL_NOTOPIC, channel
-                else
-                    thing.send :numeric, RPL_TOPIC, channel.topic
-                    thing.send :numeric, RPL_TOPICSETON, channel.topic
-                end
+                channel.topic = [fromRef.value, topic]
+                
+                channel.send :raw, ":#{channel.topic.setBy} TOPIC #{channel} :#{channel.topic}"
+            end
+        else
+            if !channel.topic
+                thing.send :numeric, RPL_NOTOPIC, channel
+            else
+                thing.send :numeric, RPL_TOPIC, channel.topic
+                thing.send :numeric, RPL_TOPICSETON, channel.topic
             end
         end
-    end
-
-    def topic_change (channel, topic, fromRef)
-        channel.topic = [fromRef.value, topic]
-
-        channel.send :raw, ":#{channel.topic.setBy} TOPIC #{channel} :#{channel.topic}"
     end
 
     def names (thing, string)
@@ -2354,7 +2360,7 @@ class Base < Module
 
             to.users.each_value {|user|
                 if user.client != from
-                    server.execute :message, :output, fromRef, ref{:user}, message.clone
+                    server.execute :message, :output, fromRef, ref{:user}, message
                 end
             }
         elsif to.is_a?(Client)

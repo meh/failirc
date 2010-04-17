@@ -20,7 +20,8 @@
 require 'failirc/utils'
 
 class Incoming
-    attr_reader :server, :socket, :config, :ip, :port, :data
+    attr_reader   :server, :socket, :config, :ip, :port
+    attr_accessor :data
 
     def initialize (server, socket=nil, config=nil)
         if server.is_a?(Incoming)
@@ -50,8 +51,10 @@ class Incoming
     end
 
     def raw (text)
-        @server.dispatcher.dispatch :output, self, text
-        @server.dispatcher.connection.output.push @socket, text
+        string = text.clone
+
+        @server.dispatcher.dispatch :output, self, string
+        @server.dispatcher.connection.output.push @socket, string
     end
 
     def numeric (response, value=nil)

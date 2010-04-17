@@ -28,8 +28,8 @@ module IRC
 class Server
 
 class Client < Incoming
-    attr_reader   :channels, :modes, :mask, :nick, :user, :host, :connectedOn
-    attr_accessor :password, :realName
+    attr_reader   :channels, :mask, :nick, :user, :host, :connectedOn
+    attr_accessor :password, :realName, :modes
 
     def initialize (server, socket=nil, config=nil)
         super(server, socket, config)
