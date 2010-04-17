@@ -38,6 +38,10 @@ class User
         @client.server
     end
 
+    def data
+        @client.data
+    end
+
     def nick
         @client.nick
     end

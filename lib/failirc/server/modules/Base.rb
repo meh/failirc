@@ -85,9 +85,12 @@ class Base < Module
             :u => :auditorium,
             :V => :no_invites,
             :z => :ssl_only,
+
+            :! => :service,
         },
 
         :user => {
+            :! => [:x],
             :x => [:y, :can_give_channel_admin],
             :y => [:o, :admin],
             :o => [:h, :operator, :can_change_topic, :can_invite, :can_change_channel_modes, :can_change_user_modes],
@@ -97,7 +100,7 @@ class Base < Module
 
         :client => {
             :netadmin => [:N, :operator],
-            :operator => [:o, :can_kill, :can_see_secrets, :can_give_channel_owner, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
+            :operator => [:o, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
         },
     }
 
@@ -262,7 +265,7 @@ class Base < Module
             'INVEX'       => 'I',
             'CHANTYPES'   => '&#+!',
             'CHANMODES'   => 'beI,kfL,lj,acCiKmnNQsStuVz',
-            'PREFIX'      => '(xyohv)~&@%+',
+            'PREFIX'      => '(!xyohv)!~&@%+',
             'STATUSMSG'   => '~&@%+',
             'FNC'         => true,
 
@@ -445,6 +448,7 @@ class Base < Module
 
         module User
             @@levels = {
+                :! => '!',
                 :x => '~',
                 :y => '&',
                 :o => '@',
@@ -456,7 +460,7 @@ class Base < Module
                 return @@levels
             end
 
-            @@levelsOrder = [:x, :y, :o, :h, :v]
+            @@levelsOrder = [:!, :x, :y, :o, :h, :v]
 
             def self.isLevel (char)
                 @@levels.has_value?(char) ? char : false
@@ -490,17 +494,17 @@ class Base < Module
             end
 
             def self.getHighestLevel (user)
-                if user.modes[:x]
-                    return :x
-                elsif user.modes[:y]
-                    return :y
-                elsif user.modes[:o]
-                    return :o
-                elsif user.modes[:h]
-                    return :h
-                elsif user.modes[:v]
-                    return :v
-                end
+                highest = 9001
+
+                @@levels.each_key {|level|
+                    if user.modes[level] && (tmp = @@levelsOrder.index(level)) && tmp < highest
+                        highest = tmp
+                    end
+                }
+
+                puts "#{highest.inspect} #{@@levels[highest].inspect}"
+
+                return @@levels[highest]
             end
 
             def self.setLevel (user, level, value)
@@ -567,7 +571,7 @@ class Base < Module
 
         def self.checkFlag (thing, type, limited=false)
             # servers can do everything
-            if thing.is_a?(IRC::Server)
+            if thing.is_a?(IRC::Server) || thing.data[:is_a_service]
                 return true
             end
 
@@ -780,13 +784,29 @@ class Base < Module
     def motd (thing, string=nil)
         thing.send :numeric, RPL_MOTDSTART
 
-        offset = 0
-        motd   = @motd
+        @motd.split(/\n/).each {|line|
+            offset = 0
 
-        while line = motd[offset, 80]
-            thing.send :numeric, RPL_MOTD, line
-            offset += 80
-        end
+            while part = line[offset, 80]
+                if (tmp = line[offset + 80, 1]) && !tmp.match(/\s/)
+                    part.sub!(/([^ ]+)$/, '')
+
+                    if (tmp = part.length) == 0
+                        tmp = 80
+                    end
+                else
+                    tmp = 80
+                end
+
+                offset += tmp
+
+                if part.strip.length == 0 && line.strip.length > 0
+                    next
+                end
+
+                thing.send :numeric, RPL_MOTD, part.strip
+            end
+        }
 
         thing.send :numeric, RPL_ENDOFMOTD
     end
