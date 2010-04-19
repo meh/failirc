@@ -78,6 +78,7 @@ class Base < Module
             :m => :moderated,
             :n => :no_external_messages,
             :N => :no_nick_change,
+            :p => :private,
             :Q => :no_kicks,
             :s => :secret,
             :S => :strip_colors,
@@ -1492,9 +1493,9 @@ class Base < Module
                         return
                     end
 
-                    Utils::setFlags(thing, :s, type == '+')
+                    Utils::setFlags(thing, :p, type == '+')
 
-                    output[:modes].push('s')
+                    output[:modes].push('p')
                 else
                     from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
                 end
