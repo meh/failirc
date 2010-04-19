@@ -71,7 +71,7 @@ RPL_WHOISMODES = {
 
 RPL_WHOISCONNECTING = {
     :code => 378,
-    :text => '"#{value.nick} :is connecting from *@#{value.ip} #{value.ip}"'
+    :text => '"#{value.nick} :is connecting from *@#{value.hostname} #{value.ip}"'
 }
 
 RPL_WHOISSERVER = {
@@ -124,7 +124,7 @@ RPL_LISTSTART = {
 
 RPL_LIST = {
     :code => 322,
-    :text => '"#{value.name} #{value.users.length} #{value.modes.to_s.empty? ? "" : "[#{value.modes.to_s}]"} :#{value.topic.text}"'
+    :text => '"#{value[:name]} #{value[:users]} #{value[:modes]}:#{value[:topic]}"'
 }
 
 # Replies RPL_LISTSTART, RPL_LIST, RPL_LISTEND mark the start, actual replies with data and end of the server's response to a LIST command.
@@ -173,7 +173,7 @@ RPL_VERSION = {
 
 RPL_WHOREPLY = {
     :code => 352,
-    :text => '"#{value[:channel].name} #{value[:user].user} #{value[:user].host} #{value[:user].server.host} #{value[:user].nick} #{\'H\' || \'G\'}#{value[:user].modes[:level]} :#{value[:hops]} #{value[:user].realName}"'
+    :text => '"#{value[:channel].name} #{value[:user][:user]} #{value[:user][:host]} #{value[:server]} #{value[:user][:nick]} #{\'H\' || \'G\'}#{value[:user][:llevel]} :#{value[:hops]} #{value[:user][:realName]}"'
 }
 
 # The RPL_WHOREPLY and RPL_ENDOFWHO pair are used to answer a WHO message.

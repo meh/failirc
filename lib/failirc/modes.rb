@@ -38,15 +38,15 @@ class Modes < ThreadSafeHash
         modes  = []
         values = []
 
-        each_key {|mode|
+        self.each {|mode, value|
             if mode
                 mode = mode.to_s
 
                 if mode.length == 1
                     modes.push mode
 
-                    if self[mode.to_sym] != true
-                        values.push self[mode.to_sym]
+                    if value.is_a?(String)
+                        values.push value
                     end
                 end
             end
@@ -57,7 +57,7 @@ class Modes < ThreadSafeHash
         if modes.length > 0
             result = "+#{modes.join}"
 
-            if values.length > 1
+            if values.length > 0
                 result << " #{values.join(' ')}"
             end
         end

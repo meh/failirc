@@ -47,6 +47,7 @@ class Client < Incoming
 
             if @socket.is_a?(OpenSSL::SSL::SSLSocket)
                 @modes[:ssl] = true
+                @modes[:z]   = true
             end
         end
 

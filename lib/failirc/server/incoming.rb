@@ -20,7 +20,7 @@
 require 'failirc/utils'
 
 class Incoming
-    attr_reader   :server, :socket, :config, :ip, :port
+    attr_reader   :server, :socket, :config, :ip, :hostname, :port
     attr_accessor :data
 
     def initialize (server, socket=nil, config=nil)
@@ -38,8 +38,9 @@ class Incoming
             @data   = {}
         end
 
-        @ip   = @socket.peeraddr[3] rescue nil
-        @port = @socket.addr[1] rescue nil
+        @ip       = @socket.peeraddr[3] rescue nil
+        @hostname = @socket.peeraddr[2] rescue nil
+        @port     = @socket.addr[1] rescue nil
     end
 
     def send (symbol, *args)

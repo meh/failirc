@@ -46,7 +46,11 @@ class Channel
         end
 
         def setBy= (value)
-            @setBy = value.mask.clone
+            if value.is_a?(Mask)
+                @setBy = value
+            else
+                @setBy = value.mask.clone
+            end
         end
 
         def to_s
