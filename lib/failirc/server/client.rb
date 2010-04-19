@@ -46,8 +46,7 @@ class Client < Incoming
             self.host = @socket.peeraddr[2]
 
             if @socket.is_a?(OpenSSL::SSL::SSLSocket)
-                @modes[:ssl] = true
-                @modes[:z]   = true
+                @modes[:ssl] = @modes[:z] = true
             end
         end
 

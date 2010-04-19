@@ -781,6 +781,10 @@ class Base < Module
 
             client.send :numeric, RPL_ISUPPORT, supported
 
+            if !client.modes.to_s.empty?
+                client.send :raw, ":#{server} MODE #{client.nick} #{client.modes}"
+            end
+
             motd(client)
 
             server.execute :connected, client
@@ -2171,11 +2175,6 @@ class Base < Module
         channel = match[1].strip
 
         if channel = thing.channels[channel]
-            if channel.modes[:secret]
-                thing.send :numeric, RPL_ENDOFNAMES, thing.nick
-                return   
-            end
-
             users = String.new
             thing = channel.user(thing)
 
@@ -2242,10 +2241,9 @@ class Base < Module
     def who (thing, string)
         match = string.match(/WHO\s+(.*?)(\s+o)?$/i)
 
-        name = match[1].strip || '*'
-
         if match
-            op = match[2]
+            name     = match[1].strip || '*'
+            operator = match[2]
 
             if Utils::Channel::isValid(name) && (channel = server.channels[name])
                 if channel.modes[:anonymous]
@@ -2283,6 +2281,21 @@ class Base < Module
                         }
                     }
                 end
+            elsif client = server.clients[name]
+                 thing.send :numeric, RPL_WHOREPLY, {
+                    :channel => '*',
+
+                    :user => {
+                        :nick     => client.nick,
+                        :user     => client.user,
+                        :host     => client.host,
+                        :realName => client.realName,
+                    },
+
+                    :server => user.server.host,
+
+                    :hops => 0,
+                }
             end
         end
 
