@@ -140,11 +140,11 @@ class ConnectionDispatcher
                 if socket
                     dispatcher.disconnecting.push({ :thing => dispatcher.connections.things[socket], :output => self[socket] })
                 end
-            elsif string.is_a?(String)
+            else
                 string.lstrip!
             end
 
-            if string.is_a?(Hash) || (string && !string.empty?) || self[socket].last == :EOC
+            if (string && !string.empty?) || self[socket].last == :EOC
                 self[socket].push(string)
             end
         end

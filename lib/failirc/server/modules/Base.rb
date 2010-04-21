@@ -920,7 +920,7 @@ class Base < Module
         mask       = thing.mask.clone
         thing.nick = nick
 
-        server.clients[thing.nick] = server.clients.delete(mask.nick)
+        thing.data[:nick] = server.clients[thing.nick] = server.clients.delete(mask.nick)
 
         thing.channels.each_value {|channel|
             channel.users.add(channel.users.delete(mask.nick))
@@ -1940,7 +1940,7 @@ class Base < Module
         text = eval(Utils::escapeMessage(@messages[:part]))
 
         if user.channel.modes[:anonymous]
-            mask = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+            mask = Mask.parse('anonymous!anonymous@anonymous.')
         else
             mask = user.mask
         end
@@ -2732,33 +2732,28 @@ class Base < Module
     def quit (thing, string)
         match = /^QUIT((\s+)(:)?(.*)?)?$/i.match(string)
 
-        server.kill(thing, { :type => :quit, :message => match[4] })
+        user    = thing
+        message = match[4] || user.nick
+        text    = eval(Utils::escapeMessage(@messages[:quit]))
+
+        server.kill(thing, text)
     end
 
     def client_quit (thing, message)
+        server.data[:nicks].delete(thing.data[:nick]) rescue nil
+
         if !thing.is_a?(Client)
             return
         end
-
-        if message.is_a?(Hash)
-            tmp     = message
-            user    = thing
-            message = tmp[:message] || thing.nick
-            text    = eval(Utils::escapeMessage(@messages[tmp[:type]])) rescue ''
-        else
-            text = message
-        end
-
-        server.data[:nicks].delete(thing.nick)
 
         @toPing.delete(thing.socket)
         @pingedOut.delete(thing.socket)
 
         thing.channels.select {|name, channel| channel.modes[:anonymous]}.each_key {|name|
-            server.execute :part, thing, name, message
+            server.execute :part, thing, name, nil
         }
 
-        thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{text}"
+        thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
     end 
 end
 
