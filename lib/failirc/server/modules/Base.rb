@@ -509,8 +509,6 @@ class Base < Module
                     end
                 }
 
-                puts "#{highest.inspect} #{@@levels[highest].inspect}"
-
                 return @@levels[highest]
             end
 
