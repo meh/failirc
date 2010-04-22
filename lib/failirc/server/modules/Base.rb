@@ -2135,12 +2135,12 @@ class Base < Module
 
         channel = server.channels[channel]
 
-        if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel.name] && !Utils::checkFlag(thing, :operator)
-            thing.send :numeric, ERR_NOTONCHANNEL, channel
-            return
-        end
-
         if topic
+            if !Utils::checkFlag(thing, :can_change_topic) && !thing.channels[channel.name] && !Utils::checkFlag(thing, :operator)
+                thing.send :numeric, ERR_NOTONCHANNEL, channel
+                return
+            end
+ 
             if channel.modes[:topic_lock] && !Utils::checkFlag(channel.user(thing), :can_change_topic)
                 thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
             else
@@ -2153,11 +2153,11 @@ class Base < Module
                 channel.send :raw, ":#{channel.topic.setBy} TOPIC #{channel} :#{channel.topic}"
             end
         else
-            if !channel.topic
-                thing.send :numeric, RPL_NOTOPIC, channel
-            else
+            if !channel.topic.nil?
                 thing.send :numeric, RPL_TOPIC, channel.topic
                 thing.send :numeric, RPL_TOPICSETON, channel.topic
+            else
+                thing.send :numeric, RPL_NOTOPIC, channel
             end
         end
     end
