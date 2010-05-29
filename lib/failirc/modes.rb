@@ -45,8 +45,8 @@ class Modes < ThreadSafeHash
                 if mode.length == 1
                     modes.push mode
 
-                    if value.is_a?(String)
-                        values.push value
+                    if value
+                        values.push value.to_s
                     end
                 end
             end

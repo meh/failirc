@@ -67,7 +67,7 @@ class Mask
     end
 
     def self.toRegexp (string)
-        return Regexp.new(Regexp.escape(string).gsub(/\\\*/, '.*?').gsub(/\\\?/, '.'))
+        return Regexp.new(Regexp.escape(string).gsub(/\\\*/, '.*?').gsub(/\\\?/, '.'), 'i')
     end
 
     def self.parse (string)

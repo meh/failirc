@@ -59,7 +59,7 @@ class Base < Module
                 :PING => /^PING( |$)/i,
 
                 :JOIN => /^:.+?\s+JOIN\s+:./i,
-                :PART => /^:.+?\s+PART\s+:./i
+                :PART => /^:.+?\s+PART\s+:./i,
 
                 :PRIVMSG => /^:.+?\s+PRIVMSG\s+.+?\s+:/i,
             },
@@ -99,7 +99,7 @@ class Base < Module
             @@defaultSupportedModes = [
                 { :mode => 'o', :status => '@' },
                 { :mode => 'h', :status => '%' },
-                { :mode => 'v', :status => '+' }
+                { :mode => 'v', :status => '+' },
             ]
 
             def self.supportedModes
