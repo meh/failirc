@@ -45,7 +45,7 @@ class Modes < ThreadSafeHash
                 if mode.length == 1
                     modes.push mode
 
-                    if value
+                    if !(value === false || value === true)
                         values.push value.to_s
                     end
                 end
