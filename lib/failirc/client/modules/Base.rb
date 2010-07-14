@@ -101,6 +101,16 @@ class Base < Module
         super(client)
     end
 
+    def rehash
+        @messages = {}
+
+        if tmp = client.config.elements['config/modules/module[@name="Base"]/messages/quit']
+            @messages[:quit] = tmp.text
+        else
+            @messages[:quit] = 'FUR DIE LULZ'
+        end
+    end
+
     module Utils
         module Server
             @@defaultSupportedModes = [
@@ -142,17 +152,10 @@ class Base < Module
         end
     end
 
-    def check_encoding (thing, string)
+    def check_encoding (string)
         result   = false
         encoding = string.encoding
 
-        ['UTF-8', 'ISO-8859-1'].each {|encoding|
-            string.force_encoding(encoding)
-
-            if string.valid_encoding?
-                result = encoding
-            end
-        }
 
         string.force_encoding(encoding)
 
@@ -164,9 +167,13 @@ class Base < Module
             return
         end
 
-        if tmp = self.check_encoding string
-            string.encode!(tmp)
-        end
+        ['UTF-8', 'ISO-8859-1', 'ASCII-8BIT'].each {|encoding|
+            string.force_encoding(encoding)
+
+            if string.valid_encoding?
+                break
+            end
+        }
 
         string.encode!('UTF-8')
     end
@@ -442,7 +449,7 @@ class Base < Module
         if message
             server.send :raw, "QUIT #{message}"
         else
-            server.send :raw, "QUIT"
+            server.send :raw, "QUIT #{@messages[:quit]}"
         end
     end
 end

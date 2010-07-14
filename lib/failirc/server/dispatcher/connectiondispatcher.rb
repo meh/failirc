@@ -258,7 +258,7 @@ class ConnectionDispatcher
             @connections.listening[:sockets].each {|socket|
                 if socket.closed?
                     @connections.listening[:sockets].delete(socket)
-                    @connections.listening[:data].delete(socket                 @connections.listening[:data].delete(socket))
+                    @connections.listening[:data].delete(socket)
                 end
             }
         rescue
@@ -267,13 +267,17 @@ class ConnectionDispatcher
 
     # Executed with each incoming connection
     def newConnection (socket, listen, context=nil)
-        # here, somehow we should check if the incoming peer is a linked server or a real client
+        begin
+            host = socket.peeraddr[2]
+            ip   = socket.peeraddr[3]
+            port = socket.addr[1]
 
-        host = socket.peeraddr[2]
-        ip   = socket.peeraddr[3]
-        port = socket.addr[1]
+            self.debug "#{host}[#{ip}/#{port}] connecting."
+        rescue 
+            self.debug 'Someone failed to connect.'
 
-        self.debug "#{host}[#{ip}/#{port}] connecting."
+            return
+        end
 
         Thread.new {
             begin

@@ -467,8 +467,6 @@ class Base < Module
                 return @@levels
             end
 
-            @@levelsOrder = [:!, :x, :y, :o, :h, :v]
-
             def self.isLevel (char)
                 @@levels.has_value?(char) ? char : false
             end
@@ -487,8 +485,8 @@ class Base < Module
                 if !highest
                     return false
                 else
-                    highest = @@levelsOrder.index(highest)
-                    level   = @@levelsOrder.index(level)
+                    highest = @@levels.keys.index(highest)
+                    level   = @@levels.keys.index(level)
 
                     if !level
                         return true
@@ -501,15 +499,11 @@ class Base < Module
             end
 
             def self.getHighestLevel (user)
-                highest = 9001
-
                 @@levels.each_key {|level|
-                    if user.modes[level] && (tmp = @@levelsOrder.index(level)) && tmp < highest
-                        highest = tmp
+                    if user.modes[level]
+                        return level
                     end
                 }
-
-                return @@levels[highest]
             end
 
             def self.setLevel (user, level, value)
@@ -645,7 +639,7 @@ class Base < Module
         return !stop
     end
 
-    def check_encoding (thing, string)
+    def check_encoding (string)
         result   = false
         encoding = string.encoding
 
@@ -671,7 +665,7 @@ class Base < Module
             string.force_encoding(thing.data[:encoding])
 
             if !string.valid_encoding?
-                if !thing.data[:encoding_tested] && (tmp = check_encoding(thing, string))
+                if !thing.data[:encoding_tested] && (tmp = check_encoding(string))
                     thing.data[:encoding_tested] = true
                     thing.data[:encoding]        = tmp
 

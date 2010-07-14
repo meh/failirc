@@ -183,55 +183,57 @@ class ConnectionDispatcher
     end
 
     def connect (options, config, name=nil)
-        socket  = nil
-        context = nil
-
-        begin
-            socket = TCPSocket.new(options[:host], options[:port])
-        rescue Errno::ECONNREFUSED
-            self.debug "Could not connect to #{options[:host]}/#{options[:port]}."
-            return
-        end
-
-        if options[:ssl] != 'disabled'
-            context = SSLUtils::context(options[:ssl_cert], options[:ssl_key])
-        end
-
-        host = socket.peeraddr[2]
-        ip   = socket.peeraddr[3]
-        port = socket.peeraddr[1]
-
-        self.debug "Connecting to #{host}[#{ip}/#{port}]"
-
-        begin
-            if config.attributes['ssl'] != 'disabled'
-                ssl = OpenSSL::SSL::SSLSocket.new socket, context
-
-                ssl.connect
-                socket = ssl
+        Thread.new {
+            socket  = nil
+            context = nil
+    
+            begin
+                socket = TCPSocket.new(options[:host], options[:port])
+            rescue Errno::ECONNREFUSED
+                self.debug "Could not connect to #{options[:host]}/#{options[:port]}."
+                return
             end
-
-            @connections.servers[:bySocket][socket] = Server.new(client, socket, config, name)
-            @connections.servers[:byName][server(socket).name] = server socket
-            @connections.sockets.push(socket)
-
-            if config.attributes['password']
-                server(socket).password = config.attributes['password']
+    
+            if options[:ssl] != 'disabled'
+                context = SSLUtils::context(options[:ssl_cert], options[:ssl_key])
             end
-
-            @input[socket]
-            
-            dispatcher.execute :connect, @connections.servers[:bySocket][socket]
-        rescue OpenSSL::SSL::SSLError
-            self.debug "Tried to connect to #{host}[#{ip}/#{port}] with SSL but the handshake failed."
-            socket.close rescue nil
-        rescue Errno::ECONNRESET
-            socket.close rescue nil
-            self.debug "#{host}[#{ip}/#{port}] connection reset."
-        rescue Exception => e
-            socket.close rescue nil
-            self.debug e
-        end
+    
+            host = socket.peeraddr[2]
+            ip   = socket.peeraddr[3]
+            port = socket.peeraddr[1]
+    
+            self.debug "Connecting to #{host}[#{ip}/#{port}]"
+    
+            begin
+                if config.attributes['ssl'] != 'disabled'
+                    ssl = OpenSSL::SSL::SSLSocket.new socket, context
+    
+                    ssl.connect
+                    socket = ssl
+                end
+    
+                @connections.servers[:bySocket][socket] = Server.new(client, socket, config, name)
+                @connections.servers[:byName][server(socket).name] = server socket
+                @connections.sockets.push(socket)
+    
+                if config.attributes['password']
+                    server(socket).password = config.attributes['password']
+                end
+    
+                @input[socket]
+                
+                dispatcher.execute :connect, @connections.servers[:bySocket][socket]
+            rescue OpenSSL::SSL::SSLError
+                self.debug "Tried to connect to #{host}[#{ip}/#{port}] with SSL but the handshake failed."
+                socket.close rescue nil
+            rescue Errno::ECONNRESET
+                socket.close rescue nil
+                self.debug "#{host}[#{ip}/#{port}] connection reset."
+            rescue Exception => e
+                socket.close rescue nil
+                self.debug e
+            end
+        }
     end
 
     def read (timeout=0.1)
@@ -281,21 +283,24 @@ class ConnectionDispatcher
         }
     end
 
-    def disconnect (server, message)
-        @output.push server, :EOC
-        @output.push server, message
+    def disconnect (server, message=nil)
+        @dispatcher.execute(:disconnect, server, message) rescue nil
+
+        self.write
+
+        @input.delete(server.socket)
+        @output.delete(server.socket)
+        connections.delete(server.socket)
+
+        self.debug "Disconnected from #{server}[#{server.ip}/#{server.port}]"
+
+        server.socket.close rescue nil
+
     end
 
     def clean
-        @disconnecting.each {|data|
-            server = data[:server]
-            output = data[:output]
-
-            if output.first == :EOC
-                output.shift
-                handleDisconnection server, output.shift
-                @disconnecting.delete(data)
-            end
+        @disconnecting.each {|server|
+            disconnect server
         }
     end
 
@@ -346,7 +351,10 @@ class ConnectionDispatcher
                     output = @output.first(socket)
 
                     if output == :EOC
-                        @output.delete(socket)
+                        @disconnecting.push({
+                            :server => server,
+                            :output => @output[server]
+                        })
                     else
                         output.force_encoding 'ASCII-8BIT'
                         socket.write_nonblock "#{output}\r\n"
@@ -371,22 +379,10 @@ class ConnectionDispatcher
         }
     end
 
-    def handleDisconnection (server, message)
-        @dispatcher.execute(:disconnect, server, message) rescue nil
-
-        @input.delete(server.socket)
-        @output.delete(server.socket)
-        connections.delete(server.socket)
-
-        self.debug "Disconnected from #{server}[#{server.ip}/#{server.port}]"
-
-        server.socket.close rescue nil
-    end
-
     def finalize
         begin
             @connections.sockets.each {|socket|
-                disconnect self.server(socket), disconnecting
+                disconnect self.server(socket)
             }
         rescue Exception => e
             self.debug e
