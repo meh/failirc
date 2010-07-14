@@ -41,13 +41,13 @@ def debug (argument, separator='')
     end
 
     begin
-        if @verbose || (@server && @server.verbose) || (@client && @client.verbose)
+        if @verbose || (@server && @server.verbose) || (@client && @client.verbose) || ($server && $server.verbose) || ($client && $client.verbose)
             puts output
         end
     rescue
     end
 
-    (dispatcher rescue server.dispatcher rescue client.dispatcher).execute :log, output rescue nil
+    (dispatcher rescue ($server || server).dispatcher rescue ($client || client).dispatcher).execute :log, output rescue nil
 end
 
 end

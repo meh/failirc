@@ -104,7 +104,7 @@ class ConnectionDispatcher
             end
 
             if string == :EOC
-                if socket.is_a?(Client) || socket.is_a?(User)
+                if socket.is_a?(Server)
                     socket = socket.socket
                 end
 
@@ -171,6 +171,7 @@ class ConnectionDispatcher
         @input         = Data.new(dispatcher)
         @output        = Data.new(dispatcher)
         @disconnecting = []
+        @reconnecting  = []
     end
 
     def sockets
@@ -400,6 +401,10 @@ class ConnectionDispatcher
         else
             return @connections.servers[:bySocket][identifier]
         end
+    end
+
+    def empty?
+        @connections.servers[:byName].empty?
     end
 end
 

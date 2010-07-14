@@ -58,24 +58,30 @@ class Base < Module
 
                 :PING => /^PING( |$)/i,
 
-                :JOIN => /^:.+?\s+JOIN\s+:./i,
-                :PART => /^:.+?\s+PART\s+:./i,
+                :JOIN  => /^:.+?\s+JOIN\s+:./i,
+                :PART  => /^:.+?\s+PART\s+:./i,
+                :TOPIC => /^:.+?\s+TOPIC\s+/i,
 
                 :PRIVMSG => /^:.+?\s+PRIVMSG\s+.+?\s+:/i,
             },
         }
 
         @events = {
+            :pre => [Event::Callback.new(self.method(:input_encoding), -1234567890)],
+
             :custom => {
                 :connect    => self.method(:connect),
                 :disconnect => self.method(:disconnect),
 
                 :numeric => self.method(:received_numeric),
 
-                :join => self.method(:join),
-                :who  => self.method(:who),
+                :join  => self.method(:join),
+                :who   => self.method(:who),
+                :topic => self.method(:topic_change),
 
                 :message => self.method(:send_message),
+                :notice  => self.method(:send_notice),
+                :ctcp    => self.method(:send_ctcp),
 
                 :quit => self.method(:do_quit),
             },
@@ -85,7 +91,8 @@ class Base < Module
 
                 :PING => self.method(:pong),
 
-                :JOIN => self.method(:joined),
+                :JOIN  => self.method(:joined),
+                :TOPIC => self.method(:topic),
 
                 :PRIVMSG => self.method(:message),
             },
@@ -135,13 +142,42 @@ class Base < Module
         end
     end
 
+    def check_encoding (thing, string)
+        result   = false
+        encoding = string.encoding
+
+        ['UTF-8', 'ISO-8859-1'].each {|encoding|
+            string.force_encoding(encoding)
+
+            if string.valid_encoding?
+                result = encoding
+            end
+        }
+
+        string.force_encoding(encoding)
+
+        return result
+    end
+
+    def input_encoding (event, thing, string)
+        if event.chain != :input
+            return
+        end
+
+        if tmp = self.check_encoding string
+            string.encode!(tmp)
+        end
+
+        string.encode!('UTF-8')
+    end
+
     def connect (server)
         if server.password
             server.send :raw, "PASS #{server.password}"
         end
 
-        server.send :raw, "NICK #{client.nick}"
-        server.send :raw, "USER #{client.user} * * :#{client.realName}"
+        server.send :raw, "NICK #{server.client.nick}"
+        server.send :raw, "USER #{server.client.user} * * :#{client.realName}"
     end
 
     def disconnect (server, message)
@@ -174,6 +210,38 @@ class Base < Module
 
                 Base.supported[support[0]] = support[1]
             }
+
+        # topic on join
+        when 332
+            match = message.match(/(.+?)\s+:(.*)$/)
+            
+            if !match
+                return
+            end
+
+            topic = server.channels[match[1]].topic
+            
+            topic.text = match[2]
+
+            if topic.setBy
+                client.dispatcher.execute :topic_change, server, topic, topic
+            end
+
+        when 333
+            match = message.match(/(.+?)\s+(.+?)\s+(.+?)$/)
+
+            if !match
+                return
+            end
+
+            topic = server.channels[match[1]].topic
+
+            topic.setBy = Mask.parse(match[2])
+            topic.setOn = Time.at(match[3].to_i)
+
+            if topic.text
+                client.dispatcher.execute :topic_change, server, topic, topic
+            end
 
         # end of MOTD or no MOTD, hence concluded connection.
         when 376, 422
@@ -212,17 +280,12 @@ class Base < Module
     end
 
     def join (server, channel, password=nil)
-        text = "JOIN #{channel}"
-
-        if password
-            text << " #{password}"
-        end
-
-        server.send :raw, text
-        client.execute :who, server, channel
+        server.send :raw, "JOIN #{channel} #{password}"
     end
 
     def joined (server, string)
+        puts string.inspect
+
         match = string.match(/^:(.+?)\s+JOIN\s+:(.+)$/i)
 
         if !match
@@ -232,10 +295,12 @@ class Base < Module
         mask    = Mask.parse(match[1])
         channel = match[2]
 
-        if mask.nick == server.nick
+        if mask.nick == server.client.nick
             if !server.channels[channel]
                 server.channels[channel] = Channel.new(server, channel)
             end
+
+            client.execute :who, server, channel
         else
             if !server.clients[mask.nick] || server.clients[mask.nick].mask != mask
                 server.clients[mask.nick] = Client.new(server, mask)
@@ -249,6 +314,27 @@ class Base < Module
 
     def who (server, channel)
         server.send :raw, "WHO #{channel}"
+    end
+
+    def topic (server, string)
+        match = string.match(/^:(.+?)\s+TOPIC\s+(.*?)\s+:(.*)$/)
+
+        if !match
+            return
+        end
+
+        by      = server.clients[Mask.parse(match[1]).nick]
+        channel = server.channels[match[2]]
+        old     = channel.topic.clone
+        topic   = match[3]
+
+        channel.topic.set(topic, by.mask.clone)
+
+        client.dispatcher.execute :topic_change, server, old, channel.topic.clone
+    end
+
+    def topic_change (server, channel, topic)
+        server.send :raw, :raw, "TOPIC #{channel.to_s} :#{topic}"
     end
 
     def message (server, string)

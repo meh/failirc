@@ -419,7 +419,7 @@ class Base < Module
                     return true
                 end
 
-                if channel.modes[:invited].has_value?(client.nick)
+                if channel.modes[:invited][client.mask]
                     return true
                 end
 
@@ -646,17 +646,20 @@ class Base < Module
     end
 
     def check_encoding (thing, string)
-        string = string.clone
+        result   = false
+        encoding = string.encoding
 
         ['UTF-8', 'ISO-8859-1'].each {|encoding|
             string.force_encoding(encoding)
 
             if string.valid_encoding?
-                return encoding
+                result = encoding
             end
         }
 
-        return false
+        string.force_encoding(encoding)
+
+        return result
     end
 
     def input_encoding (event, thing, string)
@@ -1491,7 +1494,7 @@ class Base < Module
 
             when 'p'
                 if Utils::checkFlag(from, :can_change_private_mode)
-                    if Utils::checkFlag(thing, :p) == (type == '+') || thing.modes[:secret]
+                    if thing.modes[:secret] || Utils::checkFlag(thing, :p) == (type == '+')
                         return
                     end
 
@@ -1822,12 +1825,6 @@ class Base < Module
             channel.modes[:invited]    = ThreadSafeHash.new
         end
 
-        if channel.modes[:password]
-            password = passwords.shift
-        else
-            password = ''
-        end
-
         if channel.modes[:limit]
             if channel.users.length >= channel.modes[:limit]
                 @joining.delete(thing)
@@ -1878,7 +1875,7 @@ class Base < Module
         if empty
             server.execute :mode, server, channel, "+o #{user.nick}", true
         else
-            channel.modes[:invited].delete(user.nick)
+            channel.modes[:invited].delete(user.mask)
         end
 
         client.channels.add(channel)
@@ -2072,7 +2069,7 @@ class Base < Module
         target = channel
 
         if channel = server.channels[target]
-            channel.modes[:invited][to.nick] = true
+            channel.modes[:invited][to.mask] = true
             server.execute :notice, :input, ref{:server}, ref{:channel}, "#{from.nick} invited #{to.nick} into the channel.", '@'
         end
 
@@ -2223,7 +2220,7 @@ class Base < Module
         end
 
         channels.each_value {|channel|
-            if !channel.modes[:secret] || thing.channels[channel.name] || thing.modes[:can_see_secrets]
+            if !(channel.modes[:secret] || channel.modes[:private]) || thing.channels[channel.name] || thing.modes[:can_see_secrets]
                 thing.send :numeric, RPL_LIST, {
                     :name  => channel.name,
                     :users => channel.modes[:anonymous] ? 1 : channel.users.length,

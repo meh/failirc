@@ -103,17 +103,18 @@ class Client
     def stop
         @stopping = true
 
-        begin
-            dispatcher.stop
+        dispatcher.stop
 
-            @modules.each {|mod|
-                mod.finalize
-            }
-        rescue
-        end
+        @modules.each {|mod|
+            mod.finalize
+        } rescue nil
 
         @stopping = false
         @started  = false
+    end
+
+    def connected?
+        !@dispatcher.connection.empty?
     end
 
     def connect (*args)

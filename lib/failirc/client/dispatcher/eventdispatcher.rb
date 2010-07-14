@@ -38,6 +38,9 @@ class EventDispatcher
         @events  = newEvents
     end
 
+    def finalize
+    end
+
     def newAliases
         Hash[
             :input  => {},

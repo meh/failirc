@@ -28,12 +28,18 @@ class Client
 
 class Channel
     class Topic
-        attr_reader :server, :channel, :text, :setBy
-        attr_accessor :setOn
+        attr_reader :server, :channel
+        attr_accessor :text, :setBy, :setOn
 
         def initialize (channel)
             @server  = channel.server
             @channel = channel
+        end
+
+        def set (text, by)
+            @text  = text
+            @by    = by
+            @setOn = Time.new
         end
 
         def to_s
