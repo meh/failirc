@@ -43,11 +43,7 @@ class Server
         nick = client.nick
 
         if !name
-            if @host == @ip
-                name = @config.attributes['host']
-            else
-                name = @host
-            end
+            name = @config.attributes['host']
         else
             if client.server name
                 raise Error.new "There is already a server named `#{name}`."

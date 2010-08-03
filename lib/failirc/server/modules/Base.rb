@@ -2371,7 +2371,7 @@ class Base < Module
 
         result = String.new
 
-        match.split(/\s+/).each {|nick|
+        match[1].split(/\s+/).each {|nick|
             if server.clients[nick]
                 result << " #{nick}"
             end
