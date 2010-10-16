@@ -58,11 +58,13 @@ class Base < Module
 
                 :PING => /^PING( |$)/i,
 
-                :JOIN  => /^:.+?\s+JOIN\s+:./i,
-                :PART  => /^:.+?\s+PART\s+:./i,
-                :TOPIC => /^:.+?\s+TOPIC\s+/i,
+                :JOIN  => /^:\S+?\s+JOIN\s+:./i,
+                :PART  => /^:\S+?\s+PART\s+:./i,
+                :TOPIC => /^:\S+?\s+TOPIC\s+/i,
 
-                :PRIVMSG => /^:.+?\s+PRIVMSG\s+.+?\s+:/i,
+                :KICK  => /^:\S+?\s+KICK\s+\S+\s+\S+\s+:./i,
+
+                :PRIVMSG => /^:\S+?\s+PRIVMSG\s+.+?\s+:/i,
             },
         }
 
@@ -84,6 +86,8 @@ class Base < Module
                 :ctcp    => self.method(:send_ctcp),
 
                 :quit => self.method(:do_quit),
+
+                :kick   => self.method(:kick),
             },
 
             :input => {
@@ -95,6 +99,8 @@ class Base < Module
                 :TOPIC => self.method(:topic),
 
                 :PRIVMSG => self.method(:message),
+
+                :KICK   => self.method(:kicked),
             },
         }
 
@@ -451,6 +457,28 @@ class Base < Module
         else
             server.send :raw, "QUIT #{@messages[:quit]}"
         end
+    end
+
+    def kicked(server, string)
+        match = string.match(/^:(.+?)\s+KICK\s+(.+?)\s+(.+?)\s+:(.*)$/i)
+
+        return if !match
+
+        from    = server.channels[match[2]]
+        by      = server.clients[Mask.parse(match[1]).nick]
+        to      = server.clients[match[3]]
+
+        from.delete(to)
+
+        client.dispatcher.execute :kicked, server, from, by, to, match[4].dup
+    end
+
+    def kick(server, channel, user, reason = nil)
+        user = (user.is_a?(Client) ? user.nick : user.to_s)
+        channel = (channel.is_a?(Channel) ? channel.name : channel.to_s)
+        reason ||= server.client.nick
+
+        server.send :raw, "KICK #{channel} #{user} :#{reason}"
     end
 end
 
