@@ -112,9 +112,7 @@ class Server
                 require "#{path}/#{name}"
             end
 
-            klass = eval("Modules::#{name}") rescue nil
-
-            if klass
+            if klass = Modules.get_const(name) rescue nil
                 @modules[name] = klass.new(self)
                 self.debug "Loaded `#{name}`."
             else

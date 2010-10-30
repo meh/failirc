@@ -61,9 +61,7 @@ class Client
                 require "#{path}/#{name}"
             end
 
-            klass = eval("Modules::#{name}") rescue nil
-
-            if klass
+            if klass = Modules.const_get(name) rescue nil
                 @modules[name] = klass.new(self)
                 self.debug "Loaded `#{name}`."
             else

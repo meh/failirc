@@ -19,7 +19,7 @@
 
 require 'thread'
 require 'socket'
-require 'openssl/nonblock'
+begin; require 'openssl/nonblock'; rescue Exception => e; end
 
 require 'failirc/utils'
 require 'failirc/sslutils'
