@@ -53,19 +53,17 @@ class Client
         end
 
         begin 
-            if path[0] == '/'
-                $LOAD_PATH.push path
-                require name
-                $LOAD_PATH.pop
+            if path
+                load "#{path}/#{name}.rb"
             else
-                require "#{path}/#{name}"
+                require "#{name}"
             end
 
             if klass = Modules.const_get(name) rescue nil
                 @modules[name] = klass.new(self)
                 self.debug "Loaded `#{name}`."
             else
-                raise Exception
+                raise RuntimeError.new("Module #{name} not found.")
             end
         rescue Exception => e
             self.debug "Failed to load `#{name}`."

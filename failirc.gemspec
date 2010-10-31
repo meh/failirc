@@ -13,4 +13,5 @@ Gem::Specification.new {|s|
     s.has_rdoc     = true
 
     s.add_dependency('openssl-nonblock')
+    s.add_dependency('versionomy')
 }
