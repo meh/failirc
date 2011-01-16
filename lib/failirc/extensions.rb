@@ -111,7 +111,7 @@ class CaseInsensitiveHash < Hash
   alias ___delete___ delete
 
   def []= (key, value)
-    if key.class == String
+    if key.is_a?(String)
       key = key.downcase
     end
 
@@ -119,7 +119,7 @@ class CaseInsensitiveHash < Hash
   end
 
   def [] (key)
-    if key.class == String
+    if key.is_a?(String)
       key = key.downcase
     end
     
@@ -127,7 +127,7 @@ class CaseInsensitiveHash < Hash
   end
 
   def delete (key)
-    if key.class == String
+    if key.is_a?(String)
       key = key.downcase
     end
 

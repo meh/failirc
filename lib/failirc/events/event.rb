@@ -39,6 +39,10 @@ class Event
     self
   end
 
+  def alias? (name)
+    @aliases.member?(name.to_sym.downcase)
+  end
+
   def call (*args, &block)
     @callbacks.sort {|a, b|
       a.priority <=> b.priority

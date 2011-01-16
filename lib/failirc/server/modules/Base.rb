@@ -25,26 +25,232 @@ require 'failirc/responses'
 module IRC; class Server
 
 Module.define('base', '0.0.1') {
+  module Flags
+    Groups = {
+      :can_change_channel_modes => [
+        :can_change_channel_extended_modes, :can_change_topic_mode,
+        :can_change_no_external_messages_mode, :can_change_secret_mode,
+        :can_change_ssl_mode, :can_change_moderated_mode,
+        :can_change_invite_only_mode, :can_change_auditorium_mode,
+        :can_change_anonymous_mode, :can_change_limit_mode,
+        :can_change_redirect_mode, :can_change_noknock_mode,
+        :can_add_invitation, :can_channel_ban, :can_add_ban_exception,
+        :can_change_channel_password, :can_change_nocolors_mode,
+        :can_change_noctcp_mode, :can_change_no_nick_change_mode,
+        :can_change_nokicks_mode, :can_change_strip_colors_mode,
+        :can_change_noinvites_mode, :can_change_private_mode,
+      ],
+  
+      :can_change_user_modes => [
+        :can_give_channel_operator, :can_give_channel_half_operator,
+        :can_give_voice, :can_change_user_extended_modes,
+      ],
+  
+      :can_change_client_modes => [
+        :can_change_client_extended_modes,
+      ]
+    }
+  
+    def set_flags (type, value, inherited=false, force=false)
+      if !inherited
+        if value == false
+          self.modes.delete(type)
+        else
+          self.modes[type] = value
+        end
+      end
+  
+      return unless modes = (Modes[type] || Groups[type])
+      
+      if !modes.is_a?(Array)
+        modes = [modes]
+      end
+  
+      modes.each {|mode|
+        if (Modes[mode] || Groups[mode]) && !self.modes.has_key?(mode)
+          set_flags mode, value, !force
+        else
+          if value == false
+            if !Modes.has_key?(mode)
+              self.modes.delete(mode)
+            end
+          else
+            self.modes[mode] = value
+          end
+        end
+      }
+    end
+  
+    def check_flags (type)
+      self.modes[type] || self.modes[:extended][type] || false
+    end
+  end
+  
+  class Server
+    include Flags
+  
+    Modes = { }
+  
+    def check_flags (type)
+      true
+    end
+  end
+  
+  class Channel
+    include Flags
+  
+    Modes = {
+      :a => :anonymous,
+      :c => :no_colors,
+      :C => :no_ctcps,
+      :i => :invite_only,
+      :l => :limit,
+      :L => :redirect,
+      :k => :password,
+      :K => :no_knock,
+      :m => :moderated,
+      :n => :no_external_messages,
+      :N => :no_nick_change,
+      :p => :private,
+      :Q => :no_kicks,
+      :s => :secret,
+      :S => :strip_colors,
+      :t => :topic_lock,
+      :u => :auditorium,
+      :V => :no_invites,
+      :z => :ssl_only,
+    }
+  end
+  
+  class Client
+    include Flags
+  
+    Modes = {
+      :z => :ssl,
+  
+      :N => [:o, :netadmin],
+      :o => [:operator, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes]
+    }
+  end
+  
+  class User
+    include Flags
+  
+    Modes = {
+      :! => [:x],
+      :x => [:y, :can_give_channel_admin],
+      :y => [:o, :admin],
+      :o => [:h, :operator, :can_change_topic, :can_invite, :can_change_channel_modes, :can_change_user_modes],
+      :h => [:v, :halfoperator, :can_kick],
+      :v => [:voice, :can_talk]
+    }
+  
+    alias __check_flags__ check_flags
+  
+    def check_flags (type, limited=false)
+      result = __check_flags__(type)
+  
+      if !result && !limited
+        result = self.client.check_flags(type)
+      end
+  
+      result
+    end
+  
+    Levels = {
+      :! => '!',
+      :x => '~',
+      :y => '&',
+      :o => '@',
+      :h => '%',
+      :v => '+'
+    }
+  
+    def is_level_enough? (level)
+      return true if !level || (level.is_a?(String) && level.empty?)
+  
+      if level.is_a?(String)
+        level = Levels.key level
+      end
+  
+      highest = self.getHighestLevel(user)
+  
+      return false unless highest
+  
+      highest = Levels.keys.index(highest)
+      level   = Levels.keys.index(level)
+  
+      if !level
+        return true
+      elsif !highest
+        return false
+      else
+        return highest <= level
+      end
+    end
+  
+    def highest_level
+      Levels.each_key {|level|
+        if modes[level]
+          return level
+        end
+      }
+    end
+  
+    def set_level (level, value)
+      if Levels[level]
+        set_flags level, value
+  
+        if value
+          modes[:level] = Levels[level]
+        else
+          set_level highest_level, true
+        end
+      else
+        modes[:level] = ''
+      end
+    end
+  end
+  
+  class ::String
+    def is_level?
+      User::Levels.has_value?(self) ? self : false
+    end
+  end
+
+  class Action
+    attr_reader :client, :event, :string, :on
+
+    def initialize (client, event, string)
+      @client = client
+      @event  = event
+      @string = string
+      @on   = Time.now
+    end
+  end
+
+  def server; owner; end
+
   on start do |server|
     server.data[:nicks] = ThreadSafeHash.new
 
-    @supportedModes = {
-      :client  => 'Nzo'.split(''),
-      :channel => 'abcCehiIkKlLmnNoQsStuvVxyz'.split('')
+    @supported_modes = {
+      :client  => 'Nzo',
+      :channel => 'abcCehiIkKlLmnNoQsStuvVxyz'
     }
 
     @support ={ 
-      'CASEMAPPING' => 'ascii',
-      'SAFELIST'    => true,
-      'EXCEPTS'     => 'e',
-      'INVEX'       => 'I',
-      'CHANTYPES'   => '&#+!',
-      'CHANMODES'   => 'beI,kfL,lj,acCiKmnNQsStuVz',
-      'PREFIX'      => '(!xyohv)!~&@%+',
-      'STATUSMSG'   => '~&@%+',
-      'FNC'         => true,
+      :CASEMAPPING => 'ascii',
+      :SAFELIST    => true,
+      :EXCEPTS     => 'e',
+      :INVEX       => 'I',
+      :CHANTYPES   => '&#+!',
+      :CHANMODES   => 'beI,kfL,lj,acCiKmnNQsStuVz',
+      :PREFIX      => '(!xyohv)!~&@%+',
+      :STATUSMSG   => '~&@%+',
+      :FNC         => true,
 
-      'CMDS' => 'KNOCK'
+      :CMDS => 'KNOCK'
     }
 
     @semaphore = Mutex.new
@@ -89,6 +295,65 @@ Module.define('base', '0.0.1') {
     thing.data[:encoding] = 'UTF-8'
   end
 
+  def check_encoding (string)
+    result   = false
+    encoding = string.encoding
+
+    ['UTF-8', 'ISO-8859-1'].each {|encoding|
+      string.force_encoding(encoding)
+
+      if string.valid_encoding?
+        result = encoding
+      end
+    }
+
+    string.force_encoding(encoding)
+
+    return result
+  end
+
+  # check encoding
+  input do before -1234567890 do |event, thing, string|
+    begin
+      string.force_encoding(thing.data[:encoding])
+
+      if !string.valid_encoding?
+        if !thing.data[:encoding_tested] && (tmp = check_encoding(string))
+          thing.data[:encoding_tested] = true
+          thing.data[:encoding]    = tmp
+
+          string.force_encoding(tmp)
+        else
+          raise Encoding::InvalidByteSequenceError
+        end
+      end
+
+      string.encode!('UTF-8')
+    rescue
+      if thing.data[:encoding]
+        server.execute :error, thing, 'The encoding you choose seems to not be the one you are using.'
+      else
+        server.execute :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
+      end
+
+      string.force_encoding('ASCII-8BIT')
+
+      string.encode!('UTF-8',
+        :invalid => :replace,
+        :undef   => :replace
+      )
+    end
+  end end
+
+  output do after 1234567890 do |event, thing, string|
+    if thing.data[:encoding]
+      string.encode!(thing.data[:encoding],
+        :invalid => :replace,
+        :undef   => :replace
+      )
+    end
+  end end
+
   input {
     aliases {
       pass /^PASS( |$)/i
@@ -132,48 +397,98 @@ Module.define('base', '0.0.1') {
       quit /^QUIT( |$)/i
     }
 
-    # check for ping timeout
+    # check for ping timeout and registration
     before -1234567890 do |event, thing, string|
-      ap event.aliases
-
-=begin
       @semaphore.synchronize {
         @toPing.delete(thing.socket)
         @pingedOut.delete(thing.socket)
       }
 
-      if !event.aliases.include?(:PING) && !event.aliases.include?(:PONG) && !event.aliases.include?(:WHO) && !event.aliases.include?(:MODE)
-        thing.data[:last_action] = Utils::Client::Action.new(thing, event, string)
+      if !event.alias?(:PING) && !event.alias?(:PONG) && !event.alias?(:WHO) && !event.alias?(:MODE)
+        thing.data[:last_action] = Action.new(thing, event, string)
       end
-  
-      stop = false
   
       # if the client tries to do something without having registered, kill it with fire
-      if !event.aliases.include?(:PASS) && !event.aliases.include?(:NICK) && !event.aliases.include?(:USER) && thing.class == Incoming
+      if !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER) && thing.class == Incoming
         thing.send :numeric, ERR_NOTREGISTERED
-        stop = true
+
+        throw :halt
       # if the client tries to reregister, kill it with fire
-      elsif (event.aliases.include?(:PASS) || event.aliases.include?(:USER)) && thing.class != Incoming
+      elsif (event.alias?(:PASS) || event.alias?(:USER)) && thing.class != Incoming
         thing.send :numeric, ERR_ALREADYREGISTRED
-        stop = true
+
+        throw :halt
       end
-  
-      return !stop
-=end
-    end
-
-    before -1234567890 do |event, thing, string|
-
-    end
-
-    after 12345667890 do |event, thing, string|
-
     end
 
     fallback do |event, thing, string|
       whole, command = string.match(/^([^ ]+)/).to_a
   
       thing.send :numeric, ERR_UNKNOWNCOMMAND, command
+    end
+
+    # This method does some checks trying to register the connection, various checks
+    # for nick collisions and such.
+    def register (thing)
+      return if thing.class != Incoming
+
+      # additional check for nick collisions
+      if thing.data[:nick]
+        if (thing.server.data[:nicks][thing.data[:nick]] && thing.server.data[:nicks][thing.data[:nick]] != thing) || thing.server.clients[thing.data[:nick]]
+          if thing.data[:warned] != thing.data[:nick]
+            thing.send :numeric, ERR_NICKNAMEINUSE, thing.data[:nick]
+            thing.data[:warned] = thing.data[:nick]
+          end
+  
+          return
+        end
+  
+        thing.server.data[:nicks][thing.data[:nick]] = thing
+      end
+  
+      # if the client isn't registered but has all the needed attributes, register it
+      if thing.data[:user] && thing.data[:nick]
+        if thing.config.attributes['password'] && thing.config.attributes['password'] != thing.data[:password]
+          return false
+        end
+  
+        client           = Client.new(thing)
+        client.nick      = thing.data[:nick]
+        client.user      = thing.data[:user]
+        client.real_name = thing.data[:real_name]
+  
+        # clean the temporary hash value and use the nick as key
+        thing.server.connections.clients[:byName][client.nick]   = client
+        thing.server.connections.clients[:bySocket][client.socket] = client
+  
+        thing.server.data[:nicks].delete(client.nick)
+  
+        thing.server.execute(:registered, client)
+  
+        client.send :numeric, RPL_WELCOME, client
+        client.send :numeric, RPL_HOSTEDBY, client
+        client.send :numeric, RPL_SERVCREATEDON
+        client.send :numeric, RPL_SERVINFO, {
+          :client  => @supported_modes[:client],
+          :channel => @supported_modes[:channel],
+        }
+  
+        client.send :numeric, RPL_ISUPPORT, @support.map {|(key, value)|
+          if value != true
+            "#{key}=#{value}"
+          else
+            "#{key}"
+          end
+        }.join(' ')
+
+        if !client.modes.to_s.empty?
+          client.send :raw, ":#{server} MODE #{client.nick} #{client.modes}"
+        end
+  
+        motd(client)
+  
+        server.execute :connected, client
+      end
     end
   
     on pass do |thing, string|
@@ -197,7 +512,59 @@ Module.define('base', '0.0.1') {
       end
   
       # try to register it
-      registration(thing)
+      register(thing)
+    end
+
+    def nick_is_ok? (thing, nick)
+      if thing.is_a?(Client)
+        if thing.nick == nick
+          return false
+        end
+  
+        if thing.nick.downcase == nick.downcase
+          return true
+        end
+      end
+  
+      if server.data[:nicks][nick]
+        thing.send :numeric, ERR_NICKNAMEINUSE, nick
+        return false
+      end
+  
+      allowed = eval(@nickAllowed) rescue false
+  
+      if !allowed || nick.downcase == 'anonymous'
+        thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
+        return false
+      end
+  
+      return true
+    end
+
+    observe :nick do |thing, nick|
+      return unless nick_is_ok?(thing, nick)
+  
+      thing.channels.each_value {|channel|
+        if channel.modes[:no_nick_change] && !channel.user(thing).is_level_enough?('+')
+          thing.send :numeric, ERR_NONICKCHANGE, channel.name
+          return false
+        end
+      }
+  
+      mask       = thing.mask.clone
+      thing.nick = nick
+  
+      server.clients[thing.nick] = server.clients.delete(mask.nick)
+  
+      thing.channels.each_value {|channel|
+        channel.users.add(channel.users.delete(mask.nick))
+      }
+  
+      if thing.channels.empty?
+        thing.send :raw, ":#{mask} NICK :#{nick}"
+      else
+        thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
+      end
     end
 
     on nick do |thing, string|

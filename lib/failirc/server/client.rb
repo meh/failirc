@@ -28,59 +28,59 @@ module IRC
 class Server
 
 class Client < Incoming
-    attr_reader   :channels, :mask, :nick, :user, :host, :connectedOn
-    attr_accessor :password, :realName, :modes
+  attr_reader   :channels, :mask, :nick, :user, :host, :connectedOn
+  attr_accessor :password, :realName, :modes
 
-    def initialize (server, socket=nil, config=nil)
-        super(server, socket, config)
+  def initialize (server, socket=nil, config=nil)
+    super(server, socket, config)
 
-        @registered = false
+    @registered = false
 
-        @channels = Channels.new(@server)
-        @modes    = Modes.new
+    @channels = Channels.new(@server)
+    @modes    = Modes.new
 
-        if socket.is_a?(Mask)
-            @mask = socket
-        else
-            @mask     = Mask.new
-            self.host = @socket.peeraddr[2]
+    if socket.is_a?(Mask)
+      @mask = socket
+    else
+      @mask   = Mask.new
+      self.host = @socket.peeraddr[2]
 
-            if @socket.is_a?(OpenSSL::SSL::SSLSocket)
-                @modes[:ssl] = @modes[:z] = true
-            end
-        end
-
-        @connectedOn = Time.now
+      if @socket.is_a?(OpenSSL::SSL::SSLSocket)
+        @modes[:ssl] = @modes[:z] = true
+      end
     end
 
-    def nick= (value)
-        @mask.nick = @nick = value
-    end
+    @connectedOn = Time.now
+  end
 
-    def user= (value)
-        @mask.user = @user = value
-    end
+  def nick= (value)
+    @mask.nick = @nick = value
+  end
 
-    def host= (value)
-        @mask.host = @host = value
-    end
+  def user= (value)
+    @mask.user = @user = value
+  end
 
-    def numeric (response, value=nil)
-        begin
-            raw ":#{server.host} #{'%03d' % response[:code]} #{nick} #{eval(response[:text])}"
-        rescue Exception => e
-            IRC.debug response[:text]
-            raise e
-        end
-    end
+  def host= (value)
+    @mask.host = @host = value
+  end
 
-    def to_s
-        mask.to_s
+  def numeric (response, value=nil)
+    begin
+      raw ":#{server.host} #{'%03d' % response[:code]} #{nick} #{eval(response[:text])}"
+    rescue Exception => e
+      IRC.debug response[:text]
+      raise e
     end
+  end
 
-    def inspect
-        "#{mask}[#{ip}/#{port}]"
-    end
+  def to_s
+    mask.to_s
+  end
+
+  def inspect
+    "#{mask}[#{ip}/#{port}]"
+  end
 end
 
 end

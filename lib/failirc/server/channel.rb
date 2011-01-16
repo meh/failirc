@@ -17,110 +17,89 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'forwardable'
+
 require 'failirc/utils'
 require 'failirc/modes'
 
 require 'failirc/server/users'
 
-module IRC
-
-class Server
+module IRC; class Server
 
 class Channel
-    class Topic
-        attr_reader :server, :channel, :text, :setBy
-        attr_accessor :setOn
+  extend Forwardable
 
-        def initialize (channel)
-            @server  = channel.server
-            @channel = channel
+  class Topic
+    attr_reader :server, :channel, :text, :set_by
+    attr_accessor :setOn
 
-            @semaphore = Mutex.new
-        end
+    def initialize (channel)
+      @server  = channel.server
+      @channel = channel
 
-        def text= (value)
-            @semaphore.synchronize {
-                @text  = value
-                @setOn = Time.now
-            }
-        end
-
-        def setBy= (value)
-            if value.is_a?(Mask)
-                @setBy = value
-            else
-                @setBy = value.mask.clone
-            end
-        end
-
-        def to_s
-            text
-        end
-
-        def nil?
-            text.nil?
-        end
+      @semaphore = Mutex.new
     end
 
-    attr_reader :server, :name, :type, :createdOn, :users, :modes, :topic
-
-    def initialize (server, name)
-        @server = server
-        @name   = name
-        @type   = name[0, 1]
-
-        @createdOn = Time.now
-        @users     = Users.new(self)
-        @modes     = Modes.new
-        @topic     = Topic.new(self)
-
-        @semaphore = Mutex.new
+    def text= (value)
+      @semaphore.synchronize {
+        @text  = value
+        @setOn = Time.now
+      }
     end
 
-    def type
-        @name[0, 1]
-    end
-
-    def topic= (data)
-        @semaphore.synchronize {
-            if data.is_a?(Topic)
-                @topic = data
-            elsif data.is_a?(Array)
-                @topic.setBy = data[0]
-                @topic.text  = data[1]
-            end
-        }
-    end
-
-    def [] (user)
-        users[user]
-    end
-
-    def add (user)
-        users.add(user)
-    end
-
-    def delete (user)
-        users.delete(user)
-    end
-
-    def user (client)
-        return @users[client.nick]
-    end
-
-    def empty?
-        @users.empty?
-    end
-
-    def send (*args)
-        users.send(*args)
+    def set_by= (value)
+      if value.is_a?(Mask)
+        @set_by = value
+      else
+        @set_by = value.mask.clone
+      end
     end
 
     def to_s
-        @name
+      text
     end
+
+    def nil?
+      text.nil?
+    end
+  end
+
+  attr_reader :server, :name, :type, :createdOn, :users, :modes, :topic
+
+  def initialize (server, name)
+    @server = server
+    @name   = name
+    @type   = name[0, 1]
+
+    @createdOn = Time.now
+    @users   = Users.new(self)
+    @modes   = Modes.new
+    @topic   = Topic.new(self)
+  end
+
+  def type
+    @name[0, 1]
+  end
+
+  def topic= (data)
+    if data.is_a?(Topic)
+      @topic.set_by = data.set_by
+      @topic.text   = data.text
+    elsif data.is_a?(Array)
+      @topic.set_by = data[0]
+      @topic.text  = data[1]
+    end
+  end
+
+  def_delegators :@users, :[], :add, :delete, :send, :empty?
+
+  def user (client)
+    return @users[client.nick]
+  end
+
+  def to_s
+    @name
+  end
 end
 
-end
-
-end
+end; end
