@@ -19,15 +19,15 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/utils'
+require 'failirc/callback'
 
 module IRC
 
 class Module
   def self.get; @@last; end
 
-  attr_accessor :owner
-  attr_reader   :aliases, :events
+  attr_accessor :owner, :config
+  attr_reader   :name, :version, :events, :custom
 
   def self.define (name, version, owner=nil, &block)
     @@last = Module.new(name, version, &block)
@@ -67,7 +67,7 @@ class Module
   end
 
   def aliases (&block)
-    return unless @into
+    return @aliases unless @into
 
     on = InsensitiveStruct.new
     on.instance_eval(&block)
@@ -97,7 +97,7 @@ class Module
 
   def on (what, priority=0, &block)
     if @into
-      (@events[@into][what] || []) << Callback.new(block, priority)
+      (@events[@into][what] ||= []) << Callback.new(block, priority)
     else
       observe(what, priority, &block)
     end
@@ -118,7 +118,7 @@ class Module
   end
 
   def method_missing (id, *args, &block)
-    @aliases[@into][id.to_s.downcase] || (@owner.alias(@into, id) rescue nil) || id
+    (@aliases[@into][id.to_sym.downcase] rescue nil) || (@owner.alias(@into, id) rescue nil) || id
   end
 end
 

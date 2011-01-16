@@ -37,8 +37,8 @@ class Dispatcher
     @connection = ConnectionDispatcher.new(server)
     @event      = Events.new(server)
 
-    Dispatcher.def_delegators :@event, :alias, :register, :dispatch, :observe, :fire
-    Dispatcher.def_delegators :@connection, :connections, :input, :output, :disconnecting
+    Dispatcher.def_delegators :@event, :hook, :alias, :register, :dispatch, :observe, :fire
+    Dispatcher.def_delegators :@connection, :connections, :input, :output, :disconnecting, :wakeup
 
     @intervals = {}
     @timeouts  = {}

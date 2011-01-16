@@ -19,7 +19,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-module IRC; class Events
+module IRC
 
 class Callback
   attr_reader   :method
@@ -31,8 +31,8 @@ class Callback
   end
 
   def call (*args, &block)
-    return @method.call(*args, &block)
+    begin; @method.call(*args, &block); rescue LocalJumpError; end
   end
 end
 
-end; end
+end

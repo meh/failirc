@@ -69,7 +69,7 @@ class Client < Incoming
         begin
             raw ":#{server.host} #{'%03d' % response[:code]} #{nick} #{eval(response[:text])}"
         rescue Exception => e
-            self.debug response[:text]
+            IRC.debug response[:text]
             raise e
         end
     end

@@ -39,10 +39,11 @@ class Server
   def initialize (config)
     @modules    = Modules.new
     @data       = ThreadSafeHash.new
-    self.config = config
     @created_on = Time.now
     @dispatcher = Dispatcher.new(self)
     @channels   = Channels.new(self)
+
+    self.config = config
   end
 
   def fire (*args, &block)
@@ -93,6 +94,9 @@ class Server
 
       if Module.get.name.downcase == name.downcase
         (@modules[name.downcase] = Module.get).owner = self
+        @dispatcher.hook(Module.get)
+
+        Module.get.config = @config.xpath(%{//modules/module[@name="#{name}"]}).first
 
         IRC.debug "Loaded `#{name}`."
       else
@@ -120,11 +124,15 @@ class Server
       )
     }
 
+    self.fire(:start, self)
+
     @dispatcher.start
   end
 
   def stop
     @stopping = true
+
+    self.fire(:stop, self)
 
     begin
       dispatcher.stop

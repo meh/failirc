@@ -22,7 +22,69 @@
 require 'failirc/errors'
 require 'failirc/responses'
 
+module IRC; class Server
+
 Module.define('base', '0.0.1') {
+  on start do |server|
+    server.data[:nicks] = ThreadSafeHash.new
+
+    @supportedModes = {
+      :client  => 'Nzo'.split(''),
+      :channel => 'abcCehiIkKlLmnNoQsStuvVxyz'.split('')
+    }
+
+    @support ={ 
+      'CASEMAPPING' => 'ascii',
+      'SAFELIST'    => true,
+      'EXCEPTS'     => 'e',
+      'INVEX'       => 'I',
+      'CHANTYPES'   => '&#+!',
+      'CHANMODES'   => 'beI,kfL,lj,acCiKmnNQsStuVz',
+      'PREFIX'      => '(!xyohv)!~&@%+',
+      'STATUSMSG'   => '~&@%+',
+      'FNC'         => true,
+
+      'CMDS' => 'KNOCK'
+    }
+
+    @semaphore = Mutex.new
+    @joining   = {}
+    @pingedOut = {}
+    @toPing    = {}
+
+    server.dispatcher.setInterval(Fiber.new {
+      while true
+        @semaphore.synchronize {
+          # time to ping non active users
+          @toPing.each_value {|thing|
+            @pingedOut[thing.socket] = thing
+
+            if thing.class != Incoming
+              thing.send :raw, "PING :#{server.host}"
+            end
+          }
+
+          # clear and refil the hash of clients to ping with all the connected clients
+          @toPing.clear
+          @toPing.merge!(server.connections.things)
+        }
+
+        Fiber.yield
+
+        @semaphore.synchronize {
+          # people who didn't answer with a PONG have to YIFF IN HELL.
+          @pingedOut.each_value {|thing|
+            if !thing.socket.closed?
+              server.kill thing, 'Ping timeout', true
+            end
+          }
+
+          @pingedOut.clear
+        }
+      end
+    }, (config.xpath('./misc/pingTimeout').first.text.to_f / 2))
+  end
+
   on connection do |thing|
     thing.data[:encoding] = 'UTF-8'
   end
@@ -32,14 +94,86 @@ Module.define('base', '0.0.1') {
       pass /^PASS( |$)/i
       nick /^(:[^ ]\s+)?NICK( |$)/i
       user /^(:[^ ]\s+)?USER( |$)/i
+
+      motd /^MOTD( |$)/i
+
+      ping /^PING( |$)/i
+      pong /^PONG( |$)/i
+
+      away     /^AWAY( |$)/i
+      mode     /^MODE( |$)/i
+      encoding /^ENCODING( |$)/i
+
+      join   /^(:[^ ] )?JOIN( |$)/i
+      part   /^(:[^ ] )?PART( |$)/i
+      kick   /^(:[^ ] )?KICK( |$)/i
+      invite /^INVITE( |$)/i
+      knock  /^KNOCK( |$)/i
+
+      topic /^(:[^ ] )?TOPIC( |$)/i
+      names /^NAMES( |$)/i
+      list  /^LIST( |$)/i
+
+      who    /^WHO( |$)/i
+      whois  /^WHOIS( |$)/i
+      whowas /^WHOWAS( |$)/i
+      ison   /^ISON( |$)/i
+
+      privmsg /^(:[^ ] )?PRIVMSG( |$)/i
+      notice  /^NOTICE( |$)/i
+
+      map     /^MAP( |$)/i
+      version /^VERSION( |$)/i
+
+      oper   /^OPER( |$)/i
+      kill   /^KILL( |$)/i
+      rehash /^REHASH( |$)/i
+
+      quit /^QUIT( |$)/i
     }
+
+    # check for ping timeout
+    before -1234567890 do |event, thing, string|
+      ap event.aliases
+
+=begin
+      @semaphore.synchronize {
+        @toPing.delete(thing.socket)
+        @pingedOut.delete(thing.socket)
+      }
+
+      if !event.aliases.include?(:PING) && !event.aliases.include?(:PONG) && !event.aliases.include?(:WHO) && !event.aliases.include?(:MODE)
+        thing.data[:last_action] = Utils::Client::Action.new(thing, event, string)
+      end
+  
+      stop = false
+  
+      # if the client tries to do something without having registered, kill it with fire
+      if !event.aliases.include?(:PASS) && !event.aliases.include?(:NICK) && !event.aliases.include?(:USER) && thing.class == Incoming
+        thing.send :numeric, ERR_NOTREGISTERED
+        stop = true
+      # if the client tries to reregister, kill it with fire
+      elsif (event.aliases.include?(:PASS) || event.aliases.include?(:USER)) && thing.class != Incoming
+        thing.send :numeric, ERR_ALREADYREGISTRED
+        stop = true
+      end
+  
+      return !stop
+=end
+    end
+
+    before -1234567890 do |event, thing, string|
+
+    end
+
+    after 12345667890 do |event, thing, string|
+
+    end
 
     fallback do |event, thing, string|
       whole, command = string.match(/^([^ ]+)/).to_a
   
-      if command && thing.class != Incoming
-        thing.send :numeric, ERR_UNKNOWNCOMMAND, command
-      end
+      thing.send :numeric, ERR_UNKNOWNCOMMAND, command
     end
   
     on pass do |thing, string|
@@ -2814,3 +2948,5 @@ end
 
 end
 =end
+
+end; end

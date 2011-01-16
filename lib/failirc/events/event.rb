@@ -19,17 +19,18 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/events/callback'
+require 'failirc/callback'
 
 module IRC; class Events
 
 class Event
-  attr_reader :owner, :chain, :name, :callbacks, :thing, :string
+  attr_reader :owner, :chain, :name, :callbacks, :aliases, :thing, :string
 
-  def initialize (owner, chain, callbacks)
+  def initialize (owner, chain, callbacks=[], aliases=[])
     @owner     = owner
     @chain     = chain
     @callbacks = callbacks
+    @aliases   = aliases
   end
 
   def on (thing, string)
@@ -42,8 +43,8 @@ class Event
     @callbacks.sort {|a, b|
       a.priority <=> b.priority
     }.each {|callback|
-      if @thing && @string
-        callback.call(@thing, @string, *args, &block)
+      if @thing && @string && args.empty?
+        callback.call(@thing, @string)
       else
         callback.call(*args, &block)
       end

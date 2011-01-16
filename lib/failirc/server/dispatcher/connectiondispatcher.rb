@@ -160,6 +160,8 @@ class ConnectionDispatcher
         string.lstrip!
       end
 
+      server.dispatcher.wakeup
+
       if (string && !string.empty?) || self[socket].last == :EOC
         self[socket].push(string)
       end
@@ -216,14 +218,18 @@ class ConnectionDispatcher
 
   def initialize (server)
     @server        = server
+    @pipes         = IO.pipe
     @connections   = Connections.new(server)
     @input         = Data.new(server)
     @output        = Data.new(server)
     @disconnecting = []
     @handling      = ThreadSafeHash.new
-    @waiting       = ThreadSafeCounter.new
 
     ConnectionDispatcher.def_delegators :@connections, :sockets, :clients, :servers, :things
+  end
+
+  def wakeup
+    @pipes.last.write 'x'
   end
 
   def listen (listen, options)
@@ -235,34 +241,28 @@ class ConnectionDispatcher
     end
 
     @connections.listening.push(Connections::Server.new(server, listen, context))
-  end
-
-  def timeout
-    if @input.empty? && @output.empty? && @waiting.to_i == 0
-      nil
-    elsif @waiting.to_i > 0
-      0.1
-    else
-      0
-    end
+    wakeup
   end
 
   def do
     sockets = @connections.things.sockets
 
     begin
-      reading, writing, erroring = IO::select((sockets + @connections.listening.map {|server| server.socket}), (@output.empty? ? nil : sockets), nil, timeout)
+      reading, writing, erroring = IO::select(([@pipes.first] + sockets + @connections.listening.map {|server| server.socket}), (@output.empty? ? nil : sockets))
     rescue; ensure
       clean
     end
     
     if reading && !reading.empty?
       reading.each {|socket|
-        if sockets.member?(socket)
-          read socket
+        if socket == @pipes.first
+          @pipes.first.read_nonblock 2048
         else
-          @waiting.increment
-          accept socket
+          if sockets.member?(socket)
+            read socket
+          else
+            accept socket
+          end
         end
       }
     end
@@ -333,7 +333,6 @@ class ConnectionDispatcher
       IRC.debug "#{host}[#{ip}/#{port}] connecting."
     rescue
       IRC.debug "Someone (#{host}[#{ip}/#{port}]) failed to connect."
-      @waiting.decrement
       return
     end
 
@@ -363,7 +362,7 @@ class ConnectionDispatcher
         socket.close
         IRC.debug e
       ensure
-        @waiting.decrement
+        wakeup
       end
     }
   end
@@ -403,8 +402,6 @@ class ConnectionDispatcher
       Thread.new {
         begin
           if string = @input.pop(socket)
-            ap string
-
             server.dispatcher.dispatch(:input, @connections.thing(socket), string)
           end
         rescue Exception => e

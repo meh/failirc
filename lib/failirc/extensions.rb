@@ -74,10 +74,10 @@ class ThreadSafeCounter
 end
 
 class InsensitiveStruct
-  def initialize (data)
+  def initialize (data={})
     @data = {}
 
-    hash.each {|name, value|
+    data.each {|name, value|
       self.send name, value
     }
   end
@@ -86,13 +86,13 @@ class InsensitiveStruct
     name = id.to_s.downcase
 
     if name.end_with?('=')
-      name[0] = ''
+      name[-1] = ''
     end
 
-    if args.length > 1
-      @data[name] = args.shift
+    if args.length > 0
+      @data[name.to_sym] = args.shift
     else
-      @data[name]
+      @data[name.to_sym]
     end
   end
 

@@ -49,7 +49,7 @@ class Incoming
     begin
       self.method(symbol).call(*args)
     rescue Exception => e
-      self.debug e
+      IRC.debug e
     end
   end
 
@@ -62,9 +62,9 @@ class Incoming
 
   def numeric (response, value=nil)
     begin
-      raw ":#{server.host} #{'%03d' % response[:code]} faggot #{eval(response[:text])}"
+      raw ":#{server.host} #{'%03d' % response[:code]} faggot #{response[:text].interpolate}"
     rescue Exception => e
-      self.debug response[:text]
+      IRC.debug response[:text]
       raise e
     end
   end

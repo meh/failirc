@@ -21,6 +21,7 @@
 
 require 'failirc/utils'
 
+require 'failirc/callback'
 require 'failirc/events/event'
 
 module IRC
@@ -53,9 +54,9 @@ class Events
 
   def alias (chain, name, value=nil)
     if value
-      @aliases[chain][name.to_s.downcase] = value
+      @aliases[chain][name.to_sym.downcase] = value
     else
-      @aliases[chain][name.to_s.downcase] || @hooks.find {|hook|
+      @aliases[chain][name.to_sym.downcase] || @hooks.find {|hook|
         hook.aliases[chain][name]
       }
     end
@@ -65,29 +66,53 @@ class Events
     if what.is_a?(Symbol)
       Event.new(self, chain, ((@events[chain][what] || []) + @hooks.map {|hook| hook.events[chain][what]}).flatten.compact)
     else
-      Event.new(self, chain, (@hooks.map {|hook| hook.events[chain]} + @events[chain].to_a).flatten.compact.select {|(name, callbacks)|
-        name.class == Regexp
+      callbacks = {}
+
+      (@hooks + [self]).each {|hook|
+        hook.events[chain].each {|key, value|
+          (callbacks[key] ||= []).insert(-1, *value)
+        }
+      }
+
+      regexps, callbacks = callbacks.to_a.select {|(name, callbacks)|
+        !name.is_a?(Symbol)
       }.select {|(regexp, callbacks)|
-        what.to_s.match(regexp)
-      }.map {|(regexp, callbacks)|
-        callbacks
-      }.flatten)
+        what.to_s.match(regexp) rescue nil
+      }.transpose
+
+      aliases = (regexps || []).flatten.compact.map {|regexp|
+        @aliases[chain].select {|(name, value)|
+          regexp == value
+        }.map {|(name, value)|
+          name
+        } + @hooks.map {|hook|
+          hook.aliases[chain].to_a.select {|(name, value)|
+            regexp == value
+          }.map {|(name, value)|
+            name
+          }
+        }
+      }.flatten.compact.uniq
+
+      Event.new(self, chain, (callbacks || []).flatten.compact, aliases)
     end
   end
 
   def dispatch (chain, thing, string)
     return unless thing
 
-    catch(:halt) {
-      event(chain, :before).on(thing, string).call
+    current = event(chain, string).on(thing, string)
 
-      if (tmp = event(chain, string)).callbacks.length > 0
-        tmp.on(thing, string).call
+    catch(:halt) {
+      event(chain, :before).call(current, thing, string)
+
+      if current.callbacks.length > 0
+        current.call
       else
-        event(chain, :fallback).on(thing, string).call
+        event(chain, :fallback).call(current, thing, string)
       end
 
-      event(chain, :after).on(thing, string).call
+      event(chain, :after).call(current, thing, string)
     }
   end
 

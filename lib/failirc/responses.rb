@@ -33,7 +33,7 @@ RPL_NONE = {
 # The '-' or '+' characters represent whether the client has set an AWAY message or not respectively.
 RPL_USERHOST = {
   :code => 302,
-  :text => %q{:#{(value) ? "#{value.nick}=#{(value.modes[:oper]) ? '*' : ''} = #{(!value.modes[:away]) ? '+' : '-'}#{value.user}@#{value.host}" : ''}
+  :text => %q{:#{(value) ? "#{value.nick}=#{(value.modes[:oper]) ? '*' : ''} = #{(!value.modes[:away]) ? '+' : '-'}#{value.user}@#{value.host}" : ''}}
 }
 
 # Reply format used by ISON to list replies to the query list.
