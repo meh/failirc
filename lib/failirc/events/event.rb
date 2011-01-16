@@ -1,5 +1,5 @@
-#! /usr/bin/env ruby
-# failirc, a fail IRC server.
+#--
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -17,43 +17,38 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
-require 'failirc/server'
-require 'getoptlong'
+require 'failirc/events/callback'
 
-args = GetoptLong.new(
-  ['--version', '-v', GetoptLong::NO_ARGUMENT],
-  ['--verbose', '-V', GetoptLong::NO_ARGUMENT],
-  ['--config', '-f', GetoptLong::REQUIRED_ARGUMENT]
-)
+module IRC; class Events
 
-options = {
-  :verbose => false,
-  :config  => '/etc/failircd.conf',
-}
+class Event
+  attr_reader :owner, :chain, :name, :callbacks, :thing, :string
 
-args.each {|option, value|
-  case option
-    when '--version'
-      puts "Fail IRCd #{IRC::VERSION}"
-      exit 0
-
-    when '--verbose'
-      options[:verbose] = true
-
-    when '--config'
-      options[:config] = value
+  def initialize (owner, chain, callbacks)
+    @owner     = owner
+    @chain     = chain
+    @callbacks = callbacks
   end
-}
 
-ircd = IRC::Server.new(Nokogiri::XML.parse(File.read(options[:config])))
+  def on (thing, string)
+    @thing  = thing
+    @string = string
+    self
+  end
 
-def stop (ircd)
-  ircd.stop
-  Process.exit!(0)
+  def call (*args, &block)
+    @callbacks.sort {|a, b|
+      a.priority <=> b.priority
+    }.each {|callback|
+      if @thing && @string
+        callback.call(@thing, @string, *args, &block)
+      else
+        callback.call(*args, &block)
+      end
+    }
+  end
 end
 
-trap('INT') { stop ircd }
-trap('KILL') { stop ircd }
-
-ircd.start
+end; end

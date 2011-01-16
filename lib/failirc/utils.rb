@@ -19,35 +19,34 @@
 
 require 'failirc/extensions'
 
-class Object
+module IRC
+  def self.debug (argument, options={})
+    if !ENV['DEBUG'] && !options[:force]
+      return
+    end
 
-def debug (argument, separator='')
+    if ENV['DEBUG'].to_i < (options[:level] || 1) && !options[:force]
+      return
+    end
+
     output = ''
 
     if argument.is_a?(Exception)
-        output << "\n#{self.class}: #{argument.class}: #{argument.message}\n"
-        output << argument.backtrace.collect {|stack|
-            "#{self.class}: #{stack}"
-        }.join("\n")
-        output << "\n\n"
+      output << "#{argument.class}: #{argument.message}\n"
+      output << argument.backtrace.collect {|stack|
+        stack
+      }.join("\n")
+      output << "\n\n"
     elsif argument.is_a?(String)
-        output << "#{self.class}: #{argument}\n"
+      output << "#{argument}\n"
     else
-        output << "#{self.class}: #{argument.inspect}\n"
+      output << "#{argument.inspect}\n"
     end
 
-    if separator
-        output << separator
+    if options[:separator]
+      output << options[:separator]
     end
 
-    begin
-        if @verbose || (@server && @server.verbose) || (@client && @client.verbose) || ($server && $server.verbose) || ($client && $client.verbose)
-            puts output
-        end
-    rescue
-    end
-
-    (dispatcher rescue ($server || server).dispatcher rescue ($client || client).dispatcher).execute :log, output rescue nil
-end
-
+    puts output
+  end
 end

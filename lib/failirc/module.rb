@@ -1,3 +1,4 @@
+#--
 # failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
@@ -16,88 +17,109 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
 require 'failirc/utils'
 
 module IRC
 
-class Server
-
 class Module
-    attr_reader :server
+  def self.get; @@last; end
 
-    def initialize (server)
-        @server = server
+  attr_accessor :owner
+  attr_reader   :aliases, :events
 
-        if @aliases
-            if @aliases[:input]
-                @aliases[:input].each {|key, value|
-                    @server.dispatcher.alias(:input, key, value)
-                }
-            end
+  def self.define (name, version, owner=nil, &block)
+    @@last = Module.new(name, version, &block)
 
-            if @aliases[:output]
-                @aliases[:output].each {|key, value|
-                    @server.dispatcher.alias(:output, key, value)
-                }
-            end
-        end
+    @@last.owner = owner if owner
+  end
 
-        if @events
-            if @events[:pre]
-                @server.dispatcher.register(:pre, nil, @events[:pre])
-            end
+  def initialize (name, version, &block)
+    @name    = name
+    @version = version
 
-            if @events[:post]
-                @server.dispatcher.register(:post, nil, @events[:post])
-            end
+    @aliases = {
+      :input  => {},
+      :output => {}
+    }
 
-            if @events[:default]
-                @server.dispatcher.register(:default, nil, @events[:default])
-            end
-            
-            if @events[:custom]
-                @events[:custom].each {|key, value|
-                    @server.dispatcher.register(:custom, key, value)
-                }
-            end
+    @events = {
+      :input  => {},
+      :output => {}
+    }
 
-            if @events[:input]
-                @events[:input].each {|key, value|
-                    @server.dispatcher.register(:input, key, value)
-                }
-            end
+    @custom = {}
 
-            if @events[:output]
-                @events[:output].each {|key, value|
-                    @server.dispatcher.register(:output, key, value)
-                }
-            end
-        end
+    self.instance_eval(&block)
+  end
 
-        begin
-            rehash
-        rescue NameError
-        rescue Exception => e
-            self.debug e
-        end
+  def input (&block)
+    tmp, @into = @into, :input
+    self.instance_eval(&block)
+    @into = tmp
+  end
+
+  def output (&block)
+    tmp, @into = @into, :output
+    self.instance_eval(&block)
+    @into = tmp
+  end
+
+  def aliases (&block)
+    return unless @into
+
+    on = InsensitiveStruct.new
+    on.instance_eval(&block)
+
+    on.to_hash.each {|name, value|
+      @aliases[@into][name] = value
+    }
+  end
+
+  def fallback (priority=0, &block)
+    return unless @into
+
+    (@events[@into][:fallback] ||= []) << Callback.new(block, priority)
+  end
+
+  def before (priority=0, &block)
+    return unless @into
+
+    (@events[@into][:before] ||= []) << Callback.new(block, priority)
+  end
+
+  def after (priority=0, &block)
+    return unless @into
+
+    (@events[@into][:after] ||= []) << Callback.new(block, priority)
+  end
+
+  def on (what, priority=0, &block)
+    if @into
+      (@events[@into][what] || []) << Callback.new(block, priority)
+    else
+      observe(what, priority, &block)
     end
+  end
 
-    def finalize
-        if @aliases
-            @aliases.each_key {|key|
-                @server.dispatcher.alias(key, nil)
-            }
-        end
+  def observe (what, priority=0, &block)
+    (@custom[what] ||= []) << Callback.new(block, priority)
+  end
 
-        if @events
-            @events.each_key {|key|
-                @server.dispatcher.register(key, nil)
-            }
-        end
+  def fire (what, *args, &block)
+    if @owner
+      @owner.fire(what, *args, &block)
+    else
+      catch(:halt) {
+        Event.new(self, :custom, @custom[what] || []).call(*args, &block)
+      }
     end
-end
+  end
 
+  def method_missing (id, *args, &block)
+    @aliases[@into][id.to_s.downcase] || (@owner.alias(@into, id) rescue nil) || id
+  end
 end
 
 end

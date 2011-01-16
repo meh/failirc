@@ -1,5 +1,5 @@
-#! /usr/bin/env ruby
-# failirc, a fail IRC server.
+#--
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -17,43 +17,22 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
-require 'failirc/server'
-require 'getoptlong'
+module IRC; class Events
 
-args = GetoptLong.new(
-  ['--version', '-v', GetoptLong::NO_ARGUMENT],
-  ['--verbose', '-V', GetoptLong::NO_ARGUMENT],
-  ['--config', '-f', GetoptLong::REQUIRED_ARGUMENT]
-)
+class Callback
+  attr_reader   :method
+  attr_accessor :priority
 
-options = {
-  :verbose => false,
-  :config  => '/etc/failircd.conf',
-}
-
-args.each {|option, value|
-  case option
-    when '--version'
-      puts "Fail IRCd #{IRC::VERSION}"
-      exit 0
-
-    when '--verbose'
-      options[:verbose] = true
-
-    when '--config'
-      options[:config] = value
+  def initialize (method, priority=0)
+    @method   = method
+    @priority = priority
   end
-}
 
-ircd = IRC::Server.new(Nokogiri::XML.parse(File.read(options[:config])))
-
-def stop (ircd)
-  ircd.stop
-  Process.exit!(0)
+  def call (*args, &block)
+    return @method.call(*args, &block)
+  end
 end
 
-trap('INT') { stop ircd }
-trap('KILL') { stop ircd }
-
-ircd.start
+end; end

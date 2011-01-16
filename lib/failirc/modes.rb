@@ -22,48 +22,48 @@ require 'failirc/extensions'
 module IRC
 
 class Modes < ThreadSafeHash
-    def initialize (string=nil)
-        super()
+  def initialize (string=nil)
+    super()
 
-        self[:extended] = ThreadSafeHash.new
+    self[:extended] = ThreadSafeHash.new
 
-        if string
-            string.each_char {|char|
-                @modes[char.to_sym] = true
-            }
+    if string
+      string.each_char {|char|
+        @modes[char.to_sym] = true
+      }
+    end
+  end
+
+  def to_s
+    modes  = []
+    values = []
+
+    self.each {|mode, value|
+      if mode
+        mode = mode.to_s
+
+        if mode.length == 1
+          modes.push mode
+
+          if !(value === false || value === true)
+            values.push value.to_s
+          end
         end
+      end
+    }
+
+    result = String.new
+
+    if modes.length > 0
+      result = "+#{modes.join}"
+
+      if values.length > 0
+        result << " #{values.join(' ')}"
+      end
     end
 
-    def to_s
-        modes  = []
-        values = []
-
-        self.each {|mode, value|
-            if mode
-                mode = mode.to_s
-
-                if mode.length == 1
-                    modes.push mode
-
-                    if !(value === false || value === true)
-                        values.push value.to_s
-                    end
-                end
-            end
-        }
-
-        result = String.new
-
-        if modes.length > 0
-            result = "+#{modes.join}"
-
-            if values.length > 0
-                result << " #{values.join(' ')}"
-            end
-        end
-
-        return result
-    end
+    return result
+  end
 end
 
 end

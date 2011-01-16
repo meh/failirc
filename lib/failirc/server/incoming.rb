@@ -19,59 +19,63 @@
 
 require 'failirc/utils'
 
+module IRC; class Server
+
 class Incoming
-    attr_reader   :server, :socket, :config, :ip, :hostname, :port
-    attr_accessor :data
+  attr_reader   :server, :socket, :config, :ip, :hostname, :port
+  attr_accessor :data
 
-    def initialize (server, socket=nil, config=nil)
-        if server.is_a?(Incoming)
-            tmp = server
+  def initialize (server, socket=nil, config=nil)
+    if server.is_a?(Incoming)
+      tmp = server
 
-            @server = tmp.server
-            @socket = tmp.socket
-            @config = tmp.config
-            @data   = tmp.data
-        else
-            @server = server
-            @socket = socket
-            @config = config
-            @data   = {}
-        end
-
-        @ip       = @socket.peeraddr[3] rescue nil
-        @hostname = @socket.peeraddr[2] rescue nil
-        @port     = @socket.addr[1] rescue nil
+      @server = tmp.server
+      @socket = tmp.socket
+      @config = tmp.config
+      @data   = tmp.data
+    else
+      @server = server
+      @socket = socket
+      @config = config
+      @data   = {}
     end
 
-    def send (symbol, *args)
-        begin
-            self.method(symbol).call(*args)
-        rescue Exception => e
-            self.debug e
-        end
-    end
+    @ip     = @socket.peeraddr[3] rescue nil
+    @hostname = @socket.peeraddr[2] rescue nil
+    @port   = @socket.addr[1] rescue nil
+  end
 
-    def raw (text)
-        string = text.clone
-
-        @server.dispatcher.dispatch :output, self, string
-        @server.dispatcher.connection.output.push @socket, string
+  def send (symbol, *args)
+    begin
+      self.method(symbol).call(*args)
+    rescue Exception => e
+      self.debug e
     end
+  end
 
-    def numeric (response, value=nil)
-        begin
-            raw ":#{server.host} #{'%03d' % response[:code]} faggot #{eval(response[:text])}"
-        rescue Exception => e
-            self.debug response[:text]
-            raise e
-        end
-    end
+  def raw (text)
+    string = text.clone
 
-    def to_s
-        "#{@ip}[#{@port}]"
-    end
+    @server.dispatcher.dispatch :output, self, string
+    @server.dispatcher.connection.output.push @socket, string
+  end
 
-    def inspect
-        to_s
+  def numeric (response, value=nil)
+    begin
+      raw ":#{server.host} #{'%03d' % response[:code]} faggot #{eval(response[:text])}"
+    rescue Exception => e
+      self.debug response[:text]
+      raise e
     end
+  end
+
+  def to_s
+    "#{@ip}[#{@port}]"
+  end
+
+  def inspect
+    to_s
+  end
 end
+
+end; end

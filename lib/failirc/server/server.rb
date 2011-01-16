@@ -1,3 +1,4 @@
+#--
 # failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
@@ -16,31 +17,30 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
 require 'failirc/utils'
 
-module IRC
+require 'failirc/server/incoming'
 
-class Server
+module IRC; class Server
 
 class Server < Incoming
-    attr_reader :server, :servers, :socket, :listen, :host
+  attr_reader :server, :servers, :socket, :listen, :host
 
-    def initialize (server, socket, listen)
-        super(server, socket, listen)
+  def initialize (server, socket, listen)
+    super(server, socket, listen)
 
-        @servers = {}
-    end
+    @servers = {}
+  end
 
-    def to_s
-        host
-    end
+  def to_s
+    host
+  end
 
-    def inspect
-        "#{host}[#{ip}/#{port}]"
-    end
+  def inspect
+    "#{host}[#{ip}/#{port}]"
+  end
 end
 
-end
-
-end
+end; end

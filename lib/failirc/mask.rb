@@ -1,3 +1,4 @@
+#--
 # failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
@@ -16,102 +17,63 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
 module IRC
 
 class Mask
-    attr_accessor :nick, :user, :host
+  def self.escape (str)
+    Regexp.escape(str).gsub(/\\\*/, '.*?').gsub(/\\\?/, '.') rescue '.*?'
+  end
 
-    def initialize (nick=nil, user=nil, host=nil)
-        @nick = nick
-        @user = user
-        @host = host
-    end
+  attr_accessor :nick, :user, :host
 
-    def match (mask)
-        if !mask || mask.is_a?(String)
-            mask = Mask.parse(mask || '*!*@*')
-        end
+  def initialize (nick=nil, user=nil, host=nil)
+    @nick = nick
+    @user = user
+    @host = host
+  end
 
-        matches = {}
+  def match (mask)
+    mask = Mask.parse(mask) if !mask.is_a?(Mask)
 
-        if !nick || !mask.nick || Mask.toRegexp(nick).match(mask.nick)
-            matches[:nick] = true
-        end
+    !!(mask.is_a?(Mask) ? mask : Mask.parse(mask || '*!*@*')).to_s.match(self.to_reg)
+  end
 
-        if !user || !mask.user || Mask.toRegexp(user).match(mask.user)
-            matches[:user] = true
-        end
+  def == (mask)
+    mask = Mask.parse(mask) if !mask.is_a?(Mask)
 
-        if !host || !mask.host || Mask.toRegexp(host).match(mask.host)
-            matches[:host] = true
-        end
+    @nick == mask.nick && @user == mask.user && @host == mask.host
+  end
 
-        return matches[:nick] && matches[:user] && matches[:host]
-    end
+  def to_s
+    "#{@nick || '*'}!#{@user || '*'}@#{@user || '*'}"
+  end
 
-    def == (mask)
-        if !mask.is_a?(Mask)
-            return false
-        end
+  def to_reg
+    Regexp.new("^(?:(#{Mask.escape(@nick)})(?:!|$))?(?:(#{Mask.escape(@user)})(?:@|$))(?:(#{Mask.escape(@host)}))?$", 'i')
+  end
 
-        return (@nick == mask.nick && @user == mask.user && @host == mask.host)
-    end
+  def self.parse (mask)
+    Mask.new *mask.scan(/^
+      # nickname
+      (?:
+        ([^@!]*?) # nickname can contains all chars excluding '@' and '!'
+        (?:!|$) # it must be followed by a '!' or end of string
+      )?
 
-    def != (mask)
-        !(self == mask)
-    end
+      # username
+      (?:
+        ([^@!]*?) # username can contain all chars excluding '@' and '!'
+        (?:@|$) # it must be followed by a '@' or end of string
+      )?
 
-    def to_s
-        return "#{nick || '*'}!#{user || '*'}@#{host || '*'}"
-    end
-
-    def self.toRegexp (string)
-        return Regexp.new(Regexp.escape(string).gsub(/\\\*/, '.*?').gsub(/\\\?/, '.'), 'i')
-    end
-
-    def self.parse (string)
-        if !string
-            return Mask.new
-        end
-
-        if !string.match(/[!@]/)
-            return Mask.new(string)
-        end
-
-        if string.include?('!')
-            matches = string.match(/^(.*?)!(.*)$/)
-
-            if !matches[1] || matches[1].empty? || matches[1] == '*'
-                nick = nil
-            else
-                nick = matches[1]
-            end
-
-            string = matches[2]
-        end
-
-        if string.include?('@')
-            matches = string.match(/^(.*?)@(.*)$/)
-
-            if !matches[1] || matches[1].empty? || matches[1] == '*'
-                user = nil
-            else
-                user = matches[1]
-            end
-
-            if !matches[2] || matches[2].empty? || matches[2] == '*'
-                host = nil
-            else
-                host = matches[2]
-            end
-        else
-            user = string
-            host = nil
-        end
-
-        return Mask.new(nick, user, host)
-    end
+      # hostname
+      (.*?) # hostname can contain all chars
+    $/x).flatten.map {|part|
+      part.empty? ? nil : part
+    } rescue []
+  end
 end
 
 end

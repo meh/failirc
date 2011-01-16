@@ -20,21 +20,15 @@
 module IRC
 
 class Modules < Hash
-    def initialize (*args)
-        super(*args)
-    end
-    
-    def to_s
-        result = String.new
-
-        self.each_value {|mod|
-            if (mod.method(:description) rescue nil)
-                result << " #{mod.description}"
-            end
-        }
-
-        return result[1, result.length]
-    end
+  def initialize (*args)
+    super(*args)
+  end
+  
+  def to_s
+    values.map {|mod|
+      mod.description
+    }.compact.join(' ')
+  end
 end
 
 end

@@ -1,3 +1,4 @@
+#--
 # failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
@@ -16,25 +17,86 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
-require 'failirc/utils'
 require 'failirc/errors'
 require 'failirc/responses'
 
-require 'failirc/module'
+Module.define('base', '0.0.1') {
+  on connection do |thing|
+    thing.data[:encoding] = 'UTF-8'
+  end
 
-require 'failirc/server/incoming'
-require 'failirc/server/server'
-require 'failirc/server/client'
-require 'failirc/server/channel'
-require 'failirc/server/user'
+  input {
+    aliases {
+      pass /^PASS( |$)/i
+      nick /^(:[^ ]\s+)?NICK( |$)/i
+      user /^(:[^ ]\s+)?USER( |$)/i
+    }
 
-module IRC
+    fallback do |event, thing, string|
+      whole, command = string.match(/^([^ ]+)/).to_a
+  
+      if command && thing.class != Incoming
+        thing.send :numeric, ERR_UNKNOWNCOMMAND, command
+      end
+    end
+  
+    on pass do |thing, string|
+      return if thing.class != Incoming
+  
+      whole, password = string.match(/PASS\s+(?::)?(.*)$/i).to_a
+  
+      if !password
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :PASS
+        return
+      end
+  
+      thing.data[:password] = password
+  
+      if thing.config['password']
+        if thing.data[:password] != thing.config['password']
+          server.fire :error, thing, :close, 'Password mismatch'
+          server.kill thing, 'Password mismatch'
+          return
+        end
+      end
+  
+      # try to register it
+      registration(thing)
+    end
 
-class Server
+    on nick do |thing, string|
+      whole, from, nick = string.match(/^(?::(.+?)\s+)?NICK\s+(?::)?(.+)$/i).to_a
+  
+      # no nickname was passed, so tell the user is a faggot
+      if !nick
+        thing.send :numeric, ERR_NONICKNAMEGIVEN
+        return
+      end
+  
+      case thing 
+        when Client
+          server.fire :nick, thing, nick
+  
+        when Server
+  
+        when Incoming
+          if !check_nick(thing, nick)
+            thing.data[:warned] = nick
+            return
+          end
+  
+          thing.data[:nick] = nick
+  
+          # try to register it
+          registration(thing)
+      end
+    end
+  }
+}
 
-module Modules
-
+=begin
 class Base < Module
     attr_reader :messages
 
@@ -2751,3 +2813,4 @@ end
 end
 
 end
+=end
