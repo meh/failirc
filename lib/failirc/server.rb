@@ -21,27 +21,22 @@
 
 require 'resolv'
 require 'nokogiri'
+require 'ostruct'
 
 require 'failirc/utils'
-
-require 'failirc/server/clients'
-require 'failirc/server/servers'
-require 'failirc/server/channels'
 require 'failirc/server/dispatcher'
-
 require 'failirc/modules'
 
 module IRC
 
 class Server
-  attr_reader :created_on, :dispatcher, :modules, :channels, :config, :data
+  attr_reader :created_on, :dispatcher, :modules, :config, :data
 
   def initialize (config)
     @modules    = Modules.new
-    @data       = ThreadSafeHash.new
+    @data       = OpenStruct.new
     @created_on = Time.now
     @dispatcher = Dispatcher.new(self)
-    @channels   = Channels.new(self)
 
     self.config = config
   end
@@ -56,14 +51,6 @@ class Server
 
   def connections
     dispatcher.connection.connections
-  end
-
-  def clients
-    dispatcher.connection.clients
-  end
-
-  def servers
-    dispatcher.connection.servers
   end
 
   def host

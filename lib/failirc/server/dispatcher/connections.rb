@@ -1,3 +1,4 @@
+#--
 # failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
@@ -16,33 +17,47 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
-require 'forwardable'
+module IRC; class Server; class Dispatcher; class ConnectionDispatcher
 
-module IRC; class Server
+class Connections
+  class Server
+    attr_reader :socket, :config, :context
 
-class User
-  extend Forwardable
-
-  attr_reader :client, :channel, :modes
-
-  def initialize (client, channel, modes=Modes.new)
-    @client  = client
-    @channel = channel
-    @modes   = modes
-
-    User.def_delegators :@client, :mask, :server, :data, :nick, :user, :host, :real_name, :send
+    def initialize (socket, config, context)
+      @socket  = socket
+      @config  = config
+      @context = context
+    end
   end
 
-  def to_s
-    return "#{modes[:level]}#{nick}"
+  attr_reader :server, :listening, :things
+
+  def initialize (server)
+    @server = server
+
+    @listening = []
+    @things  = Things.new
   end
 
-  def inspect
-    return "#<User: #{client.inspect} #{channel.inspect} #{modes.inspect}>"
+  def empty?
+    sockets.empty?
+  end
+
+  def exists? (socket)
+    !!things[socket]
+  end
+
+  def delete (socket)
+    return unless exists?(socket)
+
+    @things.delete(socket)
+  end
+
+  def thing (identifier)
+    identifier.is_a?(Incoming) ? identifier : @things[identifier]
   end
 end
 
-end
-
-end
+end; end; end; end

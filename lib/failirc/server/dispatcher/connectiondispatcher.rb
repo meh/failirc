@@ -34,187 +34,14 @@ require 'failirc/sslutils'
 
 require 'failirc/server/incoming'
 
+require 'failirc/server/dispatcher/connections'
+require 'failirc/server/dispatcher/things'
+require 'failirc/server/dispatcher/data'
+
 module IRC; class Server; class Dispatcher
 
 class ConnectionDispatcher
   extend Forwardable
-
-  class Connections
-    class Things < CaseInsensitiveHash
-      def initialize
-        @sockets = Hash.new
-      end
-
-      alias __get__ []
-      alias __set__ []=
-      alias __del__ delete
-
-      def [] (what)
-        if what.is_a?(String) || what.is_a?(Symbol)
-          __get__(what)
-        else
-          @sockets[what]
-        end
-      end
-
-      def []= (what, value)
-        if what.is_a?(Incoming)
-          __set__(what.to_s, value)
-          @sockets[what.socket] = value
-        else
-          @sockets[what] = value
-        end
-      end
-
-      def delete (what)
-        if what.is_a?(String) || what.is_a?(Symbol)
-          @sockets.delete(__del__(what).socket)
-        else
-          __del__(@sockets.delete(what).to_s)
-        end
-      end
-
-      def sockets
-        @sockets.keys
-      end
-    end
-
-    class Server
-      attr_reader :socket, :config, :context
-
-      def initialize (socket, config, context)
-        @socket  = socket
-        @config  = config
-        @context = context
-      end
-    end
-
-    attr_reader :server, :listening, :things, :clients, :servers
-  
-    def initialize (server)
-      @server = server
-  
-      @listening = []
-      @things  = Things.new
-      @clients = Things.new
-      @servers = Things.new
-    end
-  
-    def empty?
-      sockets.empty?
-    end
-  
-    def exists? (socket)
-      !!things[socket]
-    end
-  
-    def delete (socket)
-      return unless exists?(socket)
-
-      thing = @things[socket]
-  
-      if thing.is_a?(Client)
-        @clients.delete(thing.to_s)
-      elsif thing.is_a?(Server)
-        @servers.delete(thing.to_s)
-      end
-  
-      @things.delete(socket)
-    end
-
-    def thing (identifier)
-      if identifier.is_a?(Client) || identifier.is_a?(Server)
-        return identifier
-      elsif identifier.is_a?(User)
-        return identifier.client
-      else
-        return @things[identifier]
-      end
-    end
-  end
-
-  class Data
-    attr_reader :server
-
-    def initialize (server)
-      @server = server
-      @data   = ThreadSafeHash.new
-    end
-
-    def [] (socket)
-      if socket.is_a?(Client) || socket.is_a?(User) || socket.is_a?(Server)
-        socket = socket.socket
-      end
-
-      (@data[socket] ||= [])
-    end
-
-    def push (socket, string)
-      if string == :EOC
-        if !socket.is_a?(TCPSocket) && !socket.is_a?(OpenSSL::SSL::SSLSocket)
-          socket = socket.socket rescue nil
-        end
-
-        if socket
-          server.dispatcher.disconnecting.push(:thing => server.dispatcher.connections.things[socket], :output => self[socket])
-        end
-      else
-        string.lstrip!
-      end
-
-      server.dispatcher.wakeup
-
-      if (string && !string.empty?) || self[socket].last == :EOC
-        self[socket].push(string)
-      end
-    end
-
-    def pop (socket)
-      self[socket].shift
-    end
-
-    def clear (socket)
-      self[socket].clear
-    end
-
-    def delete (socket)
-      @data.delete(socket)
-
-      if socket.is_a?(Client) || socket.is_a?(User) || socket.is_a?(Server)
-        @data.delete(socket.socket)
-      end
-    end
-
-    def first (socket)
-      self[socket].first
-    end
-
-    def last (socket)
-      self[socket].last
-    end
-
-    def empty? (socket=nil)
-      if socket
-        if socket.is_a?(Client) || socket.is_a?(User)
-          socket = socket.socket
-        end
-
-        if @data.has_key?(socket)
-           return @data[socket].empty?
-        else
-          return true
-        end
-      else
-        return @data.all? {|(name, data)|
-          data.empty?
-        }
-      end
-    end
-
-    def each (&block)
-      @data.each_key &block
-    end
-  end
 
   attr_reader :server, :connections, :input, :output, :disconnecting
 
@@ -227,7 +54,7 @@ class ConnectionDispatcher
     @disconnecting = []
     @handling      = ThreadSafeHash.new
 
-    ConnectionDispatcher.def_delegators :@connections, :sockets, :clients, :servers, :things
+    ConnectionDispatcher.def_delegators :@connections, :sockets, :things
   end
 
   def wakeup
@@ -314,7 +141,7 @@ class ConnectionDispatcher
       end
     }
 
-    (@connections.clients.sockets + @connections.servers.sockets).each {|socket|
+    @connections.things.sockets.each {|socket|
       if socket.closed?
         self.server.kill socket
       end

@@ -19,6 +19,10 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'forwardable'
+
+require 'failirc/modes'
+require 'failirc/mask'
 require 'failirc/errors'
 require 'failirc/responses'
 
@@ -86,54 +90,111 @@ Module.define('base', '0.0.1') {
     end
   end
   
-  class Server
+  class Server < Incoming
     include Flags
+
+    Modes = {}
   
-    Modes = { }
-  
+    attr_reader :server, :servers, :socket, :listen, :host
+
+    def initialize (server, socket, listen)
+      super(server, socket, listen)
+
+      @servers = {}
+    end
+
     def check_flags (type)
       true
     end
+
+    def to_s
+      host
+    end
+
+    def inspect
+      "#{host}[#{ip}/#{port}]"
+    end
   end
-  
-  class Channel
+
+  class Client < Incoming
+    extend  Forwardable
     include Flags
-  
-    Modes = {
-      :a => :anonymous,
-      :c => :no_colors,
-      :C => :no_ctcps,
-      :i => :invite_only,
-      :l => :limit,
-      :L => :redirect,
-      :k => :password,
-      :K => :no_knock,
-      :m => :moderated,
-      :n => :no_external_messages,
-      :N => :no_nick_change,
-      :p => :private,
-      :Q => :no_kicks,
-      :s => :secret,
-      :S => :strip_colors,
-      :t => :topic_lock,
-      :u => :auditorium,
-      :V => :no_invites,
-      :z => :ssl_only,
-    }
-  end
-  
-  class Client
-    include Flags
-  
+
     Modes = {
       :z => :ssl,
   
       :N => [:o, :netadmin],
       :o => [:operator, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes]
     }
+
+    attr_reader    :channels, :mask, :connected_on
+    attr_accessor  :password, :real_name, :modes  
+    def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
+ 
+    def initialize (server, socket=nil, config=nil)
+      super(server, socket, config)
+  
+      @registered = false
+  
+      @channels = Channels.new(@server)
+      @modes    = Modes.new
+  
+      if socket.is_a?(Mask)
+        @mask = socket
+      else
+        @mask   = Mask.new
+        self.host = @socket.peeraddr[2]
+  
+        if @socket.is_a?(OpenSSL::SSL::SSLSocket)
+          @modes[:ssl] = @modes[:z] = true
+        end
+      end
+  
+      @connected_on = Time.now
+    end
+  
+    def numeric (response, value=nil)
+      begin
+        raw ":#{server.host} #{'%03d' % response[:code]} #{nick} #{eval(response[:text])}"
+      rescue Exception => e
+        IRC.debug response[:text]
+        raise e
+      end
+    end
+  
+    def to_s
+      mask.to_s
+    end
+  
+    def inspect
+      "#{mask}[#{ip}/#{port}]"
+    end
+  end
+
+  class Clients < Hash
+    attr_reader :server
+  
+    def initialize (server, *args)
+      @server = server
+  
+      super(*args)
+    end
+  
+    def send (*args)
+      each_value {|client|
+        client.send(*args)
+      }
+    end
+  
+    def inspect
+      map {|(_, client)|
+        client.inspect
+      }.join(' ')
+    end
   end
   
   class User
+    extend  Forwardable
     include Flags
   
     Modes = {
@@ -144,6 +205,24 @@ Module.define('base', '0.0.1') {
       :h => [:v, :halfoperator, :can_kick],
       :v => [:voice, :can_talk]
     }
+
+    Levels = {
+      :! => '!',
+      :x => '~',
+      :y => '&',
+      :o => '@',
+      :h => '%',
+      :v => '+'
+    }
+  
+    attr_reader    :client, :channel, :modes
+    def_delegators :@client, :mask, :server, :data, :nick, :user, :host, :real_name, :send
+  
+    def initialize (client, channel, modes=Modes.new)
+      @client  = client
+      @channel = channel
+      @modes   = modes
+    end
   
     alias __check_flags__ check_flags
   
@@ -156,15 +235,6 @@ Module.define('base', '0.0.1') {
   
       result
     end
-  
-    Levels = {
-      :! => '!',
-      :x => '~',
-      :y => '&',
-      :o => '@',
-      :h => '%',
-      :v => '+'
-    }
   
     def is_level_enough? (level)
       return true if !level || (level.is_a?(String) && level.empty?)
@@ -210,6 +280,230 @@ Module.define('base', '0.0.1') {
         modes[:level] = ''
       end
     end
+
+    def to_s
+      return "#{modes[:level]}#{nick}"
+    end
+  
+    def inspect
+      return "#<User: #{client.inspect} #{channel.inspect} #{modes.inspect}>"
+    end
+  end
+
+  class Users < ThreadSafeHash
+    extend Forwardable
+
+    attr_reader    :channel
+    def_delegators :@channel, :server
+  
+    def initialize (channel, *args)
+      @channel = channel
+  
+      super(*args)
+    end
+  
+    alias __get [] 
+    alias __set []=
+    alias __delete delete
+  
+    def [] (user)
+      if user.is_a?(Client) || user.is_a?(User)
+        user = user.nick
+      end
+  
+      __get(user)
+    end
+  
+    def []= (user, value)
+      if user.is_a?(Client) || user.is_a?(User)
+        user = user.nick
+      end
+  
+      __set(user, value)
+    end
+    
+    def delete (key)
+      if key.is_a?(User) || key.is_a?(Client)
+        key = key.nick
+      end
+  
+      key = key.downcase
+      user = self[key]
+  
+      if user
+        __delete(key)
+  
+        if channel.empty?
+          server.channels.delete(channel)
+        end
+      end
+  
+      return user
+    end
+  
+    def add (user)
+      case user
+        when Client then self[user.nick] = User.new(user, @channel)
+        when User   then self[user.nick] = user
+      end
+    end
+  
+    def send (*args)
+      each_value {|user|
+        user.send(*args)
+      }
+    end
+  end
+  
+  class Channel
+    extend  Forwardable
+    include Flags
+
+    class Topic
+      attr_reader :server, :channel, :text, :set_by
+      attr_accessor :setOn
+  
+      def initialize (channel)
+        @server  = channel.server
+        @channel = channel
+  
+        @semaphore = Mutex.new
+      end
+  
+      def text= (value)
+        @semaphore.synchronize {
+          @text  = value
+          @setOn = Time.now
+        }
+      end
+  
+      def set_by= (value)
+        if value.is_a?(Mask)
+          @set_by = value
+        else
+          @set_by = value.mask.clone
+        end
+      end
+  
+      def to_s
+        text
+      end
+  
+      def nil?
+        text.nil?
+      end
+    end
+  
+    Modes = {
+      :a => :anonymous,
+      :c => :no_colors,
+      :C => :no_ctcps,
+      :i => :invite_only,
+      :l => :limit,
+      :L => :redirect,
+      :k => :password,
+      :K => :no_knock,
+      :m => :moderated,
+      :n => :no_external_messages,
+      :N => :no_nick_change,
+      :p => :private,
+      :Q => :no_kicks,
+      :s => :secret,
+      :S => :strip_colors,
+      :t => :topic_lock,
+      :u => :auditorium,
+      :V => :no_invites,
+      :z => :ssl_only,
+    }
+
+    attr_reader    :server, :name, :type, :created_on, :users, :modes, :topic 
+    def_delegators :@users, :[], :add, :delete, :send, :empty?
+  
+    def initialize (server, name)
+      @server = server
+      @name   = name
+      @type   = name[0, 1]
+  
+      @created_on = Time.now
+      @users      = Users.new(self)
+      @modes      = Modes.new
+      @topic      = Topic.new(self)
+    end
+  
+    def type
+      @name[0, 1]
+    end
+  
+    def topic= (data)
+      if data.is_a?(Topic)
+        @topic.set_by = data.set_by
+        @topic.text   = data.text
+      elsif data.is_a?(Array)
+        @topic.set_by = data[0]
+        @topic.text  = data[1]
+      end
+    end
+  
+    def user (client)
+      return @users[client.nick]
+    end
+  
+    def to_s
+      @name
+    end
+  end
+
+  class Channels < ThreadSafeHash
+    attr_reader :server
+  
+    def initialize (server, *args)
+      @server = server
+  
+      super(*args)
+    end
+  
+    alias __delete delete
+  
+    def delete (channel)
+      if channel.is_a?(Channel)
+        __delete(channel.name)
+      else
+        __delete(channel)
+      end
+    end
+  
+    def add (channel)
+      self[channel.name] = channel
+    end
+  
+    # get single users in the channels
+    def unique_users
+      result = Clients.new(server)
+  
+      each_value {|channel|
+        channel.users.each {|nick, user|
+          result[nick] = user.client
+        }
+      }
+  
+      return result
+    end
+  
+    def to_s (thing=nil)
+      result = ''
+  
+      if thing.is_a?(Client) || thing.is_a?(User)
+        each_value {|channel|
+          result << " #{channel.user(thing).modes[:level]}#{channel.name}"
+        }
+      else
+        each_value {|channel|
+          result << " #{channel.name}"
+        }     
+      end
+  
+      return result[1, result.length]
+    end
   end
   
   class ::String
@@ -253,17 +547,18 @@ Module.define('base', '0.0.1') {
       :CMDS => 'KNOCK'
     }
 
-    @semaphore = Mutex.new
-    @joining   = {}
-    @pingedOut = {}
-    @toPing    = {}
+    @semaphore  = Mutex.new
+    @joining    = {}
+    @pinged_out = {}
+    @to_ping    = {}
+    @nicks      = {}
 
     server.dispatcher.setInterval(Fiber.new {
       while true
         @semaphore.synchronize {
           # time to ping non active users
-          @toPing.each_value {|thing|
-            @pingedOut[thing.socket] = thing
+          @to_ping.each_value {|thing|
+            @pinged_out[thing.socket] = thing
 
             if thing.class != Incoming
               thing.send :raw, "PING :#{server.host}"
@@ -271,21 +566,21 @@ Module.define('base', '0.0.1') {
           }
 
           # clear and refil the hash of clients to ping with all the connected clients
-          @toPing.clear
-          @toPing.merge!(server.connections.things)
+          @to_ping.clear
+          @to_ping.merge!(server.connections.things)
         }
 
         Fiber.yield
 
         @semaphore.synchronize {
           # people who didn't answer with a PONG have to YIFF IN HELL.
-          @pingedOut.each_value {|thing|
+          @pinged_out.each_value {|thing|
             if !thing.socket.closed?
               server.kill thing, 'Ping timeout', true
             end
           }
 
-          @pingedOut.clear
+          @pinged_out.clear
         }
       end
     }, (config.xpath('./misc/pingTimeout').first.text.to_f / 2))
@@ -400,8 +695,8 @@ Module.define('base', '0.0.1') {
     # check for ping timeout and registration
     before -1234567890 do |event, thing, string|
       @semaphore.synchronize {
-        @toPing.delete(thing.socket)
-        @pingedOut.delete(thing.socket)
+        @to_ping.delete(thing.socket)
+        @pinged_out.delete(thing.socket)
       }
 
       if !event.alias?(:PING) && !event.alias?(:PONG) && !event.alias?(:WHO) && !event.alias?(:MODE)
@@ -427,28 +722,60 @@ Module.define('base', '0.0.1') {
       thing.send :numeric, ERR_UNKNOWNCOMMAND, command
     end
 
+    def motd (thing, string=nil)
+      thing.send :numeric, RPL_MOTDSTART
+  
+      config.xpath('./misc/motd').first.text.split(/\n/).each {|line|
+        offset = 0
+  
+        while part = line[offset, 80]
+          if (tmp = line[offset + 80, 1]) && !tmp.match(/\s/)
+            part.sub!(/([^ ]+)$/, '')
+  
+            if (tmp = part.length) == 0
+              tmp = 80
+            end
+          else
+            tmp = 80
+          end
+  
+          offset += tmp
+  
+          if part.strip.length == 0 && line.strip.length > 0
+            next
+          end
+  
+          thing.send :numeric, RPL_MOTD, part.strip
+        end
+      }
+  
+      thing.send :numeric, RPL_ENDOFMOTD
+    end
+
     # This method does some checks trying to register the connection, various checks
     # for nick collisions and such.
     def register (thing)
       return if thing.class != Incoming
 
-      # additional check for nick collisions
-      if thing.data[:nick]
-        if (thing.server.data[:nicks][thing.data[:nick]] && thing.server.data[:nicks][thing.data[:nick]] != thing) || thing.server.clients[thing.data[:nick]]
-          if thing.data[:warned] != thing.data[:nick]
-            thing.send :numeric, ERR_NICKNAMEINUSE, thing.data[:nick]
-            thing.data[:warned] = thing.data[:nick]
+      @semaphore.synchronize {
+        # additional check for nick collisions
+        if thing.data[:nick]
+          if @nicks[thing.data[:nick]] && @nicks[thing.data[:nick]] != thing) || server.clients[thing.data[:nick]]
+            if thing.data[:warned] != thing.data[:nick]
+              thing.send :numeric, ERR_NICKNAMEINUSE, thing.data[:nick]
+              thing.data[:warned] = thing.data[:nick]
+            end
+  
+            return
           end
   
-          return
+          @nicks[thing.data[:nick]] = thing
         end
-  
-        thing.server.data[:nicks][thing.data[:nick]] = thing
-      end
+      }
   
       # if the client isn't registered but has all the needed attributes, register it
       if thing.data[:user] && thing.data[:nick]
-        if thing.config.attributes['password'] && thing.config.attributes['password'] != thing.data[:password]
+        if thing.config['password'] && thing.config['password'] != thing.data[:password]
           return false
         end
   
@@ -457,14 +784,10 @@ Module.define('base', '0.0.1') {
         client.user      = thing.data[:user]
         client.real_name = thing.data[:real_name]
   
-        # clean the temporary hash value and use the nick as key
-        thing.server.connections.clients[:byName][client.nick]   = client
-        thing.server.connections.clients[:bySocket][client.socket] = client
+        server.connections.clients << client
   
-        thing.server.data[:nicks].delete(client.nick)
-  
-        thing.server.execute(:registered, client)
-  
+        server.fire(:registered, client)
+
         client.send :numeric, RPL_WELCOME, client
         client.send :numeric, RPL_HOSTEDBY, client
         client.send :numeric, RPL_SERVCREATEDON
@@ -487,7 +810,7 @@ Module.define('base', '0.0.1') {
   
         motd(client)
   
-        server.execute :connected, client
+        server.fire :connected, client
       end
     end
   
@@ -845,14 +1168,14 @@ class Base < Module
         @joining   = ThreadSafeHash.new
         @semaphore = Mutex.new
 
-        @pingedOut = ThreadSafeHash.new
-        @toPing    = ThreadSafeHash.new
+        @pinged_out = ThreadSafeHash.new
+        @to_ping    = ThreadSafeHash.new
 
         @pingInterval = server.dispatcher.setInterval Fiber.new {
             while true
                 # time to ping non active users
-                @toPing.each_value {|thing|
-                    @pingedOut[thing.socket] = thing
+                @to_ping.each_value {|thing|
+                    @pinged_out[thing.socket] = thing
 
                     if thing.class != Incoming
                         thing.send :raw, "PING :#{server.host}"
@@ -860,19 +1183,19 @@ class Base < Module
                 }
 
                 # clear and refil the hash of clients to ping with all the connected clients
-                @toPing.clear
-                @toPing.merge!(server.connections.things)
+                @to_ping.clear
+                @to_ping.merge!(server.connections.things)
 
                 Fiber.yield
 
                 # people who didn't answer with a PONG has to YIFF IN HELL.
-                @pingedOut.each_value {|thing|
+                @pinged_out.each_value {|thing|
                     if !thing.socket.closed?
                         server.kill thing, 'Ping timeout', true
                     end
                 }
 
-                @pingedOut.clear
+                @pinged_out.clear
             end
         }, (@pingTimeout / 2.0)
     end
@@ -1180,8 +1503,8 @@ class Base < Module
             return
         end
 
-        @toPing.delete(thing.socket)
-        @pingedOut.delete(thing.socket)
+        @to_ping.delete(thing.socket)
+        @pinged_out.delete(thing.socket)
 
         if !event.aliases.include?(:PING) && !event.aliases.include?(:PONG) && !event.aliases.include?(:WHO) && !event.aliases.include?(:MODE)
             thing.data[:last_action] = Utils::Client::Action.new(thing, event, string)
@@ -1532,7 +1855,7 @@ class Base < Module
         end
 
         if match[2] == server.host
-            @pingedOut.delete(thing.socket)
+            @pinged_out.delete(thing.socket)
         else
             thing.send :numeric, ERR_NOSUCHSERVER, match[2]
         end
@@ -3298,8 +3621,8 @@ class Base < Module
             return
         end
 
-        @toPing.delete(thing.socket)
-        @pingedOut.delete(thing.socket)
+        @to_ping.delete(thing.socket)
+        @pinged_out.delete(thing.socket)
 
         thing.channels.select {|name, channel| channel.modes[:anonymous]}.each_key {|name|
             server.execute :part, thing, name, nil
