@@ -170,7 +170,7 @@ RPL_SUMMONING = {
 # The "comments" field may contain any comments about the version or further version details.
 RPL_VERSION = {
   :code => 351,
-  :text => 'failirc-#{server.version}. #{server.host} :#{value}'
+  :text => 'failirc-#{IRC.version}. #{server.host} :#{value}'
 }
 
 RPL_WHOREPLY = {
@@ -351,12 +351,12 @@ RPL_TRACESERVER = {
 # custom
 RPL_WELCOME = {
   :code => 1,
-  :text => %q{:Welcome to the #{server.config.elements['config/server/name'].text} #{value.mask}}
+  :text => %q{:Welcome to the #{server.config.xpath('config/server/name').first.text || 'failirc'} #{value.mask}}
 }
 
 RPL_HOSTEDBY = {
   :code => 2,
-  :text => ':Your host is #{server.host}[#{server.ip}/#{value.port}], running version failirc-#{server.version}'
+  :text => ':Your host is #{server.host}[#{server.ip}/#{value.port}], running version failirc-#{IRC.version}'
 }
 
 RPL_SERVCREATEDON = {
@@ -366,7 +366,7 @@ RPL_SERVCREATEDON = {
 
 RPL_SERVINFO = {
   :code => 4,
-  :text => '#{server.host} failirc-#{server.version} #{value[:client]} #{value[:channel]}'
+  :text => '#{server.host} failirc-#{IRC.version} #{value[:client]} #{value[:channel]}'
 }
 
 RPL_ISUPPORT = {

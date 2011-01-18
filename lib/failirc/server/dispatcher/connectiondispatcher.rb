@@ -115,7 +115,7 @@ class ConnectionDispatcher
 
         self.server.fire(:killed, thing, output.shift)
 
-        thing.data[:quitting] = true
+        thing.data.quitting = true
 
         case thing
           when Client

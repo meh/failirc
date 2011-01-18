@@ -1,3 +1,4 @@
+#--
 # failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
@@ -16,6 +17,9 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
+
+require 'ostruct'
 
 require 'failirc/utils'
 
@@ -37,12 +41,12 @@ class Incoming
       @server = server
       @socket = socket
       @config = config
-      @data   = {}
+      @data   = OpenStruct.new
     end
 
-    @ip     = @socket.peeraddr[3] rescue nil
+    @ip       = @socket.peeraddr[3] rescue nil
     @hostname = @socket.peeraddr[2] rescue nil
-    @port   = @socket.addr[1] rescue nil
+    @port     = @socket.addr[1] rescue nil
   end
 
   def send (symbol, *args)
@@ -62,7 +66,7 @@ class Incoming
 
   def numeric (response, value=nil)
     begin
-      raw ":#{server.host} #{'%03d' % response[:code]} faggot #{response[:text].interpolate}"
+      raw ":#{server.host} #{'%03d' % response[:code]} #{self.to_s} #{response[:text].interpolate(binding)}"
     rescue Exception => e
       IRC.debug response[:text]
       raise e

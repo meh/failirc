@@ -23,6 +23,7 @@ require 'resolv'
 require 'nokogiri'
 require 'ostruct'
 
+require 'failirc/version'
 require 'failirc/utils'
 require 'failirc/server/dispatcher'
 require 'failirc/modules'
@@ -144,7 +145,7 @@ class Server
 
   # kill connection with harpoons on fire
   def kill (thing, message=nil, force=false)
-    if !thing || (thing.data[:killing] && (!force || thing.data[:kill_forcing])) || !@dispatcher.connections.exists?(thing.socket)
+    if !thing || (thing.data.killing && (!force || thing.data.kill_forcing)) || !@dispatcher.connections.exists?(thing.socket)
       return
     end
 
@@ -152,10 +153,10 @@ class Server
       thing = thing.client
     end
 
-    thing.data[:killing] = true
+    thing.data.killing = true
 
     if force
-      thing.data[:kill_forcing] = true
+      thing.data.kill_forcing = true
 
       tmp = @dispatcher.output[thing.socket].drop_while {|item|
         item != :EOC

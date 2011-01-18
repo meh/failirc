@@ -42,7 +42,16 @@ end
 
 class String
   def interpolate (on=nil)
-    on.instance_eval("%{#{self}}") rescue eval(self) rescue self
+    begin
+      if !on || on.is_a?(Binding)
+        (on || binding).eval("%{#{self}}")
+      else
+        on.instance_eval("%{#{self}}")
+      end
+    rescue Exception => e
+      IRC.debug e
+      self
+    end
   end
 end
 

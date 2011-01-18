@@ -47,7 +47,7 @@ class Mask
   end
 
   def to_s
-    "#{@nick || '*'}!#{@user || '*'}@#{@user || '*'}"
+    "#{@nick || '*'}!#{@user || '*'}@#{@host || '*'}"
   end
 
   def to_reg
