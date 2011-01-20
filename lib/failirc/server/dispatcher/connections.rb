@@ -23,12 +23,16 @@ module IRC; class Server; class Dispatcher; class ConnectionDispatcher
 
 class Connections
   class Server
-    attr_reader :socket, :config, :context
+    attr_reader :socket, :options, :context
 
-    def initialize (socket, config, context)
+    def initialize (socket, options, context)
       @socket  = socket
-      @config  = config
+      @options = options
       @context = context
+    end
+
+    def ssl?
+      !!@options['ssl']
     end
   end
 
@@ -38,11 +42,11 @@ class Connections
     @server = server
 
     @listening = []
-    @things  = Things.new
+    @things    = {}
   end
 
   def empty?
-    sockets.empty?
+    @things.empty?
   end
 
   def exists? (socket)
@@ -50,9 +54,15 @@ class Connections
   end
 
   def delete (socket)
-    return unless exists?(socket)
-
     @things.delete(socket)
+  end
+
+  def << (thing)
+    @things[thing.socket] = thing
+  end
+
+  def sockets
+    @things.keys
   end
 
   def thing (identifier)

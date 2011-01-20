@@ -39,9 +39,6 @@ class Dispatcher
 
     Dispatcher.def_delegators :@event, :hook, :alias, :register, :dispatch, :observe, :fire
     Dispatcher.def_delegators :@connection, :connections, :input, :output, :disconnecting, :wakeup
-
-    @intervals = {}
-    @timeouts  = {}
   end
 
   def start
@@ -67,70 +64,10 @@ class Dispatcher
     while true
       begin
         @connection.do
-      rescue FiberError
-        IRC.debug 'Something went deeply wrong in the dispatcher, aborting.'
-        Process::exit 23
       rescue Exception => e
         IRC.debug e
       end
-
-      @intervals.each {|fiber, meta|
-        begin
-          raise FiberError unless @intervals[fiber]
-
-          if meta[:at] <= Time.now
-            fiber.resume
-
-            meta[:at] += meta[:offset]
-          end
-        rescue FiberError
-          clearInterval meta
-        rescue Exception => e
-          IRC.debug e
-        end
-      }
-
-      @timeouts.each {|fiber, meta|
-        begin
-          raise FiberError unless @timeouts[fiber]
-
-          if meta[:at] <= Time.now
-            fiber.resume
-
-            clearTimeout meta
-          end
-        rescue FiberError
-          clearTimeout meta
-        rescue Exception => e
-          IRC.debug e
-        end
-      }
     end
-  end
-
-  def setTimeout (fiber, time)
-    @timeouts[fiber] = {
-      :fiber => fiber,
-      :at  => Time.now + time,
-      :on  => Time.now,
-    }
-  end
-
-  def clearTimeout (timeout)
-    @timeouts.delete(timeout[:fiber])
-  end
-
-  def setInterval (fiber, time)
-    @intervals[fiber] = {
-      :fiber  => fiber,
-      :offset => time,
-      :at   => Time.now + time,
-      :on   => Time.now,
-    }
-  end
-
-  def clearInterval (interval)
-    @intervals.delete(interval[:fiber])
   end
 end
 

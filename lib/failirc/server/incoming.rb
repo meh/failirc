@@ -26,22 +26,22 @@ require 'failirc/utils'
 module IRC; class Server
 
 class Incoming
-  attr_reader   :server, :socket, :config, :ip, :hostname, :port
+  attr_reader   :server, :socket, :options, :ip, :hostname, :port
   attr_accessor :data
 
-  def initialize (server, socket=nil, config=nil)
+  def initialize (server, socket=nil, options=nil)
     if server.is_a?(Incoming)
       tmp = server
 
-      @server = tmp.server
-      @socket = tmp.socket
-      @config = tmp.config
-      @data   = tmp.data
+      @server  = tmp.server
+      @socket  = tmp.socket
+      @options = tmp.options
+      @data    = tmp.data
     else
-      @server = server
-      @socket = socket
-      @config = config
-      @data   = OpenStruct.new
+      @server  = server
+      @socket  = socket
+      @options = options
+      @data    = OpenStruct.new
     end
 
     @ip       = @socket.peeraddr[3] rescue nil
@@ -66,7 +66,7 @@ class Incoming
 
   def numeric (response, value=nil)
     begin
-      raw ":#{server.host} #{'%03d' % response[:code]} #{self.to_s} #{response[:text].interpolate(binding)}"
+      raw ":#{server.host} #{'%03d' % response[:code]} #{self} #{response[:text].interpolate(binding)}"
     rescue Exception => e
       IRC.debug response[:text]
       raise e

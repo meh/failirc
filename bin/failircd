@@ -46,7 +46,7 @@ args.each {|option, value|
   end
 }
 
-ircd = IRC::Server.new(Nokogiri::XML.parse(File.read(options[:config])))
+ircd = IRC::Server.new(YAML.parse_file(options[:config]))
 
 def stop (ircd)
   ircd.stop

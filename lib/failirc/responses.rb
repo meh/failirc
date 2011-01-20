@@ -351,7 +351,7 @@ RPL_TRACESERVER = {
 # custom
 RPL_WELCOME = {
   :code => 1,
-  :text => %q{:Welcome to the #{server.config.xpath('config/server/name').first.text || 'failirc'} #{value.mask}}
+  :text => %q{:Welcome to the #{server.name} #{value.mask}}
 }
 
 RPL_HOSTEDBY = {

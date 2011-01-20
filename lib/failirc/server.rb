@@ -19,8 +19,8 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'forwardable'
 require 'resolv'
-require 'nokogiri'
 require 'ostruct'
 
 require 'failirc/version'
@@ -31,7 +31,10 @@ require 'failirc/modules'
 module IRC
 
 class Server
-  attr_reader :created_on, :dispatcher, :modules, :config, :data
+  extend Forwardable
+
+  attr_reader    :created_on, :dispatcher, :modules, :config, :data
+  def_delegators :@dispatcher, :dispatch, :register, :fire, :observe, :connections
 
   def initialize (config)
     @modules    = Modules.new
@@ -42,32 +45,20 @@ class Server
     self.config = config
   end
 
-  def fire (*args, &block)
-    dispatcher.fire(*args, &block)
-  end
-
-  def observe (*args, &block)
-    dispatcher.observe(*args, &block)
-  end
-
-  def connections
-    dispatcher.connection.connections
-  end
-
   def host
-    @config.xpath('config/server/host').first.text rescue 'localhost'
+    @config['server']['host'].value rescue 'localhost'
   end
 
   def ip
     begin
-      Resolv.getaddress(@config.xpath('config/server/host').first.text)
+      Resolv.getaddress(host)
     rescue
       Resolv.getaddress('localhost')
     end
   end
 
   def name
-    @config.xpath('config/server/name').first.text
+    @config['server']['name'].value rescue 'failirc'
   end
 
   def loadModule (name, path=nil, reload=false)
@@ -84,7 +75,9 @@ class Server
         (@modules[name.downcase] = Module.get).owner = self
         @dispatcher.hook(Module.get)
 
-        Module.get.config = @config.xpath(%{//modules/module[@name="#{name}"]}).first
+        Module.get.config = @config.select('/modules/*').find {|mod|
+          mod['name'].value.downcase == name.downcase
+        }.transform
 
         IRC.debug "Loaded `#{name}`."
       else
@@ -101,15 +94,10 @@ class Server
 
     @started = true
 
-    @config.xpath('config/server/listen').each {|listen|
-      self.listen(listen, 
-        :bind => listen.attributes['bind'],
-        :port => listen.attributes['port'],
-
-        :ssl      => listen.attributes['ssl'],
-        :ssl_cert => listen.attributes['sslCert'],
-        :ssl_key  => listen.attributes['sslKey']
-      )
+    @config.select('/server/listen/*').each {|listen|
+      self.listen({
+        'bind' => '0.0.0.0'
+      }.merge(listen.transform))
     }
 
     self.fire(:start, self)
@@ -133,6 +121,10 @@ class Server
 
     @stopping = false
     @started  = false
+  end
+
+  def running?
+    @started && !stopping?
   end
 
   def stopping?
@@ -174,56 +166,13 @@ class Server
   def rehash
   end
 
-  def config= (dom)
-    @config = dom
-=begin
-    if !@config.elements['config/server']
-      @config.elements['config'].add(Element.new('server'))
-    end
-
-    if !@config.elements['config/server/name']
-      @config.elements['config/server'].add(Element.new('name')).text = 'Fail IRC'
-    end
-
-    if !@config.elements['config/server/host']
-      @config.elements['config/server'].add(Element.new('host')).text = Socket.gethostname
-    end
-
-    if !@config.elements['config/server/timeout']
-      @config.elements['config/server'].add(Element.new('timeout')).text = '15'
-    end
-
-    if !@config.elements['config/server/listen']
-      @config.elements['config/server'].add(Element.new('listen'))
-    end
-
-    @config.elements.each('config/server/listen') {|element|
-      if !element.attributes['port']
-        element.attributes['port'] = '6667'
-      end
-
-      if !element.attributes['bind']
-        element.attributes['bind'] = '0.0.0.0'
-      end
-
-      if !element.attributes['ssl'] || (element.attributes['ssl'] != 'enabled' && element.attributes['ssl'] != 'disabled' && element.attributes['ssl'] != 'promiscuous')
-        element.attributes['ssl'] = 'disabled'
-      end
-
-      if element.attributes['password'] && element.attributes['password'].match(/:/)
-        raise 'Password CANNOT contain :'
-      end
-    }
-=end
+  def config= (conf)
+    @config = conf
 
     IRC.debug 'Loading modules.'
 
-    @config.xpath('config/modules/module').each {|element|
-      if !element['path']
-        element['path'] = 'failirc/server/modules'
-      end
-
-      self.loadModule element['name'], element['path']
+    @config.select('/modules/*').each {|mod|
+      self.loadModule(mod['name'].value, (mod['path'].value rescue 'failirc/server/modules'))
     }
 
     IRC.debug 'Finished loading modules.'

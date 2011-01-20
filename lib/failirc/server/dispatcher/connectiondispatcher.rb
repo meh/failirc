@@ -35,7 +35,6 @@ require 'failirc/sslutils'
 require 'failirc/server/incoming'
 
 require 'failirc/server/dispatcher/connections'
-require 'failirc/server/dispatcher/things'
 require 'failirc/server/dispatcher/data'
 
 module IRC; class Server; class Dispatcher
@@ -61,20 +60,20 @@ class ConnectionDispatcher
     @pipes.last.write 'x'
   end
 
-  def listen (listen, options)
-    server  = TCPServer.new(options[:bind], options[:port])
+  def listen (options)
+    server  = TCPServer.new(options['bind'], options['port'])
     context = nil
 
-    if options[:ssl] != 'disabled'
-      context = SSLUtils::context(options[:ssl_cert], options[:ssl_key])
+    if options['ssl']
+      context = SSLUtils::context(options['ssl']['cert'], options['ssl']['key'])
     end
 
-    @connections.listening.push(Connections::Server.new(server, listen, context))
+    @connections.listening.push(Connections::Server.new(server, options, context))
     wakeup
   end
 
   def do
-    sockets = @connections.things.sockets
+    sockets = @connections.sockets
 
     begin
       reading, writing, erroring = IO::select(([@pipes.first] + sockets + @connections.listening.map {|server| server.socket}), (@output.empty? ? nil : sockets))
@@ -117,15 +116,6 @@ class ConnectionDispatcher
 
         thing.data.quitting = true
 
-        case thing
-          when Client
-            thing.channels.each_value {|channel|
-              channel.users.delete(thing.nick)
-            }
-
-          when Server
-        end
-
         @input.delete(thing)
         @output.delete(thing)
 
@@ -141,7 +131,7 @@ class ConnectionDispatcher
       end
     }
 
-    @connections.things.sockets.each {|socket|
+    @connections.sockets.each {|socket|
       if socket.closed?
         self.server.kill socket
       end
@@ -169,19 +159,19 @@ class ConnectionDispatcher
 
     Thread.new {
       begin
-        if server.config['ssl'] == 'enabled'
+        if server.ssl?
           ssl = OpenSSL::SSL::SSLSocket.new socket, server.context
 
-          timeout self.server.config.xpath('config/server/timeout').first.text.to_i do
+          timeout((self.server.config['server']['timeout'].value.to_i rescue 15)) do
             ssl.accept
           end
 
           socket = ssl
         end
 
-        @connections.things[socket] = Incoming.new(self.server, socket, server.config)
+        @connections << Incoming.new(self.server, socket, server.options)
 
-        self.server.fire(:connection, @connections.things[socket])
+        self.server.fire(:connection, @connections.thing(socket))
       rescue OpenSSL::SSL::SSLError, Timeout::Error
         socket.write_nonblock "This is a SSL connection, faggot.\r\n" rescue nil
         socket.close

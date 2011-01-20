@@ -98,7 +98,7 @@ class Events
     end
   end
 
-  def dispatch (chain, thing, string)
+  def dispatch (chain=:input, thing, string)
     return unless thing
 
     current = event(chain, string).on(thing, string)

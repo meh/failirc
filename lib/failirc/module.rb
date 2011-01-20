@@ -97,7 +97,7 @@ class Module
 
   def on (what, priority=0, &block)
     if @into
-      (@events[@into][what] ||= []) << Callback.new(block, priority)
+      (@events[@into][@aliases[@into][what] || what] ||= []) << Callback.new(block, priority)
     else
       observe(what, priority, &block)
     end
