@@ -33,20 +33,20 @@ module IRC
 class Server
   extend Forwardable
 
-  attr_reader    :created_on, :dispatcher, :modules, :config, :data
+  attr_reader    :created_on, :dispatcher, :modules, :options, :data
   def_delegators :@dispatcher, :dispatch, :register, :fire, :observe, :connections
 
-  def initialize (config)
+  def initialize (options)
     @modules    = Modules.new
     @data       = OpenStruct.new
     @created_on = Time.now
     @dispatcher = Dispatcher.new(self)
 
-    self.config = config
+    self.options = options
   end
 
   def host
-    @config['server']['host'].value rescue 'localhost'
+    @options[:server][:host] || 'localhost'
   end
 
   def ip
@@ -58,35 +58,42 @@ class Server
   end
 
   def name
-    @config['server']['name'].value rescue 'failirc'
+    @options[:server][:name] || 'failirc'
+  end
+
+  def module (name=nil, path=nil, &block)
+    if !block
+      return if @modules[name.downcase] && !reload
+  
+      begin 
+        load "#{path}/#{name.downcase}.rb"
+  
+        if Module.get.name.downcase == name.downcase
+          (@modules[name.downcase] = Module.get).owner = self
+          @dispatcher.hook(Module.get)
+
+          Module.get.define_singleton_method :server do @owner end
+  
+          Module.get.options = @options[:modules].find {|mod|
+            mod[:name].downcase == name.downcase
+          }
+  
+          IRC.debug "Loaded `#{name}`."
+        else
+          raise RuntimeError.new("Module #{name} not found.")
+        end
+      rescue Exception => e
+        IRC.debug "Failed to load `#{name}`."
+        IRC.debug e
+      end
+    else
+      name ||= "module #{rand}"
+
+      @modules[name.downcase] = Module.define(name || "module #{rand}", 1, self, &block)
+    end
   end
 
   def loadModule (name, path=nil, reload=false)
-    return if @modules[name.downcase] && !reload
-
-    begin 
-      if path
-        load "#{path}/#{name}.rb"
-      else
-        require "#{name}"
-      end
-
-      if Module.get.name.downcase == name.downcase
-        (@modules[name.downcase] = Module.get).owner = self
-        @dispatcher.hook(Module.get)
-
-        Module.get.config = @config.select('/modules/*').find {|mod|
-          mod['name'].value.downcase == name.downcase
-        }.transform
-
-        IRC.debug "Loaded `#{name}`."
-      else
-        raise RuntimeError.new("Module #{name} not found.")
-      end
-    rescue Exception => e
-      IRC.debug "Failed to load `#{name}`."
-      IRC.debug e
-    end
   end
 
   def start
@@ -94,10 +101,10 @@ class Server
 
     @started = true
 
-    @config.select('/server/listen/*').each {|listen|
-      self.listen({
+    @options[:server][:listen].each {|listen|
+      self.listen(HashWithIndifferentAccess.new({
         'bind' => '0.0.0.0'
-      }.merge(listen.transform))
+      }.merge(listen)))
     }
 
     self.fire(:start, self)
@@ -166,13 +173,13 @@ class Server
   def rehash
   end
 
-  def config= (conf)
-    @config = conf
+  def options= (data)
+    (@options ||= HashWithIndifferentAccess.new).merge!(HashWithIndifferentAccess.new(data))
 
     IRC.debug 'Loading modules.'
 
-    @config.select('/modules/*').each {|mod|
-      self.loadModule(mod['name'].value, (mod['path'].value rescue 'failirc/server/modules'))
+    @options[:modules].each {|mod|
+      self.module(mod[:name], (mod[:path] || 'failirc/server/modules'))
     }
 
     IRC.debug 'Finished loading modules.'

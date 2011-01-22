@@ -26,18 +26,17 @@ module IRC
 class Module
   def self.get; @@last; end
 
-  attr_accessor :owner, :config
+  attr_accessor :owner, :options
   attr_reader   :name, :version, :events, :custom
 
-  def self.define (name, version, owner=nil, &block)
-    @@last = Module.new(name, version, &block)
-
-    @@last.owner = owner if owner
+  def self.define (name=nil, version=nil, owner=nil, &block)
+    @@last       = Module.new(name, version, owner, &block)
   end
 
-  def initialize (name, version, &block)
+  def initialize (name=nil, version=nil, owner=nil, &block)
     @name    = name
     @version = version
+    @owner   = owner
 
     @aliases = {
       :input  => {},

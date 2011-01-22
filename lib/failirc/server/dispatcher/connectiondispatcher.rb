@@ -162,7 +162,7 @@ class ConnectionDispatcher
         if server.ssl?
           ssl = OpenSSL::SSL::SSLSocket.new socket, server.context
 
-          timeout((self.server.config['server']['timeout'].value.to_i rescue 15)) do
+          timeout((self.server.options[:server][:timeout] || 15).to_i) do
             ssl.accept
           end
 
@@ -223,7 +223,7 @@ class ConnectionDispatcher
       Thread.new {
         begin
           if string = @input.pop(socket)
-            server.dispatcher.dispatch(:input, @connections.thing(socket), string)
+            server.dispatcher.dispatch :input, @connections.thing(socket), string
           end
         rescue Exception => e
           IRC.debug e

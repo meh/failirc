@@ -1,5 +1,4 @@
-#! /usr/bin/env ruby
-# failirc, a fail IRC server.
+# failirc, a fail IRC library.
 #
 # Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
 #
@@ -18,42 +17,34 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'failirc/server'
-require 'getoptlong'
+require 'failirc/module'
 
-args = GetoptLong.new(
-  ['--version', '-v', GetoptLong::NO_ARGUMENT],
-  ['--verbose', '-V', GetoptLong::NO_ARGUMENT],
-  ['--config', '-f', GetoptLong::REQUIRED_ARGUMENT]
-)
+module IRC; class Server
 
-options = {
-  :verbose => false,
-  :config  => '/etc/failircd.conf',
-}
+Module.define('firewall', '0.0.1') {
+  on start do
+    @log = options[:file] ? File.open(options[:file]) : $stdout
+  end
 
-args.each {|option, value|
-  case option
-    when '--version'
-      puts "Fail IRCd #{IRC::VERSION}"
-      exit 0
+  on stop do
+    @log.close
+  end
 
-    when '--verbose'
-      options[:verbose] = true
+  on log do |string|
+    @log.puts "[#{Time.now}] #{string}"
+    @log.flush
+  end
 
-    when '--config'
-      options[:config] = value
+  def dispatch (event, thing, string)
+    server.fire :log, "#{thing.inspect} #{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{string.inspect}"
+  end
+
+  input  { before -1234567890, &method(:dispatch) }
+  output { after   1234567890, &method(:dispatch) }
+
+  on killed do |thing, message|
+    server.fire :log, "#{thing.inspect} KILL :#{message}"
   end
 }
 
-ircd = IRC::Server.new(YAML.parse_file(options[:config]).transform)
-
-def stop (ircd)
-  ircd.stop
-  Process.exit!(0)
-end
-
-trap('INT') { stop ircd }
-trap('KILL') { stop ircd }
-
-ircd.start
+end; end

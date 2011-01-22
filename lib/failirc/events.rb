@@ -64,7 +64,7 @@ class Events
 
   def event (chain, what)
     if what.is_a?(Symbol)
-      Event.new(self, chain, ((@events[chain][what] || []) + @hooks.map {|hook| hook.events[chain][what]}).flatten.compact)
+      Event.new(self, chain, ((@events[chain][what] || []) + @hooks.map {|hook| hook.events[chain][what]}).flatten.compact, [what])
     else
       callbacks = {}
 
