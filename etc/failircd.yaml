@@ -45,3 +45,5 @@ modules:
 
   - name:    autojoin
     channel: "#lol"
+
+  - name: netlog
