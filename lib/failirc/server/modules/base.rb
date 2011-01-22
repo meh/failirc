@@ -29,8 +29,6 @@ require 'failirc/responses'
 module IRC; class Server
 
 Module.define('base', '0.0.1') {
-  Incoming = IRC::Server::Incoming
-
   module Flags
     Groups = {
       :can_change_channel_modes => [
