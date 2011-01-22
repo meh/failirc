@@ -890,7 +890,7 @@ Module.define('base', '0.0.1') {
   
         @clients[client.nick] = (server.connections << client)
   
-        server.fire(:registered, client)
+        server.fire :registered, client
 
         client.send :numeric, RPL_WELCOME, client
         client.send :numeric, RPL_HOSTEDBY, client
