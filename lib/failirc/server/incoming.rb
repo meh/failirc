@@ -1,7 +1,7 @@
 #--
 # failirc, a fail IRC library.
 #
-# Copyleft meh. [http://meh.doesntexist.org | meh.ffff@gmail.com]
+# Copyleft meh. [http://meh.doesntexist.org | meh@paranoici.org]
 #
 # This file is part of failirc.
 #
@@ -66,11 +66,15 @@ class Incoming
 
   def numeric (response, value=nil)
     begin
-      raw ":#{server.host} #{'%03d' % response[:code]} #{self} #{response[:text].interpolate(binding)}"
+      raw ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
     rescue Exception => e
       IRC.debug response[:text]
       raise e
     end
+  end
+
+  def identifier
+    'faggot'
   end
 
   def to_s

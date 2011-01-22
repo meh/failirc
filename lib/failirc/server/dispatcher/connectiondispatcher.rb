@@ -80,7 +80,7 @@ class ConnectionDispatcher
     rescue; ensure
       clean
     end
-    
+
     if reading && !reading.empty?
       reading.each {|socket|
         if socket == @pipes.first
@@ -112,7 +112,7 @@ class ConnectionDispatcher
       if output.first == :EOC
         output.shift
 
-        self.server.fire(:killed, thing, output.shift)
+        server.fire :killed, thing, output.shift
 
         thing.data.quitting = true
 
@@ -133,7 +133,7 @@ class ConnectionDispatcher
 
     @connections.sockets.each {|socket|
       if socket.closed?
-        self.server.kill socket
+        server.kill socket
       end
     }
 
@@ -230,6 +230,8 @@ class ConnectionDispatcher
         end
 
         @handling.delete(socket)
+
+        wakeup unless @input.empty?
       }
     }
   end

@@ -107,6 +107,10 @@ Module.define('base', '0.0.1') {
       true
     end
 
+    def identifier
+      host
+    end
+
     def to_s
       host
     end
@@ -124,7 +128,10 @@ Module.define('base', '0.0.1') {
       :z => :ssl,
   
       :N => [:o, :netadmin],
-      :o => [:operator, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes]
+      :o => [:operator, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
+
+      :netadmin => :N,
+      :operator => :o,
     }
 
     attr_reader    :channels, :mask, :connected_on
@@ -151,6 +158,10 @@ Module.define('base', '0.0.1') {
       end
   
       @connected_on = Time.now
+    end
+
+    def identifier
+      nick
     end
   
     def to_s
