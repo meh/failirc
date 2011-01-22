@@ -73,7 +73,7 @@ class Server
           @dispatcher.hook(Module.get)
 
           Module.get.define_singleton_method :server do @owner end
-  
+
           Module.get.options = @options[:modules].find {|mod|
             mod[:name].downcase == name.downcase
           }

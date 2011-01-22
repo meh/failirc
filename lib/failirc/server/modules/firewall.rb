@@ -36,7 +36,7 @@ Module.define('firewall', '0.0.1') {
   end
 
   def dispatch (event, thing, string)
-    server.fire :log, "#{thing.inspect} #{(event.chain == :input) ? ' *IN*' : '*OUT*'} #{string.inspect}"
+    server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing.inspect} #{string.inspect}"
   end
 
   input  { before -1234567890, &method(:dispatch) }

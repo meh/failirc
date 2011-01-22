@@ -191,7 +191,11 @@ class ConnectionDispatcher
   def read (socket)
     begin
       thing = @connections.thing(socket)
-      input = socket.read_nonblock 2048
+      input = ''
+      
+      begin
+        loop do input << socket.read_nonblock(2048); end
+      rescue Errno::EAGAIN, IO::WaitReadable; end
 
       raise Errno::EPIPE if !input || input.empty?
 
@@ -208,7 +212,6 @@ class ConnectionDispatcher
       server.kill thing, 'Ping timeout', true
     rescue Errno::EHOSTUNREACH
       server.kill thing, 'No route to host', true
-    rescue Errno::EAGAIN, IO::WaitReadable
     rescue Exception => e
       IRC.debug e
     end

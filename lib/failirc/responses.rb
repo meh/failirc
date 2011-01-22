@@ -63,7 +63,7 @@ RPL_NOWAWAY = {
 
 RPL_WHOISUSER = {
   :code => 311,
-  :text => '#{value.nick} #{value.user} #{value.host} * :#{value.realName}'
+  :text => '#{value.nick} #{value.user} #{value.host} * :#{value.real_name}'
 }
 
 RPL_WHOISMODES = {
@@ -88,7 +88,7 @@ RPL_WHOISOPERATOR = {
 
 RPL_WHOISIDLE = {
   :code => 317,
-  :text => '#{value.nick} #{Time.now.tv_sec - value.data[:last_action].on.tv_sec} #{value.connectedOn.tv_sec} :seconds idle, signon time'
+  :text => '#{value.nick} #{Time.now.tv_sec - value.data.last_action.on.tv_sec} #{value.connected_on.tv_sec} :seconds idle, signon time'
 }
 
 RPL_ENDOFWHOIS = {
@@ -109,7 +109,7 @@ RPL_WHOISCHANNELS = {
 
 RPL_WHOWASUSER = {
   :code => 314,
-  :text => '#{value.nick} #{value.user} #{value.host} * :#{value.realName}'
+  :text => '#{value.nick} #{value.user} #{value.host} * :#{value.real_name}'
 }
 
 # When replying to a WHOWAS message, a server must use the replies RPL_WHOWASUSER, RPL_WHOISSERVER or ERR_WASNOSUCHNICK for each nickname in the presented list.
@@ -175,7 +175,7 @@ RPL_VERSION = {
 
 RPL_WHOREPLY = {
   :code => 352,
-  :text => %q{#{value[:channel].name} #{value[:user][:user]} #{value[:user][:host]} #{value[:server]} #{value[:user][:nick]} #{'H' || 'G'}#{value[:user][:llevel]} :#{value[:hops]} #{value[:user][:realName]}}
+  :text => %q{#{value[:channel].name} #{value[:user][:user]} #{value[:user][:host]} #{value[:server]} #{value[:user][:nick]} #{'H' || 'G'}#{value[:user][:llevel]} :#{value[:hops]} #{value[:user][:real_name]}}
 }
 
 # The RPL_WHOREPLY and RPL_ENDOFWHO pair are used to answer a WHO message.

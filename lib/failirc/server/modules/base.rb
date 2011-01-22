@@ -52,10 +52,14 @@ Module.define('base', '0.0.1') {
   
       :can_change_client_modes => [
         :can_change_client_extended_modes,
+      ],
+
+      :channel_moderation => [
+        :can_invite, :can_kick, :can_change_topic, :can_change_channel_modes
       ]
     }
   
-    def set_flags (type, value, inherited=false, force=false)
+    def set_flag (type, value, inherited=false, force=false)
       if !inherited
         if value == false
           self.modes.delete(type)
@@ -63,16 +67,16 @@ Module.define('base', '0.0.1') {
           self.modes[type] = value
         end
       end
-  
-      return unless modes = (Modes[type] || Groups[type])
+
+      return unless modes = (self.class::Modes[type] || Groups[type])
       
       if !modes.is_a?(Array)
         modes = [modes]
       end
   
       modes.each {|mode|
-        if (Modes[mode] || Groups[mode]) && !self.modes.has_key?(mode)
-          set_flags mode, value, !force
+        if (self.class::Modes[mode] || Groups[mode]) && !self.modes.has_key?(mode)
+          set_flag mode, value, !force
         else
           if value == false
             if !Modes.has_key?(mode)
@@ -128,7 +132,7 @@ Module.define('base', '0.0.1') {
       :z => :ssl,
   
       :N => [:o, :netadmin],
-      :o => [:operator, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :can_change_channel_modes, :can_change_user_modes, :can_change_client_modes],
+      :o => [:operator, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :channel_moderation, :can_change_user_modes, :can_change_client_modes],
 
       :netadmin => :N,
       :operator => :o,
@@ -158,6 +162,14 @@ Module.define('base', '0.0.1') {
       end
   
       @connected_on = Time.now
+    end
+
+    def is_on_channel? (name)
+      if name.is_a?(Channel)
+        !!name.user(self)
+      else
+        !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
+      end
     end
 
     def identifier
@@ -203,7 +215,7 @@ Module.define('base', '0.0.1') {
       :! => [:x],
       :x => [:y, :can_give_channel_admin],
       :y => [:o, :admin],
-      :o => [:h, :operator, :can_change_topic, :can_invite, :can_change_channel_modes, :can_change_user_modes],
+      :o => [:h, :operator, :channel_moderation, :can_change_user_modes],
       :h => [:v, :halfoperator, :can_kick],
       :v => [:voice, :can_talk]
     }
@@ -218,7 +230,7 @@ Module.define('base', '0.0.1') {
     }
   
     attr_reader    :client, :channel, :modes
-    def_delegators :@client, :mask, :server, :data, :nick, :user, :host, :real_name, :send
+    def_delegators :@client, :mask, :server, :data, :nick, :user, :host, :real_name, :send, :is_on_channel?
   
     def initialize (client, channel, modes=IRC::Modes.new)
       @client  = client
@@ -271,7 +283,7 @@ Module.define('base', '0.0.1') {
   
     def set_level (level, value)
       if Levels[level]
-        set_flags level, value
+        set_flag level, value
   
         if value
           modes[:level] = Levels[level]
@@ -391,6 +403,29 @@ Module.define('base', '0.0.1') {
         text.nil?
       end
     end
+
+    class Modifier
+      attr_reader :set_by, :set_on, :channel, :mask
+
+      def initialize (by, channel, mask)
+        @set_by  = by.mask.clone
+        @set_on  = Time.now
+        @channel = channel
+        @mask    = mask
+      end
+
+      def == (mask)
+        @mask == mask
+      end
+
+      def match (mask)
+        @mask.match(mask)
+      end
+
+      def to_s
+        "#{channel} #{mask} #{set_by.nick} #{set_on.tv_sec}"
+      end
+    end
   
     Modes = {
       :a => :anonymous,
@@ -414,7 +449,7 @@ Module.define('base', '0.0.1') {
       :z => :ssl_only,
     }
 
-    attr_reader    :server, :name, :type, :created_on, :modes, :topic 
+    attr_reader    :server, :name, :type, :created_on, :modes, :topic, :data
     attr_writer    :level
     def_delegators :@users, :[], :add, :delete, :empty?
   
@@ -429,6 +464,7 @@ Module.define('base', '0.0.1') {
       @users      = Users.new(self)
       @modes      = IRC::Modes.new
       @topic      = Topic.new(self)
+      @data       = OpenStruct.new
     end
   
     def type
@@ -480,9 +516,9 @@ Module.define('base', '0.0.1') {
     end
 
     def invited? (client, shallow=false)
-      return true if shallow && !channel.modes[:invite_only]
+      return true if shallow && !channel.has_flag?(:invite_only)
 
-      return true if channel.modes[:invited][client.mask]
+      return true if channel.data.invited[client.mask]
 
       modes[:invites].each {|invite|
         return true if invite.match(client.mask)
@@ -580,6 +616,8 @@ Module.define('base', '0.0.1') {
   end
 
   on start do |server|
+    server.define_singleton_method :has_flag? do |flag| true end
+
     @supported_modes = {
       :client  => 'Nzo',
       :channel => 'abcCehiIkKlLmnNoQsStuvVxyz'
@@ -940,7 +978,7 @@ Module.define('base', '0.0.1') {
         return unless nick_is_ok?(thing, nick)
   
         thing.channels.each_value {|channel|
-          if channel.modes[:no_nick_change] && !channel.user(thing).is_level_enough?('+')
+          if channel.has_flag?(:no_nick_change) && !channel.user(thing).is_level_enough?('+')
             thing.send :numeric, ERR_NONICKCHANGE, channel.name
             return
           end
@@ -999,7 +1037,7 @@ Module.define('base', '0.0.1') {
         thing.send :numeric, ERR_NEEDMOREPARAMS, :USER
       else
         thing.data.user      = user
-        thing.data.real_name = realname
+        thing.data.real_name = real_name
   
         # try to register it
         register(thing)
@@ -1098,7 +1136,7 @@ Module.define('base', '0.0.1') {
               thing.send :numeric, RPL_CHANNELMODEIS, channel
               thing.send :numeric, RPL_CHANCREATEDON, channel
             else
-              if thing.channels[name]
+              if thing.is_on_channel?(name)
                 thing = thing.channels[name].user(thing)
               end
   
@@ -1118,7 +1156,542 @@ Module.define('base', '0.0.1') {
     end
 
     observe :mode do |from, thing, request, answer=true|
+      if match = request.match(/^=(.*)$/)
+        value = match[1].strip
+  
+        if value == '?'
+          server.fire :mode=, :extended, from, thing, '?', nil, nil, nil
+        else
+          modes = value.split(/[^\\],/)
+    
+          modes.each {|mode|
+            if mode.start_with?('-')
+              type = '-'
+            else
+              type = '+'
+            end
+    
+            mode.sub!(/^[+\-]/, '')
+    
+            mode = mode.split(/=/)
+    
+            server.fire :mode=, :extended, from, thing, type, *mode
+          }
+        end
+      else
+        output = {
+          :modes  => [],
+          :values => [],
+        }
+  
+        return false unless match = request.match(/^\s*([+\-])?\s*([^ ]+)(?:\s+(.+))?$/)
+  
+        type   = match[1] || '+'
+        modes  = match[2].split(//)
+        values = (match[3] || '').strip.split(/ /)
+  
+        modes.each {|mode|
+          server.fire :mode=, :normal, from, thing, type, mode, values, output
+        }
+  
+        if from.is_a?(Client) || from.is_a?(User)
+          from = from.mask
+        end
+  
+        if thing.is_a?(Channel)
+          name = thing.name
+  
+          if thing.modes[:anonymous]
+            from = Mask.parse('anonymous!anonymous@anonymous.')
+          end
+        else
+          name = thing.nick
+        end
+  
+        if answer && (!output[:modes].empty? || !output[:values].empty?)
+          string = "#{type}#{output[:modes].join('')}"
+          
+          if !output[:values].empty?
+            string << " #{output[:values].join(' ')}"
+          end
+  
+          thing.send :raw, ":#{from} MODE #{name} #{string}"
+        end
+      end
+    end
 
+    observe :mode= do |kind, from, thing, type, mode, values, output=nil|
+      return unless kind == :normal
+
+      mode = mode.to_sym
+
+      if thing.is_a?(Channel)
+        case mode
+  
+        when :a
+          if thing.type != '&' && thing.type != '!'
+            server.fire :error, from, 'Only & and ! channels can use this mode.'
+            return
+          end
+  
+          if from.has_flag?(:can_change_anonymous_mode)
+            return if thing.check_flag?(:a) == (type == '+')
+  
+            thing.set_flag(:a, type == '+')
+            output[:modes].push(:a)
+          end
+  
+        when :b
+          if values.empty?
+            thing.modes[:bans].each {|ban|
+              from.send :numeric, RPL_BANLIST, ban
+            }
+            
+            from.send :numeric, RPL_ENDOFBANLIST, thing.name
+            return
+          end
+  
+          if from.has_flag?(:can_channel_ban)
+            mask = Mask.parse(values.shift)
+  
+            if type == '+'
+              if !thing.modes[:bans].any? {|ban| ban == mask}
+                thing.modes[:bans].push(Channel::Modifier.new(from, thing, mask))
+              end
+            else
+              result = thing.modes[:bans].delete_if {|ban|
+                ban == mask
+              }
+  
+              mask = nil unless result
+            end
+  
+            if mask
+              output[:modes].push(:b)
+              output[:values].push(mask.to_s)
+            end
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :c
+          if from.has_flag?(:can_change_nocolors_mode)
+            return if thing.has_flag?(:c) == (type == '+')
+  
+            thing.set_flag(:c, type == '+')
+  
+            output[:modes].push(:c)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :C
+          if from.has_flag?(:can_change_noctcp_mode)
+            return if thing.has_flag?(:C) == (type == '+')
+  
+            thing.set_flag(:C, type == '+')
+  
+            output[:modes].push(:C)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :e
+          if values.empty?
+            thing.modes[:exceptions].each {|exception|
+              from.send :numeric, RPL_EXCEPTIONLIST, exception
+            }
+            
+            from.send :numeric, RPL_ENDOFEXCEPTIONLIST, thing.name
+            return
+          end
+  
+          if from.has_flag?(:can_add_ban_exception)
+            mask = Mask.parse(values.shift)
+  
+            if type == '+'
+              if !thing.modes[:exceptions].any? {|exception| exception == mask}
+                thing.modes[:exceptions].push(Channel::Modifier.new(from, thing, mask))
+              end
+            else
+              result = thing.modes[:exceptions].delete_if {|exception|
+                exception == mask
+              }
+  
+              mask = nil if !result
+            end
+  
+            if mask
+              output[:modes].push(:e)
+              output[:values].push(mask.to_s)
+            end
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :h
+          if from.has_flag?(:can_give_channel_half_operator)
+            value = values.shift
+  
+            if !value || !(user = thing.users[value])
+              from.send :numeric, ERR_NOSUCHNICK, value
+              return
+            end
+  
+            return if user.has_flag?(:h, true) == (type == '+')
+  
+            user.set_level :h, (type == '+')
+  
+            output[:modes].push(:h)
+            output[:values].push(value)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :i
+          if from.has_flag?(:can_change_invite_only_mode)
+            return if thing.has_flag?(:i) == (type == '+')
+  
+            thing.set_flag :i, type == '+'
+  
+            output[:modes].push('i')
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :I
+          if values.empty?
+            thing.modes[:invites].each {|invitation|
+              from.send :numeric, RPL_INVITELIST, invitation
+            }
+            
+            from.send :numeric, RPL_ENDOFINVITELIST, thing.name
+            return
+          end
+  
+          if from.has_flag?(:can_add_invitation)
+            mask = Mask.parse(values.shift)
+  
+            if type == '+'
+              if !thing.modes[:invites].any? {|invitation| invitation == mask}
+                thing.modes[:invites].push(Channel::Modifier.new(from, thing, mask))
+              end
+            else
+              result = thing.modes[:invites].delete_if {|invitation|
+                invitation == mask
+              }
+  
+              mask = nil if !result
+            end
+  
+            if mask
+              output[:modes].push(:I)
+              output[:values].push(mask.to_s)
+            end
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :k
+          if from.has_flag?(:can_change_channel_password)
+            value = values.shift
+  
+            return if !value
+  
+            if type == '+' && (password = value)
+              thing.set_flag :k, password
+            else
+              password = thing.modes[:password]
+  
+              thing.set_flag :k, false
+            end
+  
+            if password
+              output[:modes].push(:k)
+              output[:values].push(password)
+            end
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :K
+          if from.has_flag?(:can_change_noknock_mode)
+            return if thing.has_flag?(:K) == (type == '+')
+  
+            thing.set_flag :K, type == '+'
+  
+            output[:modes].push(:K)
+             
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :l
+          if from.has_flag?(:can_change_limit_mode)
+            return if thing.has_flag?(:l) == (type == '+')
+
+            if type == '+'
+              value = values.shift
+  
+              return if !value || !value.match(/^\d+$/)
+  
+              thing.set_flag :l, value.to_i
+  
+              output[:modes].push(:l)
+              output[:values].push(value)
+            else
+              thing.set_flag :l, false
+  
+              output[:modes].push(:l)
+            end
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :L
+          if from.has_flag?(:can_change_redirect_mode)
+            return if thing.has_flag?(:L) == (type == '+')
+  
+            if type == '+'
+              value = values.shift
+  
+              return if !value || !Utils::Channel::isValid(value)
+  
+              thing.set_flag :L, value
+  
+              output[:modes].push(:L)
+              output[:values].push(value)
+            else
+              thing.set_flag :L, false
+  
+              output[:modes].push(:L)
+            end
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :m
+          if from.has_flag?(:can_change_moderated_mode)
+            return if thing.has_flag?(:m) == (type == '+')
+  
+            thing.set_flag :m, type == '+'
+  
+            output[:modes].push(:m)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :n
+          if from.has_flag?(:can_change_no_external_messages_mode)
+            return if thing.has_flag?(:n) == (type == '+')
+  
+            thing.set_flag :n, type == '+'
+  
+            output[:modes].push(:n)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :N
+          if from.has_flag?(:can_change_no_nick_change_mode)
+            return if thing.has_flag?(:N) == (type == '+')
+  
+            thing.set_flag :N, type == '+'
+  
+            output[:modes].push(:N)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :o
+          if from.has_flag?(:can_give_channel_operator)
+            value = values.shift
+  
+            if !value || !(user = thing.users[value])
+              from.send :numeric, ERR_NOSUCHNICK, value
+              return
+            end
+  
+            return if user.has_flag?(:o, true) == (type == '+')
+  
+            user.set_level :o, (type == '+')
+  
+            output[:modes].push(:o)
+            output[:values].push(value)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :p
+          if from.has_flag?(:can_change_private_mode)
+            return if thing.modes[:secret] || thing.has_flag?(:p) == (type == '+')
+  
+            thing.set_flag :p, type == '+'
+  
+            output[:modes].push(:p)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+  
+        when :Q
+          if from.has_flag?(:can_change_nokicks_mode)
+            return if thing.has_flag?(:Q) == (type == '+')
+  
+            thing.set_flag :Q, type == '+'
+  
+            output[:modes].push(:Q)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :s
+          if from.has_flag?(:can_change_secret_mode)
+            return if thing.has_flag?(:s) == (type == '+') || thing.modes[:private]
+  
+            thing.set_flag :s, type == '+'
+  
+            output[:modes].push(:s)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :S
+          if from.has_flag?(:can_change_strip_colors_mode)
+            return if thing.has_flag?(:S) == (type == '+')
+  
+            thing.set_flag :S, type == '+'
+  
+            output[:modes].push(:S)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :t
+          if from.has_flag?(:can_change_topic_mode)
+            return if thing.has_flag?(:t) == (type == '+')
+  
+            thing.set_flag :t, type == '+'
+  
+            output[:modes].push(:t)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :u
+          if from.has_flag?(:can_change_auditorium_mode)
+            return if thing.has_flag?(:u) == (type == '+')
+  
+            thing.set_flag :u, type == '+'
+  
+            output[:modes].push(:u)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :v
+          if from.has_flag?(:can_give_voice)
+            value = values.shift
+  
+            if !value || !(user = thing.users[value])
+              from.send :numeric, ERR_NOSUCHNICK, value
+              return
+            end
+  
+            return if user.has_flag?(:v, true) == (type == '+')
+  
+            user.set_level :v, (type == '+')
+  
+            output[:modes].push(:v)
+            output[:values].push(value)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :V
+          if from.has_flag?(:can_change_noinvites_mode)
+            return if thing.has_flag?(:V) == (type == '+')
+  
+            thing.set_flag :V, type == '+'
+  
+            output[:modes].push('V')
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :x
+          if from.has_flag?(:can_give_channel_owner)
+            value = values.shift
+  
+            if !value || !(user = thing.users[value])
+              from.send :numeric, ERR_NOSUCHNICK, value
+              return
+            end
+  
+            return if user.has_flag?(:x, true) == (type == '+')
+  
+            user.set_level :x, (type == '+')
+  
+            output[:modes].push(:x)
+            output[:values].push(value)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :y
+          if from.has_flag?(:can_give_channel_admin)
+            value = values.shift
+  
+            if !value || !(user = thing.users[value])
+              from.send :numeric, ERR_NOSUCHNICK, value
+              return
+            end
+  
+            return if user.has_flag?(:y, true) == (type == '+')
+  
+            user.set_level :y, (type == '+')
+  
+            output[:modes].push(:y)
+            output[:values].push(value)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+  
+        when :z
+          if from.has_flag?(:can_change_ssl_mode)
+            return if thing.has_flag?(:z) == (type == '+')
+  
+            if type == '+'
+              ok = true
+  
+              thing.users.each_value {|user|
+                if !user.has_flag?(:ssl)
+                  ok = false
+                  break
+                end
+              }
+  
+              if ok
+                thing.set_flag :z, true
+              else
+                from.send :numeric, ERR_ALLMUSTUSESSL
+                return
+              end
+            else
+              thing.set_flag :z, false
+            end
+  
+            output[:modes].push(:z)
+          else
+            from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
+          end
+        end
+      elsif thing.is_a?(Client)
+      end
+    end
+
+    observe :mode= do |kind, from, thing, type, mode, values, output=nil|
+      return unless kind == :extended
     end
 
     on encoding do |thing, string|
@@ -1173,7 +1746,7 @@ Module.define('base', '0.0.1') {
       channels.each {|channel|
         channel.strip!
   
-        if @channels[channel] && @channels[channel].modes[:password]
+        if @channels[channel] && @channels[channel].has_flag?(:password)
           password = passwords.shift
         else
           password = nil
@@ -1194,7 +1767,7 @@ Module.define('base', '0.0.1') {
           return
         end
 
-        return if thing.channels[channel]
+        return if thing.is_on_channel?(channel)
 
         if @channels[channel]
           channel = @channels[channel]
@@ -1207,11 +1780,11 @@ Module.define('base', '0.0.1') {
           channel.modes[:invited]    = {}
         end
 
-        if channel.modes[:limit]
+        if channel.has_flag?(:limit)
           if channel.users.length >= channel.modes[:limit]
             thing.send :numeric, ERR_CHANNELISFULL, channel.name
 
-            if channel.modes[:redirect]
+            if channel.has_flag?(:redirect)
               server.fire :join, thing, channel.modes[:redirect]
             end
 
@@ -1219,17 +1792,17 @@ Module.define('base', '0.0.1') {
           end
         end
 
-        if channel.modes[:ssl_only] && !thing.modes[:ssl]
+        if channel.has_flag?(:ssl_only) && !thing.has_flag?(:ssl)
           thing.send :numeric, ERR_SSLREQUIRED, channel.name
           return
         end
   
-        if channel.modes[:password] && password != channel.modes[:password]
+        if channel.has_flag?(:password) && password != channel.modes[:password]
           thing.send :numeric, ERR_BADCHANNELKEY, channel.name
           return
         end
     
-        if channel.modes[:invite_only] && !channel.invited?(thing, true)
+        if channel.has_flag?(:invite_only) && !channel.invited?(thing, true)
           thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
           return
         end
@@ -1248,14 +1821,14 @@ Module.define('base', '0.0.1') {
       user  = channel.add(thing)
   
       if empty
-        server.fire :mode, server, channel, "+o #{user.nick}", true
+        server.fire :mode, server, channel, "+o #{user.nick}", false
       else
         channel.modes[:invited].delete(user.mask)
       end
   
       thing.channels.add(channel)
   
-      if user.channel.modes[:anonymous]
+      if user.channel.has_flag?(:anonymous)
         mask = Mask.parse('anonymous!anonymous@anonymous.')
       else
         mask = user.mask
@@ -1271,10 +1844,10 @@ Module.define('base', '0.0.1') {
     end
 
     on part do |thing, string|
-      whole, channels, reason = string.match(/PART\s+(.+?)(?:\s+:(.*))?$/i).to_a
+      whole, channels, message = string.match(/PART\s+(.+?)(?:\s+:(.*))?$/i).to_a
   
       if !whole
-        thing.send :numeric, ERR_NEEDMOREPARAMS, 'PART'
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :PART
         return
       end
   
@@ -1283,16 +1856,16 @@ Module.define('base', '0.0.1') {
       }
     end
 
-    observe :part do |thing, channel, message=nil|
-      if !channel.channel_type
-        channel = "##{channel}"
+    observe :part do |thing, name, message=nil|
+      if !name.channel_type
+        name = "##{name}"
       end
 
-      channel = @channels[channel]
+      channel = @channels[name]
 
       if !channel
         thing.send :numeric, ERR_NOSUCHCHANNEL, name
-      elsif !thing.channels[name]
+      elsif !thing.is_on_channel?(name)
         thing.send :numeric, ERR_NOTONCHANNEL, name
       else
         server.fire :parted, channel.user(thing), message
@@ -1301,10 +1874,10 @@ Module.define('base', '0.0.1') {
 
     observe :parted do |user, message|
       return if user.client.data.quitting
-  
+
       text = (options[:messages][:part] || '#{message}').interpolate(binding)
   
-      if user.channel.modes[:anonymous]
+      if user.channel.has_flag?(:anonymous)
         mask = Mask.parse('anonymous!anonymous@anonymous.')
       else
         mask = user.mask
@@ -1362,7 +1935,7 @@ Module.define('base', '0.0.1') {
       end
   
       if from.has_flag?(:can_kick)
-        if channel.modes[:no_kicks]
+        if channel.has_flag?(:no_kicks)
           from.send :numeric, ERR_NOKICKS
         else
           server.fire :kicked, from, user, message
@@ -1423,7 +1996,7 @@ Module.define('base', '0.0.1') {
           return
         end
   
-        if @channels[channel].modes[:no_invites]
+        if @channels[channel].has_flag?(:no_invites)
           thing.send :numeric, ERR_NOINVITE, channel
           return
         end
@@ -1431,7 +2004,7 @@ Module.define('base', '0.0.1') {
   
       client = @clients[nick]
   
-      if client.modes[:away]
+      if client.has_flag?(:away)
         thing.send :numeric, RPL_AWAY, client
       end
   
@@ -1465,11 +2038,11 @@ Module.define('base', '0.0.1') {
       if channel = thing.channels[channel.strip]
         thing = channel.user(thing)
 
-        if channel.modes[:anonymous]
+        if channel.has_flag?(:anonymous)
           users = 'anonymous'
         else
           users = channel.users.map {|(_, user)|
-            if channel.modes[:auditorium] && !Utils::User::isLevelEnough(user, '%') && !Utils::checkFlag(thing, :operator)
+            if channel.has_flag?(:auditorium) && !user.is_level_enough?('%') && !thing.has_flag?(:operator)
               if user.modes[:level]
                 user.to_s
               end
@@ -1488,6 +2061,257 @@ Module.define('base', '0.0.1') {
       thing.send :numeric, RPL_ENDOFNAMES, channel
     end
 
+    on knock do |thing, string|
+      whole, channel, message = string.match(/KNOCK\s+(.+?)(?:\s+:(.*))?$/i).to_a
+  
+      if !whole
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :KNOCK
+        return
+      end
+  
+      if !@channels[channel]
+        thing.send :numeric, ERR_NOKNOCK, { :channel => channel, :reason => 'Channel does not exist!' }
+        return
+      end
+  
+      channel = @channels[channel]
+  
+      if !channel.has_flag?(:invite_only)
+        thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'Channel is not invite only!' }
+        return
+      end
+  
+      if channel.has_flag?(:no_knock)
+        thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'No knocks are allowed! (+K)' }
+        return
+      end
+  
+      server.fire :send, :notice, server, channel.level(?@), "[Knock] by #{thing.mask} (#{message ? message : 'no reason specified'})"
+      server.fire :send, :notice, server, thing, "Knocked on #{channel.name}"
+    end
+
+    on topic do |thing, string|
+      whole, channel, topic = string.match(/TOPIC\s+(.*?)(?:\s+:(.*))?$/i)
+  
+      if !whole
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :TOPIC
+        return
+      end
+  
+      server.fire :topic, ref{:thing}, channel.strip, topic
+    end
+
+    observe :topic do |from, channel, topic|
+      if !@channels[channel] || (@channels[channel].has_flag?(:secret) && !from.is_on_channel?(channel))
+        from.send :numeric, ERR_NOSUCHCHANNEL, channel
+        return
+      end
+  
+      channel = @channels[channel]
+  
+      if !topic
+        if !channel.topic.nil?
+          from.send :numeric, RPL_TOPIC, channel.topic
+          from.send :numeric, RPL_TOPICSETON, channel.topic
+        else
+          from.send :numeric, RPL_NOTOPIC, channel
+        end
+
+        return
+      end
+      
+      if !from.has_flag?(:can_change_topic) && !from.is_on_channel?(channel) && !from.has_flag?(:operator)
+        from.send :numeric, ERR_NOTONCHANNEL, channel
+        return
+      end
+ 
+      if channel.has_flag?(:topic_lock) && !channel.user(from).has_flag?(:can_change_topic)
+        from.send :numeric, ERR_CHANOPRIVSNEEDED, channel
+      else
+        if channel.has_flag?(:anonymous)
+          channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), topic
+        else
+          channel.topic = from, topic
+        end
+        
+        channel.send :raw, ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic}"
+      end
+    end
+
+    on list do |thing, string|
+      match, channels = string.match(/LIST(?:\s+(.*))?$/).to_a
+  
+      channels = (channels || '').strip.split(/,/)
+  
+      thing.send :numeric, RPL_LISTSTART
+  
+      if channels.empty?
+        channels = @channels
+      else
+        tmp = Channels.new(thing.server)
+  
+        channels.each {|channel|
+          tmp.add(@channels[channel]) if @channels[channel]
+        }
+  
+        channels = tmp
+      end
+  
+      channels.each_value {|channel|
+        if !(channel.has_flag?(:secret) || channel.has_flag?(:private)) || thing.is_on_channel?(channel) || thing.has_flag?(:can_see_secrets)
+          thing.send :numeric, RPL_LIST, {
+            :name  => channel.name,
+            :users => channel.has_flag?(:anonymous) ? 1 : channel.users.length,
+            :modes => channel.modes.to_s.empty? ? '' : "[#{channel.modes.to_s}] ",
+            :topic => channel.topic.text,
+          }
+        end
+      }
+  
+      thing.send :numeric, RPL_LISTEND
+    end
+
+    on who do |thing, string|
+      whole, name, operator = string.match(/WHO\s+(.*?)(?:\s+(o))?$/i).to_a
+  
+      if !whole
+        thing.send :numeric, RPL_ENDOFWHO
+        return
+      end
+
+      name ||= '*'
+
+      if name.is_valid_channel? && (channel = @channels[name])
+        if channel.has_flag?(:anonymous)
+          thing.send :numeric, RPL_WHOREPLY, {
+            :channel => channel,
+
+            :user => {
+              :nick      => 'anonymous',
+              :user      => 'anonymous',
+              :host      => 'anonymous.',
+              :real_name => 'anonymous',
+            },
+
+            :server => server.host,
+
+            :hops => 0
+          }
+        else
+          channel.users.each_value {|user|
+            thing.send :numeric, RPL_WHOREPLY, {
+              :channel => channel,
+
+              :user => {
+                :nick      => user.nick,
+                :user      => user.user,
+                :host      => user.host,
+                :real_name => user.real_name,
+
+                :level => user.modes[:level],
+              },
+
+              :server => user.server.host,
+
+              :hops => 0
+            }
+          }
+        end
+      elsif client = @clients[name]
+         thing.send :numeric, RPL_WHOREPLY, {
+          :channel => '*',
+
+          :user => {
+            :nick      => client.nick,
+            :user      => client.user,
+            :host      => client.host,
+            :real_name => client.real_name,
+          },
+
+          :server => user.server.host,
+
+          :hops => 0
+        }
+      end
+
+      thing.send :numeric, RPL_ENDOFWHO, name
+    end
+
+    on whois do |thing, string|
+      matches = string.match(/WHOIS\s+(.+?)(?:\s+(.+?))?$/i)
+  
+      if !matches
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :WHOIS
+        return
+      end
+  
+      names  = (matches[2] || matches[1]).strip.split(/,/)
+      target = matches[2] ? matches[1].strip : nil
+  
+      names.each {|name|
+        server.fire :whois, thing, name, target
+      }
+    end
+
+    observe :whois do |thing, name, target=nil|
+      unless client = @clients[name]
+        thing.send :numeric, ERR_NOSUCHNICK, name
+        return
+      end
+  
+      thing.send :numeric, RPL_WHOISUSER, client
+  
+      if thing.has_flag?(:operator)
+        thing.send :numeric, RPL_WHOISMODES, client
+        thing.send :numeric, RPL_WHOISCONNECTING, client
+      end
+  
+      if !client.channels.empty?
+        thing.send :numeric, RPL_WHOISCHANNELS, {
+          :nick     => client.nick,
+          :channels => client.channels.map {|(name, channel)|
+            if ((!channel.has_flag?(:secret) && !channel.has_flag?(:private)) || thing.is_on_channel?(name)) && !channel.modes[:anonymous]
+              "#{channel.user(client).modes[:level]}#{channel.name}"
+            end
+          }.compact.join(' ')
+        }
+      end
+  
+      thing.send :numeric, RPL_WHOISSERVER, client
+  
+      if client.has_flag?(:ssl)
+        thing.send :numeric, RPL_USINGSSL, client
+      end
+  
+      if client.has_flag?(:away)
+        thing.send :numeric, RPL_AWAY, client
+      end
+  
+      if client.has_flag?(:message)
+        thing.send :numeric, RPL_WHOISOPERATOR, client
+      end
+  
+      thing.send :numeric, RPL_WHOISIDLE, client
+      thing.send :numeric, RPL_ENDOFWHOIS, client
+    end
+
+    on whowas do |thing, string|
+      thing.send :raw, 'PHONE'
+    end
+
+    on ison do |thing, string|
+      whole, who = string.match(/ISON\s+(.+)$/i).to_a
+  
+      if !whole
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :ISON
+        return
+      end
+  
+      thing.send :numeric, RPL_ISON, who.split(/\s+/).map {|nick|
+        nick if @clients[nick]
+      }.compact.join(' ')
+    end
+
     observe :send do |kind=:message, from, to, message|
       if from.is_a?(User)
         from = from.client
@@ -1497,9 +2321,9 @@ Module.define('base', '0.0.1') {
         server.fire :ctcp, kind, ref{:from}, ref{:to}, match[1], match[3], level
       else
         if kind == :notice
-          from.server.fire :notice, :input, ref{:from}, ref{:to}, message, level
+          server.fire :notice, :input, ref{:from}, ref{:to}, message, level
         elsif kind == :message
-           from.server.fire :message, :input, ref{:from}, ref{:to}, message
+           server.fire :message, :input, ref{:from}, ref{:to}, message
         end
       end
     end
@@ -1531,7 +2355,7 @@ Module.define('base', '0.0.1') {
   
         thing = channel.user(thing) || thing
   
-        if channel.modes[:moderated] && thing.has_flag?(:can_talk)
+        if channel.has_flag?(:moderated) && thing.has_flag?(:can_talk)
           thing.send :numeric, ERR_YOUNEEDVOICE, channel.name
           return
         end
@@ -1544,7 +2368,7 @@ Module.define('base', '0.0.1') {
         if thing.is_a?(User)
           server.fire :send, thing, channel.level(level), message
         else
-          if @channels[receiver].modes[:no_external_messages]
+          if @channels[receiver].has_flag?(:no_external_messages)
             thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
           else
             server.fire :send, thing, channel.level(level), message
@@ -1566,11 +2390,11 @@ Module.define('base', '0.0.1') {
 
       case to.value
         when Channel
-          if to.value.modes[:strip_colors]
+          if to.value.has_flag?(:strip_colors)
             message.gsub!(/\x03((\d{1,2})?(,\d{1,2})?)?/, '')
           end
 
-          if to.value.modes[:no_colors] && message.include("\x03")
+          if to.value.has_flag?(:no_colors) && message.include("\x03")
             from.value.send :numeric, ERR_NOCOLORS, to.value.name
             return
           end
@@ -1595,7 +2419,7 @@ Module.define('base', '0.0.1') {
         when User
           name = to.value.channel.name
 
-          if to.value.channel.modes[:anonymous]
+          if to.value.channel.has_flag?(:anonymous)
             mask = Mask.parse('anonymous!anonymous@anonymous.')
           end
 
@@ -1623,7 +2447,7 @@ Module.define('base', '0.0.1') {
           return
         end
   
-        if !channel.modes[:no_external_messages] || channel.user(thing)
+        if !channel.has_flag?(:no_external_messages)|| channel.user(thing)
           service :send, :notice, thing, channel.level(level), message
         end
       elsif client = @clients[receiver]
@@ -1654,7 +2478,7 @@ Module.define('base', '0.0.1') {
         when User
           name = to.value.channel.name
   
-          if to.value.channel.modes[:anonymous]
+          if to.value.channel.has_flag?(:anonymous)
             from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
           end
 
@@ -1664,7 +2488,7 @@ Module.define('base', '0.0.1') {
         else return
       end
   
-      to.send :raw, ":#{from} NOTICE #{level}#{name} :#{message}"
+      to.value.send :raw, ":#{from.value} NOTICE #{level}#{name} :#{message}"
     end
 
     observe :ctcp do |chain=:input, kind=:message, from, to, type, message|
@@ -1672,7 +2496,7 @@ Module.define('base', '0.0.1') {
 
       case to.value
         when Channel
-          if to.value.modes[:no_ctcps]
+          if to.value.has_flag?(:no_ctcps)
             from.value.send :numeric, ERR_NOCTCPS, to.value.name
             return false
           end
@@ -1697,7 +2521,7 @@ Module.define('base', '0.0.1') {
         when User
           name = to.value.channel.name
 
-          if to.value.channel.modes[:anonymous]
+          if to.value.channel.has_flag?(:anonymous)
             mask = Mask.parse('anonymous!anonymous@anonymous.')
           end
 
@@ -1723,6 +2547,106 @@ Module.define('base', '0.0.1') {
       end
   
       to.value.send :raw, ":#{mask} #{kind} #{level}#{name} :\x01#{text}\x01"
+    end
+
+    on map do |thing, string|
+      server.fire :send, :notice, server, thing, 'The X tells the point.'
+    end
+
+    on version do |thing, string|
+      thing.send :numeric, RPL_VERSION, options[:messages][:version].interpolate(binding)
+    end
+
+    on oper do |thing, string|
+      matches = string.match(/OPER\s+(.*?)(?:\s+(.+?))?$/i).to_a
+  
+      if !matches
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :OPER
+        return
+      end
+  
+      password = matches[2] || matches[1]
+      name     = (matches[2]) ? matches[1] : nil
+  
+      mask = thing.mask.clone
+  
+      mask.nick = name if name
+  
+      server.options[:operators].each {|operator|
+        next unless mask.match(operator[:mask]) && password == operator[:password]
+
+        operator[:flags].split(/\s*,\s*/).each {|flag|
+          thing.set_flag flag.to_sym, true, false, true
+        }
+  
+        thing.modes[:message] = 'is an IRC operator'
+  
+        thing.send :numeric, RPL_YOUREOPER
+        thing.send :raw, ":#{server} MODE #{thing.nick} #{thing.modes}"
+  
+        server.fire :oper, true, thing, name, password
+
+        return
+      }
+  
+      thing.send :numeric, ERR_NOOPERHOST
+      server.fire :oper, false, thing, name, password
+    end
+
+    on kill do |thing, string|
+      whole, target, message = string.match(/KILL\s+(.*?)(?:\s+:?(.*))?$/i).to_a
+  
+      if !whole
+        thing.send :numeric, ERR_NEEDMOREPARAMS, :KILL
+        return
+      end
+  
+      client = @clients[target]
+  
+      if !client
+        thing.send :numeric, ERR_NOSUCHNICK, nick
+        return
+      end
+  
+      server.fire :kill, ref{:thing}, client, message
+    end
+
+    observe :kill do |from, client, message=nil|
+      if !from.value.has_flag?(:can_kill)
+        from.value.send :numeric, ERR_NOPRIVILEGES
+        return
+      end
+
+      text = options[:messages][:kill].interpolate(binding)
+
+      client.send :raw, ":#{client} QUIT :#{text}"
+      server.kill client, text
+    end
+
+    on quit do |thing, string|
+      whole, message = string.match(/^QUIT(?:\s+:?(.*))?$/i).to_a
+
+      user      = thing
+      message ||= user.nick
+
+      server.kill(thing, options[:messages][:quit].interpolate(binding))
+    end
+
+    observe :killed do |thing, message|
+      return unless thing.is_a?(Client)
+
+      @nicks.delete(thing.data.nick)
+
+      @to_ping.delete(thing.socket)
+      @pinged_out.delete(thing.socket)
+  
+      thing.channels.select {|name, channel|
+        channel.has_flag?(:anonymous)
+      }.each_key {|name|
+        server.fire :part, thing, name, nil
+      }
+  
+      thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
     end
   }
 }
