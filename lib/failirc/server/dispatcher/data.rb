@@ -30,7 +30,7 @@ class Data
   end
 
   def [] (socket)
-    if socket.is_a?(Client) || socket.is_a?(User) || socket.is_a?(Server)
+    if socket.respond_to? :socket
       socket = socket.socket
     end
 
@@ -39,8 +39,8 @@ class Data
 
   def push (socket, string)
     if string == :EOC
-      if !socket.is_a?(TCPSocket) && !socket.is_a?(OpenSSL::SSL::SSLSocket)
-        socket = socket.socket rescue nil
+      if socket.respond_to? :socket
+        socket = socket.socket
       end
 
       if socket
@@ -58,32 +58,48 @@ class Data
   end
 
   def pop (socket)
+    if socket.respond_to? :socket
+      socket = socket.socket
+    end
+
     self[socket].shift
   end
 
   def clear (socket)
+    if socket.respond_to? :socket
+      socket = socket.socket
+    end
+
     self[socket].clear
   end
 
   def delete (socket)
-    @data.delete(socket)
-
-    if socket.is_a?(Client) || socket.is_a?(User) || socket.is_a?(Server)
-      @data.delete(socket.socket)
+    if socket.respond_to? :socket
+      socket = socket.socket
     end
+
+    @data.delete(socket)
   end
 
   def first (socket)
+    if socket.respond_to? :socket
+      socket = socket.socket
+    end
+
     self[socket].first
   end
 
   def last (socket)
+    if socket.respond_to? :socket
+      socket = socket.socket
+    end
+
     self[socket].last
   end
 
   def empty? (socket=nil)
     if socket
-      if socket.is_a?(Client) || socket.is_a?(User)
+      if socket.respond_to? :socket
         socket = socket.socket
       end
 
