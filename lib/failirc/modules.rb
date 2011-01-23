@@ -28,7 +28,7 @@ class Modules < Hash
   
   def to_s
     values.map {|mod|
-      mod.description
+      mod.identifier
     }.compact.join(' ')
   end
 end

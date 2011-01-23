@@ -29,6 +29,8 @@ require 'failirc/responses'
 module IRC; class Server
 
 Module.define('base', '0.0.1') {
+  identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
+
   module Flags
     Groups = {
       :can_change_channel_modes => [
@@ -75,11 +77,11 @@ Module.define('base', '0.0.1') {
       end
   
       modes.each {|mode|
-        if (self.class::Modes[mode] || Groups[mode]) && !self.modes.has_key?(mode)
+        if (self.class::Modes[mode] || Groups[mode]) && !self.has_flag?(mode)
           set_flag mode, value, !force
         else
           if value == false
-            if !Modes.has_key?(mode)
+            if !self.class::Modes.has_key?(mode)
               self.modes.delete(mode)
             end
           else
@@ -132,8 +134,10 @@ Module.define('base', '0.0.1') {
       :z => :ssl,
   
       :N => [:o, :netadmin],
-      :o => [:operator, :can_kill, :can_kick, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :channel_moderation, :can_change_user_modes, :can_change_client_modes],
+      :o => [:operator, :can_kill, :can_see_secrets, :can_give_channel_owner, :can_give_channel_admin, :channel_moderation, :can_change_user_modes, :can_change_client_modes],
+    }
 
+    Aliases = {
       :netadmin => :N,
       :operator => :o,
     }
@@ -170,6 +174,12 @@ Module.define('base', '0.0.1') {
       else
         !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
       end
+    end
+
+    alias __set_flag set_flag
+
+    def set_flag (type, value, inherited=false, force=false)
+      __set_flag(Aliases[type] || type, value, inherited, force)
     end
 
     def identifier
@@ -721,7 +731,7 @@ Module.define('base', '0.0.1') {
   end
 
   # check encoding
-  input do before -123456789 do |event, thing, string|
+  input do before -10001 do |event, thing, string|
     begin
       string.force_encoding(thing.data.encoding)
 
@@ -753,7 +763,7 @@ Module.define('base', '0.0.1') {
     end
   end end
 
-  output do after 123456789 do |event, thing, string|
+  output do after 10001 do |event, thing, string|
     if thing.data.encoding
       string.encode!(thing.data.encoding,
         :invalid => :replace,
@@ -985,7 +995,7 @@ Module.define('base', '0.0.1') {
         }
 
         @nicks.delete(thing.nick)
-        @nick << nick
+        @nicks << nick
 
         mask       = thing.mask.clone
         thing.nick = nick
@@ -2091,7 +2101,7 @@ Module.define('base', '0.0.1') {
     end
 
     on topic do |thing, string|
-      whole, channel, topic = string.match(/TOPIC\s+(.*?)(?:\s+:(.*))?$/i)
+      whole, channel, topic = string.match(/TOPIC\s+(.*?)(?:\s+:(.*))?$/i).to_a
   
       if !whole
         thing.send :numeric, ERR_NEEDMOREPARAMS, :TOPIC
@@ -2102,7 +2112,7 @@ Module.define('base', '0.0.1') {
     end
 
     observe :topic do |from, channel, topic|
-      if !@channels[channel] || (@channels[channel].has_flag?(:secret) && !from.is_on_channel?(channel))
+      if !@channels[channel] || (@channels[channel].has_flag?(:secret) && !from.value.is_on_channel?(channel))
         from.send :numeric, ERR_NOSUCHCHANNEL, channel
         return
       end
@@ -2111,27 +2121,27 @@ Module.define('base', '0.0.1') {
   
       if !topic
         if !channel.topic.nil?
-          from.send :numeric, RPL_TOPIC, channel.topic
-          from.send :numeric, RPL_TOPICSETON, channel.topic
+          from.value.send :numeric, RPL_TOPIC, channel.topic
+          from.value.send :numeric, RPL_TOPICSETON, channel.topic
         else
-          from.send :numeric, RPL_NOTOPIC, channel
+          from.value.send :numeric, RPL_NOTOPIC, channel
         end
 
         return
       end
       
-      if !from.has_flag?(:can_change_topic) && !from.is_on_channel?(channel) && !from.has_flag?(:operator)
-        from.send :numeric, ERR_NOTONCHANNEL, channel
+      if !from.value.has_flag?(:can_change_topic) && !from.value.is_on_channel?(channel) && !from.value.has_flag?(:operator)
+        from.value.send :numeric, ERR_NOTONCHANNEL, channel
         return
       end
  
-      if channel.has_flag?(:topic_lock) && !channel.user(from).has_flag?(:can_change_topic)
-        from.send :numeric, ERR_CHANOPRIVSNEEDED, channel
+      if channel.has_flag?(:topic_lock) && !channel.user(from.value).has_flag?(:can_change_topic)
+        from.value.send :numeric, ERR_CHANOPRIVSNEEDED, channel
       else
         if channel.has_flag?(:anonymous)
           channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), topic
         else
-          channel.topic = from, topic
+          channel.topic = from.value, topic
         end
         
         channel.send :raw, ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic}"
@@ -2553,7 +2563,7 @@ Module.define('base', '0.0.1') {
       server.fire :send, :notice, server, thing, 'The X tells the point.'
     end
 
-    on version do |thing, string|
+    on :version do |thing, string|
       thing.send :numeric, RPL_VERSION, options[:messages][:version].interpolate(binding)
     end
 
@@ -2571,9 +2581,9 @@ Module.define('base', '0.0.1') {
       mask = thing.mask.clone
   
       mask.nick = name if name
-  
+
       server.options[:operators].each {|operator|
-        next unless mask.match(operator[:mask]) && password == operator[:password]
+        next unless Mask.parse(operator[:mask]).match(mask) && password == operator[:password]
 
         operator[:flags].split(/\s*,\s*/).each {|flag|
           thing.set_flag flag.to_sym, true, false, true

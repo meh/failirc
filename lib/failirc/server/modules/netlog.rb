@@ -22,6 +22,8 @@ require 'uri'
 module IRC; class Server
 
 Module.define('netlog', '0.0.1') {
+  identifier "netlog-#{version};"
+
   on message, -101 do |chain=:input, from, to, message|
     URI.extract(message.clone) {|uri|
       if match = uri.match('http://(beta\.)?(\w+?)\.netlog.com.*photo.*?(\d+)')

@@ -24,6 +24,8 @@ require 'timeout'
 module IRC; class Server
 
 Module.define('tinyurl', '0.0.1') {
+  identifier "tinyurl-#{version};"
+
   class ::URI::Generic
     def tinyurl (time)
       begin

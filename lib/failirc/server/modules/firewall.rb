@@ -39,8 +39,8 @@ Module.define('firewall', '0.0.1') {
     server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing.inspect} #{string.inspect}"
   end
 
-  input  { before -1234567890, &method(:dispatch) }
-  output { after   1234567890, &method(:dispatch) }
+  input  { before -10000, &method(:dispatch) }
+  output { after   10000, &method(:dispatch) }
 
   on killed do |thing, message|
     server.fire :log, "#{thing.inspect} KILL :#{message}"

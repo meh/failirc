@@ -53,6 +53,12 @@ class Module
     self.instance_eval(&block)
   end
 
+  def identifier (value=nil)
+    (value) ?
+      @identifier = value :
+      @identifier
+  end
+
   def input (&block)
     tmp, @into = @into, :input
     self.instance_eval(&block)

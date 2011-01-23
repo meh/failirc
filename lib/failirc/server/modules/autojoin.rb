@@ -20,6 +20,8 @@
 module IRC; class Server
 
 Module.define('autojoin', '0.0.1') {
+  identifier "autojoin-#{version};"
+
   on connected do |client|
     if options[:channel]
       server.fire :join, client, options[:channel]
