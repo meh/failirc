@@ -47,3 +47,10 @@ modules:
     channel: "#lol"
 
   - name: netlog
+
+  - name:    reupload
+    timeout: 10
+    service: imageshack
+    sites:
+      - name:  4chan
+        match: images\.4chan\.org
