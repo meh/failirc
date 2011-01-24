@@ -76,9 +76,15 @@ class ConnectionDispatcher
     sockets = @connections.sockets
 
     begin
-      reading, writing, erroring = IO::select(([@pipes.first] + sockets + @connections.listening.map {|server| server.socket}), (@output.empty? ? nil : sockets))
+      reading, writing, erroring = IO::select(([@pipes.first] + sockets + @connections.listening.map {|server| server.socket}), (@output.empty? ? nil : sockets), sockets)
     rescue; ensure
       clean
+    end
+
+    if erroring && !erroring.empty?
+      erroring.each {|socket|
+        server.kill @connections.thing(socket) 
+      }
     end
 
     if reading && !reading.empty?
@@ -106,24 +112,26 @@ class ConnectionDispatcher
 
   def clean
     @disconnecting.each {|data|
-      thing  = data[:thing]
-      output = data[:output]
+      begin
+        thing  = data[:thing]
+        output = data[:output]
 
-      if output.first == :EOC
-        output.shift
+        if output.first == :EOC
+          output.shift
 
-        server.fire :killed, thing, output.shift
+          server.fire :killed, thing, output.shift
 
-        thing.data.quitting = true
+          thing.data.quitting = true
 
+          thing.socket.close
+        end
+      ensure
         @input.delete(thing)
         @output.delete(thing)
 
         @connections.delete(thing.socket)
     
         IRC.debug "#{thing.inspect} disconnected."
-
-        thing.socket.close rescue nil
 
         @disconnecting.delete(data)
 
@@ -133,7 +141,7 @@ class ConnectionDispatcher
 
     @connections.sockets.each {|socket|
       if socket.closed?
-        server.kill socket
+        server.kill @connections.thing(socket)
       end
     }
 

@@ -49,7 +49,7 @@ modules:
   - name: netlog
 
   - name:    reupload
-    timeout: 10
+    timeout: 30
     service: imageshack
     sites:
       - name:  4chan
