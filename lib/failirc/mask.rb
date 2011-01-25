@@ -23,7 +23,7 @@ module IRC
 
 class Mask
   def self.escape (str)
-    Regexp.escape(str).gsub(/\\\*/, '.*?').gsub(/\\\?/, '.') rescue '.*?'
+    Regexp.escape(str).gsub(/\\\*/, '[^!@]*?').gsub(/\\\?/, '[^!@]') rescue '[^!@]*?'
   end
 
   attr_accessor :nick, :user, :host
