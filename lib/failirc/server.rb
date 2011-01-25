@@ -144,13 +144,7 @@ class Server
 
   # kill connection with harpoons on fire
   def kill (thing, message=nil, force=false)
-    if !thing || (thing.data.killing && (!force || thing.data.kill_forcing)) || !@dispatcher.connections.exists?(thing.socket)
-      return
-    end
-
-    if thing.is_a?(User)
-      thing = thing.client
-    end
+    return if !thing || (thing.data.killing && (!force || thing.data.kill_forcing)) || !@dispatcher.connections.exists?(thing.socket)
 
     thing.data.killing = true
 

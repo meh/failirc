@@ -61,11 +61,11 @@ class ConnectionDispatcher
   end
 
   def listen (options)
-    server  = TCPServer.new(options['bind'], options['port'])
+    server  = TCPServer.new(options[:bind], options[:port])
     context = nil
 
-    if options['ssl']
-      context = SSLUtils::context(options['ssl']['cert'], options['ssl']['key'])
+    if options[:ssl]
+      context = SSLUtils::context((options[:ssl][:cert] rescue nil), (options[:ssl][:key] rescue nil))
     end
 
     @connections.listening.push(Connections::Server.new(server, options, context))
@@ -83,7 +83,7 @@ class ConnectionDispatcher
 
     if erroring && !erroring.empty?
       erroring.each {|socket|
-        server.kill @connections.thing(socket) 
+        server.kill @connections.thing(socket), 'Input/output error', true
       }
     end
 
@@ -141,7 +141,7 @@ class ConnectionDispatcher
 
     @connections.sockets.each {|socket|
       if socket.closed?
-        server.kill @connections.thing(socket)
+        server.kill @connections.thing(socket), 'Client exited', true
       end
     }
 

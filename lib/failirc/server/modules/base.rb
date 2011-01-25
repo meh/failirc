@@ -1465,7 +1465,7 @@ Module.define('base', '0.0.1') {
             if type == '+'
               value = values.shift
   
-              return if !value || !Utils::Channel::isValid(value)
+              return if !value || !value.is_valid_channel?
   
               thing.set_flag :L, value
   
@@ -1921,7 +1921,7 @@ Module.define('base', '0.0.1') {
         from.send :numeric, ERR_BADCHANMASK, channel
         return
       end
-  
+
       if !@channels[channel]
         from.send :numeric, ERR_NOSUCHCHANNEL, channel
         return
@@ -1941,14 +1941,14 @@ Module.define('base', '0.0.1') {
       end
   
       if from.channels[channel.name]
-        from = channel.user(kicker)
+        from = channel.user(from)
       end
-  
+
       if from.has_flag?(:can_kick)
         if channel.has_flag?(:no_kicks)
           from.send :numeric, ERR_NOKICKS
         else
-          server.fire :kicked, from, user, message
+          server.fire :kicked, ref{:from}, user, message
         end
       else
         from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
@@ -1956,7 +1956,7 @@ Module.define('base', '0.0.1') {
     end
 
     observe :kicked do |from, user, message|
-      user.channel.send :raw, ":#{from.mask} KICK #{user.channel} #{user.nick} :#{message}"
+      user.channel.send :raw, ":#{from.value.mask} KICK #{user.channel} #{user.nick} :#{message}"
 
       @semaphore.synchronize {
         user.channel.delete(user)
