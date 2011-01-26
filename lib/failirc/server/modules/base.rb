@@ -326,16 +326,16 @@ Module.define('base', '0.0.1') {
       super(*args)
     end
   
-    alias __get [] 
-    alias __set []=
-    alias __delete delete
+    alias _get_ [] 
+    alias _set_ []=
+    alias _delete_ delete
   
     def [] (user)
       if user.is_a?(Client) || user.is_a?(User)
         user = user.nick
       end
   
-      __get(user)
+      _get_(user)
     end
   
     def []= (user, value)
@@ -343,7 +343,7 @@ Module.define('base', '0.0.1') {
         user = user.nick
       end
   
-      __set(user, value)
+      _set_(user, value)
     end
     
     def delete (key)
@@ -354,10 +354,8 @@ Module.define('base', '0.0.1') {
       key = key.downcase
       user = self[key]
   
-      if user
-        __delete(key)
-      end
-  
+      _delete_(key) if user
+
       return user
     end
   
@@ -502,7 +500,7 @@ Module.define('base', '0.0.1') {
     end
   
     def user (client)
-      return @users[client.nick]
+      @users[client]
     end
 
     def send (*args)
@@ -1517,7 +1515,7 @@ Module.define('base', '0.0.1') {
           if from.has_flag?(:can_give_channel_operator)
             value = values.shift
   
-            if !value || !(user = thing.users[value])
+            if !value || !(user = thing.user(value))
               from.send :numeric, ERR_NOSUCHNICK, value
               return
             end
@@ -1829,7 +1827,7 @@ Module.define('base', '0.0.1') {
     observe :joined do |thing, channel|
       empty = channel.empty?
       user  = channel.add(thing)
-  
+
       if empty
         server.fire :mode, server, channel, "+o #{user.nick}", false
       else

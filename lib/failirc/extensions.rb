@@ -71,33 +71,6 @@ class String
   end
 end
 
-class ThreadSafeCounter
-  def initialize
-    @semaphore = Mutex.new
-    @number    = 0
-    
-    super
-  end
-
-  def increment
-    @semaphore.synchronize {
-      @number += 1
-    }
-  end
-
-  def decrement
-    @semaphore.synchronize {
-      @number -= 1
-    }
-  end
-
-  def to_i
-    @semaphore.synchronize {
-      @number
-    }
-  end
-end
-
 class InsensitiveStruct
   def initialize (data={})
     @data = {}
@@ -317,77 +290,49 @@ class HashWithIndifferentAccess < Hash
 end
 
 class CaseInsensitiveHash < Hash
+  def self.def_insensitive (*methods)
+    methods.each {|method|
+      alias_method :"____#{method}____", method
+
+      self.class_eval %{
+        def #{method} (key, *args, &block)
+          if key.is_a?(String) || key.is_a?(Symbol)
+            key = key.to_s.downcase
+          end
+
+          self.method('____#{method}____').call(key, *args, &block)
+        end
+      }
+    }
+  end
+
   def initialize (*args)
     super(*args)
   end
 
-  alias ___set___ []=
-  alias ___get___ []
-  alias ___delete___ delete
-
-  def []= (key, value)
-    if key.is_a?(String)
-      key = key.downcase
-    end
-
-    ___set___(key, value)
-  end
-
-  def [] (key)
-    if key.is_a?(String)
-      key = key.downcase
-    end
-    
-    return ___get___(key)
-  end
-
-  def delete (key)
-    if key.is_a?(String)
-      key = key.downcase
-    end
-
-    ___delete___(key)
-  end
+  def_insensitive :[], :[]=, :delete
 end
 
 class ThreadSafeHash < CaseInsensitiveHash
+  def self.def_threaded (*methods)
+    methods.each {|method|
+      alias_method :"___#{method}___", method
+
+      self.class_eval %{
+        def #{method} (*args, &block)
+          @semaphore.synchronize {
+            self.method('___#{method}___').call(*args, &block)
+          }
+        end
+      }
+    }
+  end
+
   def initialize (*args)
     @semaphore = Mutex.new
 
     super(*args)
   end
 
-  alias __set__ []=
-  alias __get__ []
-  alias __delete__ delete
-
-  def []= (key, value)
-    begin
-      @semaphore.synchronize {
-        return __set__(key, value)
-      }
-    rescue ThreadError
-      return __set__(key, value)
-    end
-  end
-
-  def [] (key)
-    begin
-      @semaphore.synchronize {
-        return __get__(key)
-      }
-    rescue ThreadError
-      return __get__(key)
-    end
-  end
-
-  def delete (key)
-    begin
-      @semaphore.synchronize {
-        return __delete__(key)
-      }
-    rescue ThreadError
-      return __delete__(key)
-    end
-  end
+#  def_threaded :[], :[]=, :delete, :each, :each_value, :each_key
 end
