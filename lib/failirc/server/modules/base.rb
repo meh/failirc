@@ -240,7 +240,7 @@ Module.define('base', '0.0.1') {
     }
   
     attr_reader    :client, :channel, :modes
-    def_delegators :@client, :mask, :server, :data, :nick, :user, :host, :real_name, :send, :is_on_channel?
+    def_delegators :@client, :mask, :server, :data, :nick, :user, :host, :real_name, :send, :channels, :is_on_channel?
   
     def initialize (client, channel, modes=IRC::Modes.new)
       @client  = client
@@ -267,13 +267,13 @@ Module.define('base', '0.0.1') {
         level = Levels.key level
       end
   
-      highest = self.getHighestLevel(user)
+      highest = highest_level
   
       return false unless highest
   
       highest = Levels.keys.index(highest)
       level   = Levels.keys.index(level)
-  
+
       if !level
         return true
       elsif !highest
@@ -285,9 +285,7 @@ Module.define('base', '0.0.1') {
   
     def highest_level
       Levels.each_key {|level|
-        if modes[level]
-          return level
-        end
+        return level if modes[level]
       }
     end
   
@@ -491,9 +489,20 @@ Module.define('base', '0.0.1') {
 
     def users
       if @level
-        Users.new(self, @users.select {|user|
+        users = Users.new(self)
+        
+        @users.select {|_, user|
           user.is_level_enough?(@level)
-        })
+        }.each {|_, user|
+          user    = user.clone
+          channel = self
+
+          user.instance_eval '@channel = channel'
+
+          users.add(user)
+        }
+
+        users
       else
         @users
       end
@@ -544,10 +553,12 @@ Module.define('base', '0.0.1') {
     end
 
     def level (level)
-      return self unless level
+      return self unless User::Levels.has_value?(level)
 
       result       = self.clone
       result.level = level
+
+      result
     end
   end
 
@@ -1985,7 +1996,7 @@ Module.define('base', '0.0.1') {
       if @channels[channel]
         from = @channels[channel].user(thing) || thing
   
-        if !from.has_flag?(:can_invite) && !from.channels[channel]
+        if !from.has_flag?(:can_invite) && !from.is_on_channel?(channel)
           thing.send :numeric, ERR_NOTONCHANNEL, channel
           return
         end
@@ -2029,7 +2040,7 @@ Module.define('base', '0.0.1') {
   
       if channel = @channels[target]
         channel.modes[:invited][client.mask] = true
-        server.fire :notice, ref{:server}, ref{:channel}, "#{from.nick} invited #{client.nick} into the channel.", ?@
+        server.fire :send, :notice, server, channel.level(?@), "#{from.nick} invited #{client.nick} into the channel."
       end
   
       client.send :raw, ":#{from.mask} INVITE #{client.nick} :#{target}"
@@ -2484,14 +2495,16 @@ Module.define('base', '0.0.1') {
 
       case to.value
         when User
-          name = to.value.channel.name
+          name  = to.value.channel.name
+          level = to.value.channel.level?
   
           if to.value.channel.has_flag?(:anonymous)
             from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
           end
 
         when Client
-          name = to.value.nick
+          name  = to.value.nick
+          level = nil
 
         else return
       end
