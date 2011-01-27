@@ -389,7 +389,7 @@ Module.define('base', '0.0.1') {
       def text= (value)
         @semaphore.synchronize {
           @text  = value
-          @setOn = Time.now
+          @set_on = Time.now
         }
       end
   
