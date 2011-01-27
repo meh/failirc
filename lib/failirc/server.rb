@@ -117,14 +117,7 @@ class Server
 
     self.fire(:stop, self)
 
-    begin
-      dispatcher.stop
-
-      @modules.each {|mod|
-        mod.finalize
-      }
-    rescue
-    end
+    @dispatcher.stop
 
     @stopping = false
     @started  = false

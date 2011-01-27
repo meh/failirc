@@ -61,7 +61,7 @@ class Dispatcher
   end
 
   def loop
-    while true
+    while @started
       begin
         @connection.do
       rescue Exception => e

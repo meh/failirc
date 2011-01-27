@@ -48,12 +48,7 @@ args.each {|option, value|
 
 ircd = IRC::Server.new(YAML.parse_file(options[:config]).transform)
 
-def stop (ircd)
-  ircd.stop
-  Process.exit!(0)
-end
-
-trap('INT') { stop ircd }
-trap('KILL') { stop ircd }
+trap('INT') { ircd.stop }
+trap('KILL') { ircd.stop }
 
 ircd.start

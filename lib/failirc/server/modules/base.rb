@@ -2021,18 +2021,18 @@ Module.define('base', '0.0.1') {
 
     observe :invite do |from, client, channel|
       from.send :numeric, RPL_INVITING, {
-        :nick    => to.nick,
+        :nick    => client.nick,
         :channel => channel,
       }
   
       target = channel
   
       if channel = @channels[target]
-        channel.modes[:invited][to.mask] = true
-        server.fire :notice, ref{:server}, ref{:channel}, "#{from.nick} invited #{to.nick} into the channel.", ?@
+        channel.modes[:invited][client.mask] = true
+        server.fire :notice, ref{:server}, ref{:channel}, "#{from.nick} invited #{client.nick} into the channel.", ?@
       end
   
-      client.send :raw, ":#{from.mask} INVITE #{to.nick} :#{target}"
+      client.send :raw, ":#{from.mask} INVITE #{client.nick} :#{target}"
     end
 
     on names do |thing, string|
