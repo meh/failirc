@@ -2203,7 +2203,7 @@ Module.define('base', '0.0.1') {
       if name.is_valid_channel? && (channel = @channels[name])
         if channel.has_flag?(:anonymous)
           thing.send :numeric, RPL_WHOREPLY, {
-            :channel => channel,
+            :channel => channel.name,
 
             :user => {
               :nick      => 'anonymous',
@@ -2219,7 +2219,7 @@ Module.define('base', '0.0.1') {
         else
           channel.users.each_value {|user|
             thing.send :numeric, RPL_WHOREPLY, {
-              :channel => channel,
+              :channel => channel.name,
 
               :user => {
                 :nick      => user.nick,
