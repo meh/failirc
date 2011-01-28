@@ -2247,7 +2247,7 @@ Module.define('base', '0.0.1') {
             :real_name => client.real_name,
           },
 
-          :server => user.server.host,
+          :server => client.server.host,
 
           :hops => 0
         }
@@ -2638,7 +2638,8 @@ Module.define('base', '0.0.1') {
         return
       end
 
-      text = options[:messages][:kill].interpolate(binding)
+      sender = from.value
+      text   = options[:messages][:kill].interpolate(binding)
 
       client.send :raw, ":#{client} QUIT :#{text}"
       server.kill client, text

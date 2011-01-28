@@ -56,6 +56,16 @@ class ConnectionDispatcher
     ConnectionDispatcher.def_delegators :@connections, :sockets, :things
   end
 
+  def finalize
+    @connections.sockets.each {|socket|
+      socket.close
+    }
+
+    @connections.listening {|socket|
+      socket.close
+    }
+  end
+
   def wakeup
     @pipes.last.write 'x'
   end
