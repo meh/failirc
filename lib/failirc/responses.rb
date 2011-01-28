@@ -175,7 +175,7 @@ RPL_VERSION = {
 
 RPL_WHOREPLY = {
   :code => 352,
-  :text => %q{#{value[:channel].name} #{value[:user][:user]} #{value[:user][:host]} #{value[:server]} #{value[:user][:nick]} #{'H' || 'G'}#{value[:user][:llevel]} :#{value[:hops]} #{value[:user][:real_name]}}
+  :text => %q{#{value[:channel]} #{value[:user][:user]} #{value[:user][:host]} #{value[:server]} #{value[:user][:nick]} #{'H' || 'G'}#{value[:user][:level]} :#{value[:hops]} #{value[:user][:real_name]}}
 }
 
 # The RPL_WHOREPLY and RPL_ENDOFWHO pair are used to answer a WHO message.
