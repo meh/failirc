@@ -55,8 +55,6 @@ class Dispatcher
     @started  = false
     @stopping = true
 
-    @connection.finalize
-
     @stopping = false
   end
 

@@ -792,9 +792,10 @@ Module.define('base', '0.0.1') {
       ping /^PING( |$)/i
       pong /^PONG( |$)/i
 
-      away     /^AWAY( |$)/i
-      mode     /^MODE( |$)/i
-      encoding /^ENCODING( |$)/i
+      away      /^AWAY( |$)/i
+      hibernate /^HIBERNATE( |$)/i
+      mode      /^MODE( |$)/i
+      encoding  /^ENCODING( |$)/i
 
       join   /^(:[^ ] )?JOIN( |$)/i
       part   /^(:[^ ] )?PART( |$)/i
@@ -1100,6 +1101,10 @@ Module.define('base', '0.0.1') {
         thing.send :numeric, RPL_NOWAWAY
       end
     end
+    
+    on hibernate do |thing, string|
+
+    end
 
     # MODE user/channel = +option,-option
     on mode do |thing, string|
@@ -1179,7 +1184,7 @@ Module.define('base', '0.0.1') {
         value = match[1].strip
   
         if value == '?'
-          server.fire :mode=, :extended, from, thing, '?', nil, nil, nil
+          # TODO
         else
           modes = value.split(/[^\\],/)
     
