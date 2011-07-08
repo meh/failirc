@@ -642,18 +642,18 @@ Module.define('base', '0.0.1') {
       :channel => 'abcCehiIkKlLmnNoQsStuvVxyz'
     }
 
-    @support ={ 
-      :CASEMAPPING => 'ascii',
-      :SAFELIST    => true,
-      :EXCEPTS     => 'e',
-      :INVEX       => 'I',
-      :CHANTYPES   => '&#+!',
-      :CHANMODES   => 'beI,kfL,lj,acCiKmnNQsStuVz',
-      :PREFIX      => '(!xyohv)!~&@%+',
-      :STATUSMSG   => '~&@%+',
-      :FNC         => true,
+    @support = { 
+      CASEMAPPING: 'ascii',
+      SAFELIST:    true,
+      EXCEPTS:     'e',
+      INVEX:       'I',
+      CHANTYPES:   '&#+!',
+      CHANMODES:   'beI,kfL,lj,acCiKmnNQsStuVz',
+      PREFIX:      '(!xyohv)!~&@%+',
+      STATUSMSG:   '~&@%+',
+      FNC:         true,
 
-      :CMDS => 'KNOCK'
+      CMDS: 'KNOCK'
     }
 
     @semaphore  = Mutex.new

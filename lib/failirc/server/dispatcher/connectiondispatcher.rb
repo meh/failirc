@@ -20,12 +20,14 @@
 #++
 
 require 'forwardable'
-require 'versionomy'
 require 'thread'
 require 'socket'
 require 'timeout'
+require 'openssl'
 
-if Versionomy.parse(RUBY_VERSION) < Versionomy.parse('1.9.2')
+begin
+  OpenSSL::SSL::SSLSocket.instance_method :read_nonblock
+rescue Exception => e
   require 'openssl/nonblock'
 end
 

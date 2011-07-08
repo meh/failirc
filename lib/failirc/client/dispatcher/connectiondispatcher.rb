@@ -17,11 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'versionomy'
 require 'thread'
 require 'socket'
+require 'openssl'
 
-if Versionomy.parse(RUBY_VERSION) < Versionomy.parse('1.9.2')
+begin
+  OpenSSL::SSL::SSLSocket.instance_method :read_nonblock
+rescue Exception => e
   require 'openssl/nonblock'
 end
 
