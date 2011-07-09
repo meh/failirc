@@ -1,0 +1,58 @@
+server:
+  name: Fail IRC
+
+  listen:
+    - port: 6667
+    - port: 6697
+      ssl:  enabled
+    - port: 9999
+      ssl:  promiscuous
+
+  timeout: 15
+
+  workers: 2 .. 4
+
+operators:
+  - mask:     "meh!*@*"
+    password: password
+    flags:    netadmin
+
+modules:
+  - name: base
+
+    misc:
+      motd: >
+        Welcome to a fail IRC.
+
+      ping timeout: 60
+      allowed nick: "nick.match(/^[0-9A-Za-z_\[\]\{\}\|\^`\-\\=\.]{1,23}$/)"
+
+    messages:
+      part:    "#{message}"
+      version: "#{server.modules}"
+      quit:    "Quit: #{message}"
+      kill:    "Killed by #{sender.nick}: #{(message && !message.empty?) ? message : 'No reason'}"
+
+  - name: firewall
+
+  - name:    tinyurl
+    timeout: 5
+    length:  42
+
+  - name: cloaking
+    keys:
+      - jsdhfjhsdjfhjsadhf8829348h98ashd9uasd
+      - 23895yu9134h 9uhs9aduhf9ashd f2 99urhsaj
+      - 938jhrfjsadnlbkdsfgkj
+
+  - name:    autojoin
+    channel: "#lol"
+
+  - name: netlog
+
+  - name:    reupload
+    timeout: 30
+    service: imageshack
+    sites:
+      - name:  4chan
+        match: images\.4chan\.org
