@@ -23,14 +23,19 @@ require 'failirc/server/dispatchers'
 module IRC
 
 class Server
-  include DSL
+  extend Forwardable
 
-  attr_reader :options, :dispatchers
+  attr_reader :options, :dispatcher
+
+  def_delegators :@events, :register, :dispatch, :observe, :fire
+  def_delegators :@workers, :do
 
   def initialize (options={})
     @options = options
 
-    @dispatchers = Dispatchers.new(self)
+    @dispatcher = Dispatcher.new(self)
+    @events     = Events.new(self)
+    @workers    = Workers.new(self)
   end
 
   def server; self; end

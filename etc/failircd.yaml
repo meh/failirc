@@ -31,7 +31,7 @@ modules:
       part:    "#{message}"
       version: "#{server.modules}"
       quit:    "Quit: #{message}"
-      kill:    "Killed by #{sender.nick}: #{(message && !message.empty?) ? message : 'No reason'}"
+      kill:    "Killed by #{sender.nick}: #{message.empty? ? 'No reason' : message}"
 
   - name: firewall
 

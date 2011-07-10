@@ -27,18 +27,39 @@ rescue NameError
   require 'openssl/nonblock'
 end
 
-require 'failirc/server/dispatchers/connections/server'
+require 'failirc/server/dispatcher/server'
+require 'failirc/server/dispatcher/client'
 
-module IRC; class Server; class Dispatchers
+module IRC; class Server
 
-class Connections < Dispatcher
-  attr_reader :servers
+class Dispatcher
+  extend Forwardable
 
-  def initialize (parent)
-    super
+  attr_reader :server, :servers
+
+  def initialize (server)
+    @server = server
 
     @servers = []
     @pipes   = IO.pipe
+  end
+
+  def start
+    @started = true
+
+    self.loop
+  end
+
+  def stop
+    return unless @started
+
+    @started = false
+  end
+
+  def loop
+    while @started
+      self.do
+    end
   end
 
   def listen (options)
@@ -48,18 +69,10 @@ class Connections < Dispatcher
   end
 
   def do
-    begin
-      reading, writing, erroring = IO.select([@pipes.first] + clients + servers)
-    rescue; ensure
-      clean
-    end
+    reading, _, erroring = IO.select([@pipes.first] + clients + servers, nil, clients)
 
-    erroring.each {|thing|
-      case thing
-        when Connections::Server then servers.delete(thing)
-        when Connections::Client then thing.kill 'Input/output error', :force => true
-        when IO                  then @pipes = IO.pipe
-      end
+    erroring.each {|client|
+      client.kill 'Input/output error', :force => true
     }
 
     reading.each {|thing|
@@ -70,14 +83,8 @@ class Connections < Dispatcher
       end
     }
 
-    @clients.each {|client|
+    clients.each {|client|
       client.handle
-    }
-
-    writing.each {|thing|
-      case thing
-        when Connections::Client then thing.flush
-      end
     }
   end
 
@@ -88,10 +95,12 @@ class Connections < Dispatcher
   end
 
   def wakeup (options)
-    @clients = nil if options[:reset]
+    if options[:reset]
+      @clients = nil
+    end
 
     @pipes.last.write '?'
   end
 end
 
-end; end; end
+end; end

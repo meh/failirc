@@ -17,14 +17,22 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/server/dispatchers/dispatcher'
+require 'actionpool'
 
-module IRC; class Server; module Dispatchers
+module IRC
 
-class Event < Dispatcher
-  def initialize (server)
-    super
+class Workers
+  attr_reader :parent
+
+  def initialize (parent, range = 2 .. 4)
+    @parent = parent
+
+    @pool = ActionPool.new(:min_threads => range.begin, :max_threads => range.end)
+  end
+
+  def do (*args, &block)
+    @pool.process(*args, &block)
   end
 end
 
-end; end; end
+end

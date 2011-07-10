@@ -17,9 +17,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/server/dispatchers/connections/client'
-
-module IRC; class Server; class Dispatchers; class Connections < Dispatcher
+module IRC; class Server; class Dispatcher
 
 class Server < IO
   extend Forwardable
@@ -63,16 +61,14 @@ class Server < IO
     dispatcher.parent.will_do {
       begin
         if ssl?
-          ssl = OpenSSL::SSL::SSLSocket.new socket, server.context
-
-          timeout((self.server.options[:server][:timeout] || 15).to_i) do
+          socket = timeout((self.server.options[:server][:timeout] || 15).to_i) do
+            ssl = OpenSSL::SSL::SSLSocket.new(socket, server.context)
             ssl.accept
+            ssl
           end
-
-          socket = ssl
         end
 
-        dispatcher.parent.fire(:connection, @clients.push(Connections::Client.new(self, socket)))
+        dispatcher.parent.fire :connection, @clients.push(Connections::Client.new(self, socket))
         dispatcher.wakeup :reset => true
       rescue OpenSSL::SSL::SSLError, Timeout::Error
         socket.write_nonblock "This is an SSL connection, faggot.\r\n" rescue nil
@@ -92,4 +88,4 @@ class Server < IO
   end
 end
 
-end; end; end; end
+end; end; end
