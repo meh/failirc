@@ -19,24 +19,26 @@
 
 require 'failirc/common/events'
 
-module IRC
+module IRC; class Modules
 
 class Module
   include Events::DSL
 
-  def self.define (*args, &block)
-    self.new(*args, &block)
-  end
-
-  def initialize (data={}, &block)
+  def initialize (&block)
     Events::DSL.initialize(self)
-
-    @data = data
   end
 
-  def method_missing (id, *args, &block)
-    @data[id] ? @data[id] : super
-  end
+  [:name, :version, :identifier].each {|var|
+    data = {}
+
+    define_method var do |*args|
+      if args.length == 0
+        data[var]
+      else
+        data[var] = (args.length > 1) ? args : args.first
+      end
+    end
+  }
 end
 
-end
+end; end

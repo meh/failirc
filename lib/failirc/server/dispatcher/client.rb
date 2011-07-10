@@ -22,7 +22,7 @@ module IRC; class Server; class Dispatcher
 class Client < IO
   extend Forwardable
 
-  attr_reader    :connected_to, :ip, :host, :port
+  attr_reader    :connected_to, :socket, :ip, :host, :port
   def_delegators :@connected_to, :server, :dispatcher, :options
 
   def initialize (connected_to, socket)
@@ -39,6 +39,10 @@ class Client < IO
     super(@socket.to_i)
   end
 
+  def ssl?
+    socket.is_a?(OpenSSL::SSL::SSLSocket)
+  end
+
   def receive
     return if disconnected? or killed?
 
@@ -46,7 +50,7 @@ class Client < IO
       input = ''
 
       begin; loop do
-        input << socket.read_nonblock(4096)
+        input << @socket.read_nonblock(4096)
       end; rescue Errno::EAGAIN, IO::WaitReadable; end
 
       raise Errno::EPIPE if input.empty?
@@ -112,9 +116,9 @@ class Client < IO
 
     @handling = true
 
-    dispatcher.parent.will_do {
+    server.do {
       begin
-        dispatcher.parent.dispatch :input, self, @input.pop
+        server.dispatch :input, self, @input.pop
       rescue Exception => e
         IRC.debug e
       end

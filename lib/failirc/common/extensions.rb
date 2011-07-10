@@ -17,11 +17,11 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'rubygems'
 require 'thread'
 require 'forwardable'
 require 'versionub'
 require 'yaml'
+require 'memoized'
 
 class Object
   def numeric?
@@ -147,7 +147,6 @@ module StructLike
     @data.clone
   end
 end
-
 
 class InsensitiveStruct
   include StructLike

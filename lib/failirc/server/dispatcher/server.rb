@@ -27,24 +27,28 @@ class Server < IO
 
   def initialize (dispatcher, options)
     @dispatcher = dispatcher
-    @options    = options.clone
-    @clients    = []
+    @options    = HashWithIndifferentAccess.new({
+      :bind => '0.0.0.0'
+    }.merge(options))
 
-    @socket = TCPServer.new(options[:bind], options[:port])
+    @socket  = TCPServer.new(options[:bind], options[:port])
+    @clients = []
 
     if options[:ssl]
       @context = SSLUtils.context((options[:ssl][:cert] rescue nil), (options[:ssl][:key] rescue nil))
     end
 
     super(@socket.to_i)
+
+    IRC.debug self
   end
 
-  def ssl?
-    !!@context
-  end
+  def ssl?; !!@context;      end
+  def host; @options[:bind]; end
+  def port; @options[:port]; end
 
   def accept
-    socket = socket.accept_nonblock
+    socket = @socket.accept_nonblock
 
     begin
       host = socket.peeraddr[2]
@@ -58,7 +62,7 @@ class Server < IO
       return
     end
 
-    dispatcher.parent.will_do {
+    server.do {
       begin
         if ssl?
           socket = timeout((self.server.options[:server][:timeout] || 15).to_i) do
@@ -68,7 +72,7 @@ class Server < IO
           end
         end
 
-        dispatcher.parent.fire :connection, @clients.push(Connections::Client.new(self, socket))
+        server.fire :connection, @clients.push(Dispatcher::Client.new(self, socket))
         dispatcher.wakeup :reset => true
       rescue OpenSSL::SSL::SSLError, Timeout::Error
         socket.write_nonblock "This is an SSL connection, faggot.\r\n" rescue nil

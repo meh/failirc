@@ -20,6 +20,8 @@
 require 'failirc/common/utils'
 require 'failirc/common/events'
 require 'failirc/common/workers'
+require 'failirc/common/modules'
+require 'failirc/common/modes'
 
 require 'failirc/server/dispatcher'
 
@@ -30,19 +32,25 @@ class Server
 
   attr_reader :options, :dispatcher
 
-  def_delegators :@dispatcher, :start, :stop
+  def_delegators :@dispatcher, :start, :stop, :listen
   def_delegators :@events, :register, :dispatch, :observe, :fire
   def_delegators :@workers, :do
+  def_delegators :@modules, :load
 
   def initialize (options={})
-    @options = options
+    @options = HashWithIndifferentAccess.new(options)
 
     @dispatcher = Dispatcher.new(self)
     @events     = Events.new(self)
     @workers    = Workers.new(self)
-  end
+    @modules    = Modules.new(self, '/failirc/server/modules')
 
-  def server; self; end
+    if (@options[:server][:listen] rescue nil)
+      @options[:server][:listen].each {|data|
+        listen(data)
+      }
+    end
+  end
 end
 
 end

@@ -25,9 +25,10 @@ module IRC
 
     return if ENV['DEBUG'].to_i < (options[:level] || 1) && !options[:force]
 
-    output = "[#{Time.new}] From: #{caller[0, options[:deep] || 1].join("\n")}\n"
+    output = "[#{Time.new}] "
 
     if argument.is_a?(Exception)
+      output << "From: #{caller[0, options[:deep] || 1].join("\n")}\n"
       output << "#{argument.class}: #{argument.message}\n"
       output << argument.backtrace.collect {|stack|
         stack

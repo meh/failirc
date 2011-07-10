@@ -17,4 +17,5 @@ Gem::Specification.new {|s|
   s.add_dependency('openssl-nonblock')
   s.add_dependency('versionub')
   s.add_dependency('actionpool')
+  s.add_dependency('memoized')
 }

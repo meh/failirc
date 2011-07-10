@@ -55,12 +55,12 @@ class Events
   # WARNING: brace for legacy shitty code, I don't even understand it anymore.
   def event (chain, what)
     if what.is_a?(Symbol)
-      Event.new(self, chain, (@chains[chain][what] + @hooks.map {|hook| hook.events[chain][what]}).flatten.compact, [what])
+      Event.new(self, chain, (@chains[chain][what] + @hooks.map {|hook| hook.chains[chain][what]}).flatten.compact, [what])
     else
       callbacks = Hash.new { [] }
 
       (@hooks + [self]).each {|hook|
-        hook.events[chain].each {|key, value|
+        hook.chains[chain].each {|key, value|
           callbacks[key].insert(-1, *value)
         }
       }

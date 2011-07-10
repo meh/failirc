@@ -65,7 +65,9 @@ class Dispatcher
   end
 
   def listen (options)
-    @servers.push(Connections::Server.new(self, options))
+    @servers.push(Dispatcher::Server.new(self, options))
+
+    IRC.debug "Starting listening on #{@servers.last.host}:#{@servers.last.port}#{' (SSL)' if @servers.last.ssl?}"
 
     wakeup
   end

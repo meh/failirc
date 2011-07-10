@@ -5,8 +5,6 @@ server:
     - port: 6667
     - port: 6697
       ssl:  enabled
-    - port: 9999
-      ssl:  promiscuous
 
   timeout: 15
 
@@ -18,8 +16,7 @@ operators:
     flags:    netadmin
 
 modules:
-  - name: base
-
+  base:
     misc:
       motd: >
         Welcome to a fail IRC.
@@ -33,24 +30,24 @@ modules:
       quit:    "Quit: #{message}"
       kill:    "Killed by #{sender.nick}: #{message.empty? ? 'No reason' : message}"
 
-  - name: firewall
+  firewall:
 
-  - name:    tinyurl
+  tinyurl:
     timeout: 5
     length:  42
 
-  - name: cloaking
+  cloaking:
     keys:
       - jsdhfjhsdjfhjsadhf8829348h98ashd9uasd
       - 23895yu9134h 9uhs9aduhf9ashd f2 99urhsaj
       - 938jhrfjsadnlbkdsfgkj
 
-  - name:    autojoin
+  autojoin:
     channel: "#lol"
 
-  - name: netlog
+  netlog:
 
-  - name:    reupload
+  reupload:
     timeout: 30
     service: imageshack
     sites:
