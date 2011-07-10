@@ -17,41 +17,29 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/common/modules/module'
+module IRC; class Server; module Base; class Channel
 
-module IRC
+class Modifier
+  attr_reader :set_by, :set_on, :channel, :mask
 
-class Modules
-  attr_reader :owner, :list
-
-  def initialize (owner, path)
-    @owner = owner
-    @path  = path
-
-    @list = []
+  def initialize (by, channel, mask)
+    @set_by  = by.mask.clone
+    @set_on  = Time.now
+    @channel = channel
+    @mask    = mask
   end
 
-  def load (name, options={})
-    mod = Module.new(options)
+  def == (mask)
+    @mask == mask
+  end
 
-    $:.each {|path|
-      path = "#{path}/#{@path}/#{name}.rb"
+  def match (mask)
+    @mask.match(mask)
+  end
 
-      if File.readable?(path)
-        begin
-          mod.instance_eval(File.read(path))
-
-          return @list.push(mod).last
-        rescue Exception => e
-          IRC.debug e
-
-          return false
-        end
-      end
-    }
-
-    raise LoadError, "#{name} not found"
+  def to_s
+    "#{channel} #{mask} #{set_by.nick} #{set_on.tv_sec}"
   end
 end
 
-end
+end; end; end; end

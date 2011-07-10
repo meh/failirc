@@ -17,41 +17,20 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/common/modules/module'
+require 'failirc/server/modules/base/client'
 
-module IRC
+module IRC; class Server; module Base
 
-class Modules
-  attr_reader :owner, :list
-
-  def initialize (owner, path)
-    @owner = owner
-    @path  = path
-
-    @list = []
+class Clients < Hash
+  def initialize (server, *args)
+    super(*args)
   end
 
-  def load (name, options={})
-    mod = Module.new(options)
-
-    $:.each {|path|
-      path = "#{path}/#{@path}/#{name}.rb"
-
-      if File.readable?(path)
-        begin
-          mod.instance_eval(File.read(path))
-
-          return @list.push(mod).last
-        rescue Exception => e
-          IRC.debug e
-
-          return false
-        end
-      end
+  def send (*args)
+    each_value {|client|
+      client.send(*args)
     }
-
-    raise LoadError, "#{name} not found"
   end
 end
 
-end
+end; end; end

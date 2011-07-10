@@ -24,23 +24,23 @@ class Client
 
   Modes = IRC::Modes.define {
     ssl :Z,
-      :needs => :server
+      must: :do_god
 
     netadmin :N,
-      :needs    => :give_netadmin,
-      :inherits => :operator,
-      :powers   => [:give_netadmin]
+      must:     :give_netadmin,
+      inherits: :operator,
+      powers:   [:give_netadmin, :give_ircop]
 
     operator :o,
-      :needs  => :give_operator,
-      :powers => [
+      must: :give_ircop,
+      powers: [
         :kill, :see_secrets,
-        :give_channel_owner, :can_give_channel_admin, :channel_moderation,
-        :can_change_user_modes, :can_change_client_modes
+        :give_channel_owner, :give_channel_admin, :channel_moderation,
+        :change_user_modes, :change_client_modes
       ]
   }
 
-  attr_reader    :channels, :mask, :connected_on
+  attr_reader    :channels, :mask, :connected_on, :data
   attr_accessor  :password, :real_name, :modes  
   def_delegators :@client, :port, :ssl?
   def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
@@ -52,8 +52,12 @@ class Client
     @channels = Channels.new(@server)
     @modes    = Modes.new
 
-    @mask      = data[:mask] ? data[:mask] : Mask.new
-    @mask.host = @client
+    if data[:mask]
+      @mask = data[:mask]
+    else
+      @mask      = Mask.new
+      @mask.host = @client
+    end
 
     if @client.ssl?
       @modes + :ssl
@@ -61,6 +65,7 @@ class Client
 
     @connected_on = Time.now
     @registered   = false
+    @data         = truct
   end
 
   def is_on_channel? (name)

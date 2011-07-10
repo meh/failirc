@@ -30,8 +30,13 @@ class Mode
   end
 
   memoize
+  def must
+    [definition.options[:must]].flatten.compact.uniq
+  end
+
+  memoize
   def inherits
-    definition.options[:inherits] || []
+    [definition.options[:inherits]].flatten.compact.uniq
   end
 
   memoize

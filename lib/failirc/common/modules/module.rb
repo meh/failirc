@@ -24,7 +24,11 @@ module IRC; class Modules
 class Module
   include Events::DSL
 
-  def initialize (&block)
+  attr_reader :options
+
+  def initialize (options={})
+    @options = options
+
     Events::DSL.initialize(self)
   end
 

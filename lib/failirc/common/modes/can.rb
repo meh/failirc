@@ -29,7 +29,7 @@ class Can
   def method_missing (name, *args)
     name = name.to_s.sub(/\?$/, '').to_sym
 
-    modes.to_hash.values.unique.select {|mode|
+    modes.to_hash.values.uniq.select {|mode|
       mode.enabled?
     }.any? {
       mode.powers.include?(name)

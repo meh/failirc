@@ -32,7 +32,7 @@ class Server
 
   attr_reader :options, :dispatcher
 
-  def_delegators :@dispatcher, :start, :stop, :listen
+  def_delegators :@dispatcher, :listen
   def_delegators :@events, :register, :dispatch, :observe, :fire
   def_delegators :@workers, :do
   def_delegators :@modules, :load
@@ -50,6 +50,30 @@ class Server
         listen(data)
       }
     end
+
+    if @options[:modules]
+      @options[:modules].each {|name, data|
+        begin
+          @modules.load(name, data)
+
+          IRC.debug "#{name} loaded"
+        rescue LoadError
+          IRC.debug "#{name} not found"
+        end
+      }
+    end
+  end
+  
+  def start
+    fire :start, self
+
+    @dispatcher.start
+  end
+
+  def stop
+    fire :stop, self
+
+    @dispatcher.stop
   end
 end
 

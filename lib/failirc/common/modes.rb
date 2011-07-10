@@ -78,7 +78,7 @@ class Modes
 
     mode = self[data.name]
 
-    if @as.nil? or mode.needs.all? {|name| @at.can.send name}
+    if @as.nil? or mode.must.all? {|name| @at.can.send name}
       mode.value = data.value
     end
   end
@@ -92,7 +92,7 @@ class Modes
 
     mode = self[data.name]
 
-    if @as.nil? or mode.needs.all? {|name| @at.can.send name}
+    if @as.nil? or mode.must.all? {|name| @at.can.send name}
       mode.value = data.value
     end
   end

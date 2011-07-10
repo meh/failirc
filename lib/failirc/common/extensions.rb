@@ -353,18 +353,14 @@ end
 class CaseInsensitiveHash < Hash
   def self.def_insensitive (*methods)
     methods.each {|method|
-      refine_method(method) do |old, key, *args|
+      define_method method do |key, *args, &block|
         if key.is_a?(String) || key.is_a?(Symbol)
           key = key.to_s.downcase
         end
 
-        old.call(key, *args)
+        super(key, *args, &block)
       end
     }
-  end
-
-  def initialize (*args)
-    super(*args)
   end
 
   def_insensitive :[], :[]=, :delete
@@ -373,22 +369,18 @@ end
 class ThreadSafeHash < CaseInsensitiveHash
   def self.def_threaded (*methods)
     methods.each {|method|
-      alias_method "__tsh_#{method}__", method
-
-      self.class_eval %{
-        def #{method} (*args, &block)
+      define_method method do |*args, &block|
           @semaphore.synchronize {
-            self.method('__tsh_#{method}__').call(*args, &block)
+            super
           }
-        end
-      }
+      end
     }
   end
 
   def initialize (*args)
     @semaphore = Mutex.new
 
-    super(*args)
+    super
   end
 
   def_threaded :[], :[]=, :delete, :each, :each_value, :each_key

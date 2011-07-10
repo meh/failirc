@@ -87,7 +87,7 @@ class Client < IO
 
       until @output.empty?
         @last = @output.pop
-        @last.force_encoding 'ASCII-8BIT' rescue nil
+        @last.force_encoding 'ASCII-8BIT'
 
         @socket.write_nonblock("#{@last}\r\n")
       end
@@ -133,6 +133,8 @@ class Client < IO
     return if killed? and !options[:force]
 
     @killed = true
+
+    server.fire :kill,
   end
 
   def killed?

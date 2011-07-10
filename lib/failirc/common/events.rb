@@ -92,12 +92,13 @@ class Events
   def dispatch (chain=:input, thing, string)
     return unless thing
 
+    thing   = ref{:thing}
     current = event(chain, string).on(thing, string)
 
     catch(:halt) {
       event(chain, :before).call(current, thing, string)
 
-      if current.callbacks.length > 0
+      unless current.callbacks.empty?
         current.call
       else
         event(chain, :fallback).call(current, thing, string)

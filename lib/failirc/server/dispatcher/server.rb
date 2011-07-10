@@ -39,8 +39,6 @@ class Server < IO
     end
 
     super(@socket.to_i)
-
-    IRC.debug self
   end
 
   def ssl?; !!@context;      end

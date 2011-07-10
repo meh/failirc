@@ -17,41 +17,43 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/common/modules/module'
+module IRC; class Server; module Base; class Channel
 
-module IRC
+class Topic
+  extend Forwardable
 
-class Modules
-  attr_reader :owner, :list
+  attr_reader    :channel, :text, :set_by
+  attr_accessor  :set_on
+  def_delegators :@channel, :server
 
-  def initialize (owner, path)
-    @owner = owner
-    @path  = path
+  def initialize (channel)
+    @channel = channel
 
-    @list = []
+    @semaphore = Mutex.new
   end
 
-  def load (name, options={})
-    mod = Module.new(options)
-
-    $:.each {|path|
-      path = "#{path}/#{@path}/#{name}.rb"
-
-      if File.readable?(path)
-        begin
-          mod.instance_eval(File.read(path))
-
-          return @list.push(mod).last
-        rescue Exception => e
-          IRC.debug e
-
-          return false
-        end
-      end
+  def text= (value)
+    @semaphore.synchronize {
+      @text  = value
+      @set_on = Time.now
     }
+  end
 
-    raise LoadError, "#{name} not found"
+  def set_by= (value)
+    if value.is_a?(Mask)
+      @set_by = value
+    else
+      @set_by = value.mask.clone
+    end
+  end
+
+  def to_s
+    text
+  end
+
+  def nil?
+    text.nil?
   end
 end
 
-end
+end; end; end; end
