@@ -21,6 +21,10 @@ require 'failirc/common/events/event'
 require 'failirc/common/events/callback'
 require 'failirc/common/events/dsl'
 
+require 'failirc/common/events/aliases'
+require 'failirc/common/events/chains'
+require 'failirc/common/events/custom'
+
 module IRC
 
 class Events
@@ -29,9 +33,7 @@ class Events
   def initialize (server)
     @server = server
 
-    @aliases = Aliases.new
-    @chains  = Chains.new
-    @custom  = Custom.new
+    DSL.initialize(self)
 
     @hooks = []
   end

@@ -27,7 +27,7 @@ class Workers
   def initialize (parent, range = 2 .. 4)
     @parent = parent
 
-    @pool = ActionPool.new(:min_threads => range.begin, :max_threads => range.end)
+    @pool = ActionPool::Pool.new(:min_threads => range.begin, :max_threads => range.end)
   end
 
   def do (*args, &block)

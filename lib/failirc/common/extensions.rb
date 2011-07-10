@@ -17,9 +17,11 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'rubygems'
 require 'thread'
 require 'forwardable'
 require 'versionub'
+require 'yaml'
 
 class Object
   def numeric?
@@ -118,31 +120,44 @@ class String
   end
 end
 
+module StructLike
+  def method_missing (id, *args)
+    @data ||= {}
+
+    id = id.to_s.sub(/[=?]$/, '').to_sym
+
+    if args.length == 0
+      return @data[id]
+    else
+      if respond_to? "#{id}="
+        send "#{id}=", *args
+      else
+        value = (args.length > 1) ? args : args.first
+
+        if value.nil?
+          @data.delete(id)
+        else
+          @data[id] = value
+        end
+      end
+    end
+  end
+
+  def to_hash
+    @data.clone
+  end
+end
+
+
 class InsensitiveStruct
+  include StructLike
+
   def initialize (data={})
     @data = {}
 
     data.each {|name, value|
       self.send name, value
     }
-  end
-
-  def method_missing (id, *args, &block)
-    name = id.to_s.downcase
-
-    if name.end_with?('=')
-      name[-1] = ''
-    end
-
-    if args.length > 0
-      @data[name.to_sym] = args.shift
-    else
-      @data[name.to_sym]
-    end
-  end
-
-  def to_hash
-    @data.clone
   end
 end
 

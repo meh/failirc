@@ -45,19 +45,21 @@ class Dispatcher
   end
 
   def start
-    @started = true
+    @running = true
 
     self.loop
   end
 
   def stop
-    return unless @started
+    return unless @running
 
-    @started = false
+    @running = false
+
+    wakeup
   end
 
   def loop
-    while @started
+    while @running
       self.do
     end
   end
@@ -71,15 +73,17 @@ class Dispatcher
   def do
     reading, _, erroring = IO.select([@pipes.first] + clients + servers, nil, clients)
 
+    return unless @running
+
     erroring.each {|client|
       client.kill 'Input/output error', :force => true
     }
 
     reading.each {|thing|
       case thing
-        when Connections::Server then thing.accept
-        when Connections::Client then thing.receive
-        when IO                  then thing.read_nonblock(2048) rescue nil
+        when Dispatcher::Server then thing.accept
+        when Dispatcher::Client then thing.receive
+        when IO                 then thing.read_nonblock(2048) rescue nil
       end
     }
 
@@ -94,7 +98,7 @@ class Dispatcher
     }.flatten
   end
 
-  def wakeup (options)
+  def wakeup (options = {})
     if options[:reset]
       @clients = nil
     end

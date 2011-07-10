@@ -17,8 +17,11 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'failirc/server/dsl'
-require 'failirc/server/dispatchers'
+require 'failirc/common/utils'
+require 'failirc/common/events'
+require 'failirc/common/workers'
+
+require 'failirc/server/dispatcher'
 
 module IRC
 
@@ -27,6 +30,7 @@ class Server
 
   attr_reader :options, :dispatcher
 
+  def_delegators :@dispatcher, :start, :stop
   def_delegators :@events, :register, :dispatch, :observe, :fire
   def_delegators :@workers, :do
 
