@@ -33,7 +33,7 @@ class Server
   attr_reader :options, :dispatcher
 
   def_delegators :@dispatcher, :listen
-  def_delegators :@events, :register, :dispatch, :observe, :fire
+  def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
   def_delegators :@workers, :do
   def_delegators :@modules, :load
 
@@ -54,9 +54,15 @@ class Server
     if @options[:modules]
       @options[:modules].each {|name, data|
         begin
-          @modules.load(name, data)
+          mod = @modules.load(name, data)
 
-          IRC.debug "#{name} loaded"
+          if mod
+            hook mod
+
+            IRC.debug "#{name} loaded"
+          else
+            IRC.debug "#{name} had some errors"
+          end
         rescue LoadError
           IRC.debug "#{name} not found"
         end

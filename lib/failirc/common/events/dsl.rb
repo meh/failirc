@@ -20,6 +20,8 @@
 module IRC; class Events
 
 module DSL
+  attr_reader :aliases, :chains, :custom
+
   def self.initialize (what)
     what.instance_eval do
       @aliases = Aliases.new
@@ -93,6 +95,10 @@ module DSL
         Event.new(self, :custom, @custom[what]).call(*args, &block)
       }
     end
+  end
+
+  def skip
+    throw :halt
   end
 end
 

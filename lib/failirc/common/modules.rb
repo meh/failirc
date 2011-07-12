@@ -29,17 +29,23 @@ class Modules
     @path  = path
 
     @list = []
+
+    unless @owner.class.const_defined? :Module
+      @owner.class_eval {
+        class Module < IRC::Modules::Module; end
+      }
+    end
   end
 
   def load (name, options={})
-    mod = Module.new(options)
+    mod = @owner.class.const_get(:Module).new
 
     $:.each {|path|
       path = "#{path}/#{@path}/#{name}.rb"
 
       if File.readable?(path)
         begin
-          mod.instance_eval(File.read(path))
+          mod.instance_eval(File.read(path), File.realpath(path), 1)
 
           return @list.push(mod).last
         rescue Exception => e

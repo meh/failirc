@@ -21,7 +21,9 @@ module IRC; class Events
 
 class Custom < Hash
   def initialize
-    super { [] }
+    super {|hash, key|
+      hash[key] = []
+    }
   end
 end
 

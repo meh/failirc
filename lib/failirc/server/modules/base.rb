@@ -31,8 +31,6 @@ require 'failirc/server/modules/base/users'
 require 'failirc/server/modules/base/channels'
 
 on :start do |server|
-  ap server
-
   @supported_modes = {
     :client  => 'Nzo',
     :channel => 'abcCehiIkKlLmnNoQsStuvVxyz'
