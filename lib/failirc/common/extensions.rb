@@ -22,30 +22,42 @@ require 'forwardable'
 require 'versionub'
 require 'yaml'
 require 'memoized'
+require 'refining'
+
+class Module
+  def scopes_for (name)
+    scopes  = []
+
+    pieces = "Object::#{name}".split('::')
+    until pieces.empty?
+      scopes << eval(pieces.join('::')) rescue nil
+      pieces.pop
+    end
+
+    scopes.compact!
+    scopes.uniq!
+
+    scopes
+  end
+
+  def scopes
+    scopes_for(self.name)
+  end
+end
+
+class Class
+  def scopes
+    Module.scopes_for(self.name)
+  end
+end
 
 class Object
+  def scopes
+    self.class.scopes
+  end; alias __scopes__ scopes
+
   def numeric?
     true if Float(self) rescue false
-  end
-
-  def refine_method (meth, &block)
-    return unless block_given?
-
-    old = self.instance_method(meth) rescue Proc.new {}
-
-    define_method(meth) {|*args|
-      self.instance_exec((old.is_a?(Proc) ? old : old.bind(self)), *args, &block)
-    }
-  end
-
-  def refine_class_method (meth)
-    return unless block_given?
-
-    old = self.method(meth) rescue Proc.new {}
-
-    define_singleton_method(meth) {|*args|
-      yield old, *args
-    }
   end
 
   def merge_instance_variables (object)

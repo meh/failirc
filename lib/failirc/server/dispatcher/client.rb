@@ -46,6 +46,8 @@ class Client < IO
   end
 
   def receive
+    ap disconnected? or killed?
+
     return if disconnected? or killed?
 
     begin
@@ -76,7 +78,7 @@ class Client < IO
   end; alias recv receive
 
   def send (message)
-    dispatcher.parent.dispatch :output, self, message
+    dispatcher.server.dispatch :output, self, message
 
     @output.push(message)
   end
@@ -112,8 +114,6 @@ class Client < IO
   end
 
   def handle
-    flush
-
     return if @handling or @input.empty?
 
     @handling = true
@@ -121,6 +121,8 @@ class Client < IO
     server.do {
       begin
         server.dispatch :input, self, @input.pop
+
+        flush
       rescue Exception => e
         IRC.debug e
       end

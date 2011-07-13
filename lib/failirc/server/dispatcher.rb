@@ -75,10 +75,10 @@ class Dispatcher
   def do
     reading, _, erroring = IO.select([@pipes.first] + clients + servers, nil, clients)
 
-    return unless @running
+    return unless @running or not @clients
 
     erroring.each {|client|
-      client.kill 'Input/output error', :force => true
+      client.kill 'Input/output error', force: true
     }
 
     reading.each {|thing|

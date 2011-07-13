@@ -19,9 +19,7 @@
 
 module IRC; class Server; module Base
 
-class Client < Dispatcher::Client
-  extend  Forwardable
-
+module Client
   Modes = IRC::Modes.define {
     ssl :Z,
       must: :do_god
@@ -40,63 +38,51 @@ class Client < Dispatcher::Client
       ]
   }
 
-  attr_reader    :channels, :mask, :connected_on, :data
-  attr_accessor  :password, :real_name, :modes  
-  def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
-  def_delegators :@modes, :can
+  def self.extended (obj)
+    obj.instance_eval {
+      @channels = Channels.new(server)
+      @modes    = Modes.new
 
-  def initialize (client, data={})
-    client = client.client if client.is_a?(Base::Client)
+      if data[:mask]
+        @mask = data[:mask]
+      else
+        @mask      = Mask.new
+        @mask.host = client.host
+      end
 
-    merge_instance_variables(client)
+      if @client.ssl?
+        @modes + :ssl
+      end
 
-    @channels = Channels.new(server)
-    @modes    = Modes.new
+      @connected_on = Time.now
+      @registered   = false
+      @data         = InsensitiveStruct.new
+    }
 
-    if data[:mask]
-      @mask = data[:mask]
-    else
-      @mask      = Mask.new
-      @mask.host = client.host
+    class << obj
+      extend Forwardable
+
+      attr_reader    :channels, :mask, :connected_on, :data
+      attr_accessor  :password, :real_name, :modes  
+      def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
+      def_delegators :@modes, :can
     end
 
-    if @client.ssl?
-      @modes + :ssl
-    end
-
-    @connected_on = Time.now
-    @registered   = false
-    @data         = truct
-  end
-
-  def send (*args)
-    if args.first.is_a?(String)
-      super(args.first)
-    else
-      response, value = args
-      begin
-        super ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
-      rescue Exception => e
-        IRC.debug response[:text]
-        raise e
+    def is_on_channel? (name)
+      if name.is_a?(Channel)
+        !!name.user(self)
+      else
+        !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
       end
     end
-  end
 
-  def is_on_channel? (name)
-    if name.is_a?(Channel)
-      !!name.user(self)
-    else
-      !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
+    def identifier
+      nick
     end
-  end
 
-  def identifier
-    nick
-  end
-
-  def to_s
-    mask.to_s
+    def to_s
+      mask.to_s
+    end
   end
 end
 

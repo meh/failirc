@@ -18,4 +18,5 @@ Gem::Specification.new {|s|
   s.add_dependency('versionub')
   s.add_dependency('actionpool')
   s.add_dependency('memoized')
+  s.add_dependency('refining')
 }

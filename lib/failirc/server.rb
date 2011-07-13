@@ -81,6 +81,22 @@ class Server
 
     @dispatcher.stop
   end
+
+  def host
+    @options[:server][:host] || 'localhost'
+  end
+
+  def ip
+    begin
+      Resolv.getaddress(host)
+    rescue
+      Resolv.getaddress('localhost')
+    end
+  end
+
+  def name
+    @options[:server][:name] || 'failirc'
+  end
 end
 
 end

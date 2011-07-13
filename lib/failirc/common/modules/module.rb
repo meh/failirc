@@ -23,9 +23,15 @@ module IRC; class Modules
 
 class Module
   def self.for (what)
+    scopes = what.scopes
+
     klass = Class.new(Module)
     klass.define_singleton_method :const_missing do |name|
-      ((what.is_a?(Class) or what.is_a?(Module)) ? what : what.class).const_get(name)
+      scopes.each {|what|
+        return what.const_get(name) if what.const_defined?(name)
+      }
+
+      scopes.first.const_get(name)
     end
 
     klass

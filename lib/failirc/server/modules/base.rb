@@ -22,6 +22,7 @@ require 'failirc/server/modules/base/responses'
 
 require 'failirc/server/modules/base/extensions'
 require 'failirc/server/modules/base/flags'
+require 'failirc/server/modules/base/incoming'
 require 'failirc/server/modules/base/clients'
 require 'failirc/server/modules/base/users'
 require 'failirc/server/modules/base/channels'
@@ -93,6 +94,10 @@ on :start do |server|
       }
     end
   }
+end
+
+on :connect do |client|
+  client.extend Incoming
 end
 
 def check_encoding (string)
@@ -218,12 +223,12 @@ input {
     end
 
     # if the client tries to do something without having registered, kill it with fire
-    if !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER) && thing.class == Dispatcher::Client
+    if !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER) && thing.class == Incoming
       thing.send ERR_NOTREGISTERED
 
       skip
     # if the client tries to reregister, kill it with fire
-    elsif (event.alias?(:PASS) || event.alias?(:USER)) && thing.class != Dispatcher::Client
+    elsif (event.alias?(:PASS) || event.alias?(:USER)) && thing.class != Incoming
       thing.send ERR_ALREADYREGISTRED
 
       skip
