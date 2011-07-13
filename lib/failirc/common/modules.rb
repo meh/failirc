@@ -32,7 +32,7 @@ class Modules
   end
 
   def load (name, options={})
-    mod = Module.new
+    mod = Module.for(@owner).new
 
     $:.each {|path|
       path = "#{path}/#{@path}/#{name}.rb"

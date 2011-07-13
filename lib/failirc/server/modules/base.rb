@@ -27,8 +27,7 @@ require 'failirc/server/modules/base/users'
 require 'failirc/server/modules/base/channels'
 require 'failirc/server/modules/base/action'
 
-extend IRC::Server
-extend IRC::Server::Base
+extend Base
 
 name       'base'
 version    '0.1.0'

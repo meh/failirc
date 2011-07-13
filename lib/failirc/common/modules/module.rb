@@ -22,6 +22,15 @@ require 'failirc/common/events'
 module IRC; class Modules
 
 class Module
+  def self.for (what)
+    klass = Class.new(Module)
+    klass.define_singleton_method :const_missing do |name|
+      ((what.is_a?(Class) or what.is_a?(Module)) ? what : what.class).const_get(name)
+    end
+
+    klass
+  end
+
   include Events::DSL
 
   attr_reader :options
