@@ -40,7 +40,7 @@ class Event
   end
 
   def alias? (name)
-    @aliases.member?(name.to_sym.downcase)
+    @aliases.member?(name.to_s.downcase.to_sym)
   end
 
   def call (*args, &block)

@@ -42,7 +42,7 @@ class Modes
     end
   end
 
-  def method_missing (name, *args)
+  def method_missing (name, *args, &block)
     name = name.to_s
 
     begin
@@ -52,8 +52,12 @@ class Modes
         self[name]
       end
     rescue
-      super
+      super(name.to_sym, *args, &block)
     end
+  end
+
+  def each (&block)
+    @modes.values.uniq.each &block
   end
 
   memoize
@@ -113,8 +117,30 @@ class Modes
     @as = nil
   end
 
+  def empty?
+    each {|mode|
+      return false if mode.enabled?
+    }
+
+    true
+  end
+
   def to_hash
     @modes
+  end
+
+  def to_s
+    modes  = []
+    values = []
+
+    each {|mode|
+      next unless mode.enabled?
+
+      modes  << mode.code
+      values << mode.value unless mode.value === false or mode.value === true
+    }
+
+    "+#{modes.join}#{" #{values.join(' ')}" if values}"
   end
 
   def inspect

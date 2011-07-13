@@ -88,6 +88,10 @@ class Server < IO
       end
     }
   end
+
+  def to_s
+    "#{host}/#{port}"
+  end
 end
 
 end; end; end

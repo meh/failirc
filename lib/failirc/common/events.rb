@@ -57,7 +57,7 @@ class Events
     if what.is_a?(Symbol)
       Event.new(self, chain, (@chains[chain][what] + @hooks.map {|hook| hook.chains[chain][what]}).flatten.compact, [what])
     else
-      callbacks = Hash.new { [] }
+      callbacks = Hash.new {|hash, key| hash[key] = [] }
 
       (@hooks + [self]).each {|hook|
         hook.chains[chain].each {|key, value|
@@ -68,7 +68,7 @@ class Events
       regexps, callbacks = callbacks.to_a.select {|(name, callbacks)|
         !name.is_a?(Symbol)
       }.select {|(regexp, callbacks)|
-        what.to_s.match(regexp) rescue nil
+        what.to_s.match(regexp) rescue false
       }.transpose
 
       aliases = (regexps || []).flatten.compact.map {|regexp|

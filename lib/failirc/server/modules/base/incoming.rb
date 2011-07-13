@@ -20,6 +20,10 @@
 module IRC; class Server; module Base
 
 module Incoming; def self.extended (obj)
+  obj.instance_eval {
+    @data = InsensitiveStruct.new
+  }
+
   obj.refine_method :send do |old, *args|
     if args.first.is_a?(String)
       old.call(args.first)
@@ -35,8 +39,24 @@ module Incoming; def self.extended (obj)
     end
   end
 
-  obj.refine_method :identifier do
-    'faggot'
+  class << obj
+    attr_reader :data
+
+    def identifier
+      'faggot'
+    end
+
+    def incoming?
+      true
+    end
+
+    def client?
+      false
+    end
+
+    def server?
+      false
+    end
   end
 end; end
 

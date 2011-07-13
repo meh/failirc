@@ -43,45 +43,49 @@ module Client
       @channels = Channels.new(server)
       @modes    = Modes.new
 
-      if data[:mask]
-        @mask = data[:mask]
-      else
-        @mask      = Mask.new
-        @mask.host = client.host
-      end
+      @mask      = Mask.new
+      @mask.host = self.host
 
-      if @client.ssl?
+      if ssl?
         @modes + :ssl
       end
 
       @connected_on = Time.now
       @registered   = false
-      @data         = InsensitiveStruct.new
+
+      extend Forwardable
+
+      def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
+      def_delegators :@modes, :can
     }
 
     class << obj
-      extend Forwardable
+      attr_reader   :channels, :mask, :connected_on
+      attr_accessor :password, :real_name, :modes  
 
-      attr_reader    :channels, :mask, :connected_on, :data
-      attr_accessor  :password, :real_name, :modes  
-      def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
-      def_delegators :@modes, :can
-    end
-
-    def is_on_channel? (name)
-      if name.is_a?(Channel)
-        !!name.user(self)
-      else
-        !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
+      def is_on_channel? (name)
+        if name.is_a?(Channel)
+          !!name.user(self)
+        else
+          !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
+        end
       end
-    end
 
-    def identifier
-      nick
-    end
+      def identifier
+        nick
+      end
 
-    def to_s
-      mask.to_s
+      def incoming?
+        false
+      end
+
+      def client?
+        true
+      end
+
+      def to_s
+        mask.to_s
+      end
     end
   end
 end

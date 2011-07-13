@@ -46,9 +46,7 @@ class Client < IO
   end
 
   def receive
-    ap disconnected? or killed?
-
-    return if disconnected? or killed?
+    return if disconnected?
 
     begin
       input = ''
@@ -63,15 +61,15 @@ class Client < IO
         @input.push(string)
       }
     rescue IOError
-      kill 'Input/output error', :force => true
+      disconnect 'Input/output error', :force => true
     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-      kill 'Client exited', :force => true
+      disconnect 'Client exited', :force => true
     rescue Errno::ECONNRESET
-      kill 'Connection reset by peer', :force => true
+      disconnect 'Connection reset by peer', :force => true
     rescue Errno::ETIMEDOUT
-      kill 'Ping timeout', :force => true
+      disconnect 'Ping timeout', :force => true
     rescue Errno::EHOSTUNREACH
-      kill 'No route to host', :force => true
+      disconnect 'No route to host', :force => true
     rescue Exception => e
       IRC.debug e
     end
@@ -98,15 +96,15 @@ class Client < IO
 
       @last = nil
     rescue IOError
-      kill 'Input/output error', :force => true
+      disconnect 'Input/output error'
     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-      kill 'Client exited', :force => true
+      disconnect 'Client exited'
     rescue Errno::ECONNRESET
-      kill 'Connection reset by peer', :force => true
+      disconnect 'Connection reset by peer'
     rescue Errno::ETIMEDOUT
-      kill 'Ping timeout', :force => true
+      disconnect 'Ping timeout'
     rescue Errno::EHOSTUNREACH
-      kill 'No route to host', :force => true
+      disconnect 'No route to host'
     rescue Errno::EAGAIN, IO::WaitWritable
     rescue Exception => e
       IRC.debug e
@@ -133,20 +131,32 @@ class Client < IO
     }
   end
 
-  def kill (message, options={})
-    return if killed? and !options[:force]
+  def disconnect (message, options={})
+    return if disconnected? and !options[:force]
 
-    @killed = true
+    server.fire :disconnect, self, message
 
-    server.fire :kill,
-  end
+    IRC.debug "#{self} disconnecting because: #{message}"
 
-  def killed?
-    !!@killed
+    connected_to.clients.delete(self)
+    dispatcher.wakeup reset: true
+
+    unless disconnected?
+      flush
+      @socket.close
+    end
   end
 
   def disconnected?
-    @socket.closed?
+    begin
+      @socket.closed?
+    rescue Exception
+      true
+    end
+  end
+
+  def to_s
+    "#{host}"
   end
 end
 

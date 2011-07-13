@@ -17,11 +17,15 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'resolv'
+
+require 'failirc/version'
 require 'failirc/common/utils'
 require 'failirc/common/events'
 require 'failirc/common/workers'
 require 'failirc/common/modules'
 require 'failirc/common/modes'
+require 'failirc/common/mask'
 
 require 'failirc/server/dispatcher'
 
@@ -30,7 +34,7 @@ module IRC
 class Server
   extend Forwardable
 
-  attr_reader :options, :dispatcher
+  attr_reader :options, :dispatcher, :created_on
 
   def_delegators :@dispatcher, :listen
   def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
@@ -39,6 +43,8 @@ class Server
 
   def initialize (options={})
     @options = HashWithIndifferentAccess.new(options)
+
+    @created_on = Time.new
 
     @dispatcher = Dispatcher.new(self)
     @events     = Events.new(self)
@@ -57,6 +63,10 @@ class Server
           mod = @modules.load(name, data)
 
           if mod
+            mod.define_singleton_method :server do
+              self
+            end
+
             hook mod
 
             IRC.debug "#{name} loaded"

@@ -56,8 +56,8 @@ on :start do |server|
 
   @mutex      = Mutex.new
   @joining    = {}
-  @pinged_out = {}
-  @to_ping    = {}
+  @pinged_out = []
+  @to_ping    = []
   @nicks      = []
   @channels   = Channels.new(server)
   @clients    = {}
@@ -65,29 +65,27 @@ on :start do |server|
 
   Thread.new {
     while server.running?
-      @semaphore.synchronize {
+      @mutex.synchronize {
         # time to ping non active users
-        @to_ping.each_value {|thing|
-          @pinged_out[thing.socket] = thing
+        @to_ping.each {|thing|
+          @pinged_out << thing
 
-          if thing.class != Incoming
-            thing.send :raw, "PING :#{server.host}"
+          unless thing.incoming?
+            thing.send "PING :#{server.host}"
           end
         }
 
         # clear and refill the hash of clients to ping with all the connected clients
         @to_ping.clear
-        @to_ping.merge!(server.connections.things)
+        @to_ping.insert(-1, server.dispatcher.clients)
       }
 
       sleep((options[:misc]['ping timeout'].to_f rescue 60))
 
-      @semaphore.synchronize {
+      @mutex.synchronize {
         # people who didn't answer with a PONG have to YIFF IN HELL.
-        @pinged_out.each_value {|thing|
-          if !thing.socket.closed?
-            server.kill thing, 'Ping timeout', true
-          end
+        @pinged_out.each {|thing|
+          thing.disconnect 'Ping timeout'
         }
 
         @pinged_out.clear
@@ -98,6 +96,24 @@ end
 
 on :connect do |client|
   client.extend Incoming
+  client.data.encoding = 'UTF-8'
+end
+
+on :disconnect do |thing, message|
+  next unless thing.client?
+
+  @nicks.delete(thing.nick)
+  
+  @to_ping.delete(thing)
+  @pinged_out.delete(thing)
+
+  thing.channels.select {|name, channel|
+    channel.has_flag?(:anonymous)
+  }.each_key {|name|
+    server.fire :part, thing, name, nil
+  }
+
+  thing.channels.unique_users.send ":#{thing.mask} QUIT :#{message}"
 end
 
 def check_encoding (string)
@@ -119,7 +135,7 @@ end
 
 # check encoding
 input do before priority: -10001 do |event, thing, string|
-  return unless thing.is_a?(Client)
+  next unless thing.client?
 
   begin
     string.force_encoding(thing.data.encoding)
@@ -153,7 +169,7 @@ input do before priority: -10001 do |event, thing, string|
 end end
 
 output do after priority: 10001 do |event, thing, string|
-  return unless thing.is_a?(Client)
+  return unless thing.client?
 
   if thing.data.encoding
     string.encode!(thing.data.encoding,
@@ -166,8 +182,8 @@ end end
 input {
   aliases {
     pass /^PASS( |$)/i
-    nick /^(:[^ ]\s+)?NICK( |$)/i
-    user /^(:[^ ]\s+)?USER( |$)/i
+    nick /^(:\S\s+)?NICK( |$)/i
+    user /^(:\S\s+)?USER( |$)/i
 
     motd /^MOTD( |$)/i
 
@@ -179,13 +195,13 @@ input {
     mode      /^MODE( |$)/i
     encoding  /^ENCODING( |$)/i
 
-    join   /^(:[^ ] )?JOIN( |$)/i
-    part   /^(:[^ ] )?PART( |$)/i
-    kick   /^(:[^ ] )?KICK( |$)/i
+    join   /^(:\S\s+)?JOIN( |$)/i
+    part   /^(:\S\s+)?PART( |$)/i
+    kick   /^(:\S\s+)?KICK( |$)/i
     invite /^INVITE( |$)/i
     knock  /^KNOCK( |$)/i
 
-    topic /^(:[^ ] )?TOPIC( |$)/i
+    topic /^(:\S\s+)?TOPIC( |$)/i
     names /^NAMES( |$)/i
     list  /^LIST( |$)/i
 
@@ -194,7 +210,7 @@ input {
     whowas /^WHOWAS( |$)/i
     ison   /^ISON( |$)/i
 
-    privmsg /^(:[^ ] )?PRIVMSG( |$)/i
+    privmsg /^(:\S\s+)?PRIVMSG( |$)/i
     notice  /^NOTICE( |$)/i
 
     map     /^MAP( |$)/i
@@ -211,8 +227,6 @@ input {
 input {
   # check for ping timeout and registration
   before priority: -123456789 do |event, thing, string|
-    ap string
-
     @mutex.synchronize {
       @to_ping.delete(thing)
       @pinged_out.delete(thing)
@@ -223,12 +237,12 @@ input {
     end
 
     # if the client tries to do something without having registered, kill it with fire
-    if !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER) && thing.class == Incoming
+    if thing.incoming? && !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER)
       thing.send ERR_NOTREGISTERED
 
       skip
     # if the client tries to reregister, kill it with fire
-    elsif (event.alias?(:PASS) || event.alias?(:USER)) && thing.class != Incoming
+    elsif (event.alias?(:PASS) || event.alias?(:USER)) && !thing.incoming?
       thing.send ERR_ALREADYREGISTRED
 
       skip
@@ -239,6 +253,235 @@ input {
     whole, command = string.match(/^([^ ]+)/).to_a
 
     thing.send ERR_UNKNOWNCOMMAND, command
+  end
+
+  # this method sends a MOTD string in an RFC compliant way
+  def motd (thing, string=nil)
+    thing.send RPL_MOTDSTART
+
+    options[:misc][:motd].interpolate(binding).split(/\n/).each {|line|
+      offset = 0
+
+      while part = line[offset, 80]
+        if (tmp = line[offset + 80, 1]) && !tmp.match(/\s/)
+          part.sub!(/([^ ]+)$/, '')
+
+          if (tmp = part.length) == 0
+            tmp = 80
+          end
+        else
+          tmp = 80
+        end
+
+        offset += tmp
+
+        if part.strip.length == 0 && line.strip.length > 0
+          next
+        end
+
+        thing.send RPL_MOTD, part.strip
+      end
+    }
+
+    thing.send RPL_ENDOFMOTD
+  end
+
+  # This method does some checks trying to register the connection, various checks
+  # for nick collisions and such.
+  def register (thing)
+    return unless thing.incoming?
+
+    # if the client isn't registered but has all the needed attributes, register it
+    if thing.data.user && thing.data.nick
+      return false if thing.options[:password] && thing.options[:password] != thing.data.password
+
+      (client = thing).extend Client
+
+      client.nick      = thing.data.nick
+      client.user      = thing.data.user
+      client.real_name = thing.data.real_name
+
+      @clients[client.nick] = client
+
+      server.fire :registered, client
+
+      client.send RPL_WELCOME, client
+      client.send RPL_HOSTEDBY, client
+      client.send RPL_SERVCREATEDON
+      client.send RPL_SERVINFO,
+        client:  @supported_modes[:client],
+        channel: @supported_modes[:channel]
+
+      @support.map {|(key, value)|
+        value != true ? "#{key}=#{value}" : key
+      }.join(' ')
+
+      unless client.modes.empty?
+        client.send ":#{server} MODE #{client.nick} #{client.modes}"
+      end
+
+      motd(client)
+
+      server.fire :connected, client
+    end
+  end
+
+  on :pass do |thing, string|
+    next unless thing.incoming?
+
+    whole, password = string.match(/PASS\s+(?::)?(.*)$/i).to_a
+
+    if !password
+      thing.send ERR_NEEDMOREPARAMS, :PASS
+      next
+    end
+
+    thing.data.password = password
+
+    if thing.options[:password]
+      if thing.data.password != thing.options[:password]
+        server.fire :error, thing, :close, 'Password mismatch'
+        thing.disconnect 'Password mismatch'
+        next
+      end
+    end
+
+    # try to register it
+    register(thing)
+  end
+
+  on :user do |thing, string|
+    return unless thing.incoming?
+
+    whole, user, real_name = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.*)$/i).to_a
+
+    if !real_name
+      thing.send :numeric, ERR_NEEDMOREPARAMS, :USER
+    else
+      thing.data.user      = user
+      thing.data.real_name = real_name
+
+      # try to register it
+      register(thing)
+    end
+  end
+
+  on :nick do |thing, string|
+    whole, from, nick = string.match(/^(?::(.+?)\s+)?NICK\s+(?::)?(.+)$/i).to_a
+
+    # no nickname was passed, so tell the user is a faggot
+    if !nick
+      thing.send :numeric, ERR_NONICKNAMEGIVEN
+      return
+    end
+
+    @mutex.synchronize {
+      case thing 
+        when Client
+          server.fire :nick, thing, nick
+  
+        when Server
+  
+        when Incoming
+          if !nick_is_ok?(thing, nick)
+            thing.data.warned = nick
+            return
+          end
+
+          @nicks.delete(thing.data.nick)
+          @nicks << (thing.data.nick = nick)
+  
+          # try to register it
+          register(thing)
+      end
+    }
+  end
+
+  def nick_is_ok? (thing, nick)
+    if thing.client?
+      if thing.nick == nick
+        return false
+      end
+
+      if thing.nick.downcase == nick.downcase
+        return true
+      end
+    end
+
+    if @nicks.member?(nick)
+      thing.send ERR_NICKNAMEINUSE, nick
+
+      return false
+    end
+
+    if !(eval(options[:misc]['allowed nick']) rescue false) || nick.downcase == 'anonymous'
+      thing.send ERR_ERRONEUSNICKNAME, nick
+
+      return false
+    end
+
+    return true
+  end
+
+  observe :nick do |thing, nick|
+    catch(:no_nick_change) { @mutex.synchronize {  
+      next unless nick_is_ok?(thing, nick)
+
+      thing.channels.each_value {|channel|
+        if channel.has_flag?(:no_nick_change) && !channel.user(thing).is_level_enough?('+')
+          thing.send :numeric, ERR_NONICKCHANGE, channel.name
+
+          throw :no_nick_change
+        end
+      }
+
+      @nicks.delete(thing.nick)
+      @nicks << nick
+
+      mask       = thing.mask.clone
+      thing.nick = nick
+
+      @clients[thing.nick] = @clients.delete(mask.nick)
+
+      thing.channels.each_value {|channel|
+        channel.users.add(channel.users.delete(mask.nick))
+      }
+
+      if thing.channels.empty?
+        thing.send ":#{mask} NICK :#{nick}"
+      else
+        thing.channels.unique_users.send ":#{mask} NICK :#{nick}"
+      end
+    } }
+  end
+
+  on :motd, &method(:motd)
+
+  on :ping do |thing, string|
+    whole, what = string.match(/PING\s+(.*)$/i).to_a
+
+    thing.send ERR_NOORIGIN and next unless whole
+
+    thing.send ":#{server.host} PONG #{server.host} :#{what}"
+  end
+
+  on :pong do |thing, string|
+    whole, what = string.match(/PONG\s+(?::)?(.*)$/i).to_a
+
+    thing.send ERR_NOORIGIN and next unless whole
+
+    if what != server.host
+      thing.send ERR_NOSUCHSERVER, what
+    end
+  end
+
+  on :quit do |thing, string|
+    whole, message = string.match(/^QUIT(?:\s+:?(.*))?$/i).to_a
+
+    user      = thing
+    message ||= user.nick
+
+    thing.disconnect options[:messages][:quit].interpolate(binding)
   end
 }
 
@@ -268,234 +511,6 @@ end
     thing.send :raw, case type
       when :close; "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})"
       else;        "ERROR :#{message}"
-    end
-  end
-
-  def motd (thing, string=nil)
-    thing.send :numeric, RPL_MOTDSTART
-
-    options[:misc][:motd].interpolate(binding).split(/\n/).each {|line|
-      offset = 0
-
-      while part = line[offset, 80]
-        if (tmp = line[offset + 80, 1]) && !tmp.match(/\s/)
-          part.sub!(/([^ ]+)$/, '')
-
-          if (tmp = part.length) == 0
-            tmp = 80
-          end
-        else
-          tmp = 80
-        end
-
-        offset += tmp
-
-        if part.strip.length == 0 && line.strip.length > 0
-          next
-        end
-
-        thing.send :numeric, RPL_MOTD, part.strip
-      end
-    }
-
-    thing.send :numeric, RPL_ENDOFMOTD
-  end
-
-  # This method does some checks trying to register the connection, various checks
-  # for nick collisions and such.
-  def register (thing)
-    return if thing.class != Incoming
-
-    # if the client isn't registered but has all the needed attributes, register it
-    if thing.data.user && thing.data.nick
-      if thing.options['password'] && thing.options['password'] != thing.data.password
-        return false
-      end
-
-      client           = Client.new(thing)
-      client.nick      = thing.data.nick
-      client.user      = thing.data.user
-      client.real_name = thing.data.real_name
-
-      @clients[client.nick] = (server.connections << client)
-
-      server.fire :registered, client
-
-      client.send :numeric, RPL_WELCOME, client
-      client.send :numeric, RPL_HOSTEDBY, client
-      client.send :numeric, RPL_SERVCREATEDON
-      client.send :numeric, RPL_SERVINFO, {
-        :client  => @supported_modes[:client],
-        :channel => @supported_modes[:channel],
-      }
-
-      client.send :numeric, RPL_ISUPPORT, @support.map {|(key, value)|
-        if value != true
-          "#{key}=#{value}"
-        else
-          "#{key}"
-        end
-      }.join(' ')
-
-      if !client.modes.to_s.empty?
-        client.send :raw, ":#{server} MODE #{client.nick} #{client.modes}"
-      end
-
-      motd(client)
-
-      server.fire :connected, client
-    end
-  end
-
-  on pass do |thing, string|
-    return if thing.class != Incoming
-
-    whole, password = string.match(/PASS\s+(?::)?(.*)$/i).to_a
-
-    if !password
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :PASS
-      return
-    end
-
-    thing.data.password = password
-
-    if thing.options[:password]
-      if thing.data.password != thing.options[:password]
-        server.fire :error, thing, :close, 'Password mismatch'
-        server.kill thing, 'Password mismatch'
-        return
-      end
-    end
-
-    # try to register it
-    register(thing)
-  end
-
-  on nick do |thing, string|
-    whole, from, nick = string.match(/^(?::(.+?)\s+)?NICK\s+(?::)?(.+)$/i).to_a
-
-    # no nickname was passed, so tell the user is a faggot
-    if !nick
-      thing.send :numeric, ERR_NONICKNAMEGIVEN
-      return
-    end
-
-    @semaphore.synchronize {
-      case thing 
-        when Client
-          server.fire :nick, thing, nick
-  
-        when Server
-  
-        when Incoming
-          if !nick_is_ok?(thing, nick)
-            thing.data.warned = nick
-            return
-          end
-
-          @nicks.delete(thing.data.nick)
-          @nicks << (thing.data.nick = nick)
-  
-          # try to register it
-          register(thing)
-      end
-    }
-  end
-
-  observe :nick do |thing, nick|
-    @semaphore.synchronize {  
-      return unless nick_is_ok?(thing, nick)
-
-      thing.channels.each_value {|channel|
-        if channel.has_flag?(:no_nick_change) && !channel.user(thing).is_level_enough?('+')
-          thing.send :numeric, ERR_NONICKCHANGE, channel.name
-          return
-        end
-      }
-
-      @nicks.delete(thing.nick)
-      @nicks << nick
-
-      mask       = thing.mask.clone
-      thing.nick = nick
-
-      @clients[thing.nick] = @clients.delete(mask.nick)
-
-      thing.channels.each_value {|channel|
-        channel.users.add(channel.users.delete(mask.nick))
-      }
-
-      if thing.channels.empty?
-        thing.send :raw, ":#{mask} NICK :#{nick}"
-      else
-        thing.channels.unique_users.send :raw, ":#{mask} NICK :#{nick}"
-      end
-    }
-  end
-
-  def nick_is_ok? (thing, nick)
-    if thing.is_a?(Client)
-      if thing.nick == nick
-        return false
-      end
-
-      if thing.nick.downcase == nick.downcase
-        return true
-      end
-    end
-
-    if @nicks.member?(nick)
-      thing.send :numeric, ERR_NICKNAMEINUSE, nick
-      return false
-    end
-
-    if !(eval(options[:misc]['allowed nick']) rescue false) || nick.downcase == 'anonymous'
-      thing.send :numeric, ERR_ERRONEUSNICKNAME, nick
-      return false
-    end
-
-    return true
-  end
-
-  on user do |thing, string|
-    return if thing.class != Incoming
-
-    whole, user, real_name = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.*)$/i).to_a
-
-    if !real_name
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :USER
-    else
-      thing.data.user      = user
-      thing.data.real_name = real_name
-
-      # try to register it
-      register(thing)
-    end
-  end
-
-  on :motd, &method(:motd)
-
-  on ping do |thing, string|
-    whole, what = string.match(/PING\s+(.*)$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NOORIGIN
-      return
-    end
-
-    thing.send :raw, ":#{server.host} PONG #{server.host} :#{what}"
-  end
-
-  on pong do |thing, string|
-    whole, what = string.match(/PONG\s+(?::)?(.*)$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NOORIGIN
-      return
-    end
-
-    if what != server.host
-      thing.send :numeric, ERR_NOSUCHSERVER, what
     end
   end
 
@@ -1190,7 +1205,7 @@ end
   end
 
   observe :join do |thing, channel, password=nil|
-    @semaphore.synchronize {
+    @mutex.synchronize {
       if !channel.channel_type
         channel = "##{channel}"
       end
@@ -1318,7 +1333,7 @@ end
 
     user.channel.send :raw, ":#{mask} PART #{user.channel} :#{text}"
 
-    @semaphore.synchronize {
+    @mutex.synchronize {
       user.channel.delete(user)
       user.client.channels.delete(user.channel.name)
 
@@ -1381,7 +1396,7 @@ end
   observe :kicked do |from, user, message|
     user.channel.send :raw, ":#{from.value.mask} KICK #{user.channel} #{user.nick} :#{message}"
 
-    @semaphore.synchronize {
+    @mutex.synchronize {
       user.channel.delete(user)
       user.client.channels.delete(user.channel)
 
@@ -2057,15 +2072,6 @@ end
 
     client.send :raw, ":#{client} QUIT :#{text}"
     server.kill client, text
-  end
-
-  on quit do |thing, string|
-    whole, message = string.match(/^QUIT(?:\s+:?(.*))?$/i).to_a
-
-    user      = thing
-    message ||= user.nick
-
-    server.kill(thing, options[:messages][:quit].interpolate(binding))
   end
 
   observe :killed do |thing, message|

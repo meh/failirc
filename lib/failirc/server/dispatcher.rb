@@ -78,7 +78,7 @@ class Dispatcher
     return unless @running or not @clients
 
     erroring.each {|client|
-      client.kill 'Input/output error', force: true
+      client.disconnect 'Input/output error'
     }
 
     reading.each {|thing|
@@ -101,9 +101,7 @@ class Dispatcher
   end
 
   def wakeup (options = {})
-    if options[:reset]
-      @clients = nil
-    end
+    @clients = nil if options[:reset]
 
     @pipes.last.write '?'
   end

@@ -132,7 +132,7 @@ class String
         on.instance_eval("%{#{self}}")
       end
     rescue Exception => e
-      debug e
+      IRC.debug e
       self
     end
   end
@@ -388,9 +388,9 @@ class ThreadSafeHash < CaseInsensitiveHash
   def self.def_threaded (*methods)
     methods.each {|method|
       define_method method do |*args, &block|
-          @semaphore.synchronize {
-            super
-          }
+        @semaphore.synchronize {
+          super(*args, &block)
+        }
       end
     }
   end
