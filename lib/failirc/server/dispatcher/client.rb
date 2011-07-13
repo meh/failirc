@@ -22,7 +22,7 @@ module IRC; class Server; class Dispatcher
 class Client < IO
   extend Forwardable
 
-  attr_reader    :connected_to, :socket, :ip, :host, :port
+  attr_reader    :connected_to, :socket, :ip, :host, :port, :data
   def_delegators :@connected_to, :server, :dispatcher, :options
 
   def initialize (connected_to, socket)
@@ -35,6 +35,8 @@ class Client < IO
     @ip   = @socket.peeraddr[3] rescue nil
     @host = @socket.peeraddr[2] rescue nil
     @port = @socket.addr[1]     rescue nil
+
+    @data = InsensitiveStruct.new
 
     super(@socket.to_i)
   end

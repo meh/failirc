@@ -27,6 +27,12 @@ class Callback
     @options = options
   end
 
+  [:priority].each {|name|
+    define_method name do
+      @options[name]
+    end
+  }
+
   def call (*args, &block)
     begin
       @block.call(*args, &block)

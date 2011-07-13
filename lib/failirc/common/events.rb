@@ -92,7 +92,6 @@ class Events
   def dispatch (chain=:input, thing, string)
     return unless thing
 
-    thing   = ref{:thing}
     current = event(chain, string).on(thing, string)
 
     catch(:halt) {
@@ -101,7 +100,7 @@ class Events
       unless current.callbacks.empty?
         current.call
       else
-        event(chain, :fallback).call(current, thing, string)
+        event(chain, :default).call(current, thing, string)
       end
 
       event(chain, :after).call(current, thing, string)

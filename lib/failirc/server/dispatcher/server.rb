@@ -70,7 +70,7 @@ class Server < IO
           end
         end
 
-        server.fire :connection, @clients.push(Dispatcher::Client.new(self, socket))
+        server.fire :connection, @clients.push(Dispatcher::Client.new(self, socket)).last
         dispatcher.wakeup :reset => true
       rescue OpenSSL::SSL::SSLError, Timeout::Error
         socket.write_nonblock "This is an SSL connection, faggot.\r\n" rescue nil

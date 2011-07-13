@@ -19,7 +19,7 @@
 
 module IRC; class Server; module Base
 
-class Client
+class Client < Dispatcher::Client
   extend  Forwardable
 
   Modes = IRC::Modes.define {
@@ -42,21 +42,22 @@ class Client
 
   attr_reader    :channels, :mask, :connected_on, :data
   attr_accessor  :password, :real_name, :modes  
-  def_delegators :@client, :port, :ssl?
   def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
   def_delegators :@modes, :can
 
   def initialize (client, data={})
-    @client = client.is_a?(Base::Client) ? client.client : client
+    client = client.client if client.is_a?(Base::Client)
 
-    @channels = Channels.new(@server)
+    merge_instance_variables(client)
+
+    @channels = Channels.new(server)
     @modes    = Modes.new
 
     if data[:mask]
       @mask = data[:mask]
     else
       @mask      = Mask.new
-      @mask.host = @client
+      @mask.host = client.host
     end
 
     if @client.ssl?
@@ -66,6 +67,20 @@ class Client
     @connected_on = Time.now
     @registered   = false
     @data         = truct
+  end
+
+  def send (*args)
+    if args.first.is_a?(String)
+      super(args.first)
+    else
+      response, value = args
+      begin
+        super ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
+      rescue Exception => e
+        IRC.debug response[:text]
+        raise e
+      end
+    end
   end
 
   def is_on_channel? (name)

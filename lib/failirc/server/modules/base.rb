@@ -17,10 +17,6 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-name       'base'
-version    '0.1.0'
-identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
-
 require 'failirc/server/modules/base/errors'
 require 'failirc/server/modules/base/responses'
 
@@ -29,6 +25,14 @@ require 'failirc/server/modules/base/flags'
 require 'failirc/server/modules/base/clients'
 require 'failirc/server/modules/base/users'
 require 'failirc/server/modules/base/channels'
+require 'failirc/server/modules/base/action'
+
+extend IRC::Server
+extend IRC::Server::Base
+
+name       'base'
+version    '0.1.0'
+identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
 
 on :start do |server|
   @supported_modes = {
@@ -92,31 +96,6 @@ on :start do |server|
   }
 end
 
-=begin
-on connection do |thing|
-  thing.data.encoding = 'UTF-8'
-end
-
-on killed do |thing, message|
-  case thing
-    when Client
-      thing.channels.each_value {|channel|
-        channel.users.delete(thing.nick)
-
-        if channel.empty?
-          @channels.delete(channel.name)
-        end
-      }
-
-      @nicks.delete(thing.nick)
-      
-    when Server
-
-    when Incoming
-      @nicks.delete(thing.data.nick)
-  end
-end
-
 def check_encoding (string)
   result   = false
   encoding = string.encoding
@@ -136,6 +115,8 @@ end
 
 # check encoding
 input do before priority: -10001 do |event, thing, string|
+  return unless thing.is_a?(Client)
+
   begin
     string.force_encoding(thing.data.encoding)
 
@@ -168,6 +149,8 @@ input do before priority: -10001 do |event, thing, string|
 end end
 
 output do after priority: 10001 do |event, thing, string|
+  return unless thing.is_a?(Client)
+
   if thing.data.encoding
     string.encode!(thing.data.encoding,
       :invalid => :replace,
@@ -219,12 +202,16 @@ input {
 
     quit /^QUIT( |$)/i
   }
+}
 
+input {
   # check for ping timeout and registration
-  before -123456789 do |event, thing, string|
-    @semaphore.synchronize {
-      @to_ping.delete(thing.socket)
-      @pinged_out.delete(thing.socket)
+  before priority: -123456789 do |event, thing, string|
+    ap string
+
+    @mutex.synchronize {
+      @to_ping.delete(thing)
+      @pinged_out.delete(thing)
     }
 
     if !event.alias?(:PING) && !event.alias?(:PONG) && !event.alias?(:WHO) && !event.alias?(:MODE)
@@ -232,23 +219,46 @@ input {
     end
 
     # if the client tries to do something without having registered, kill it with fire
-    if !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER) && thing.class == Incoming
-      thing.send :numeric, ERR_NOTREGISTERED
+    if !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER) && thing.class == Dispatcher::Client
+      thing.send ERR_NOTREGISTERED
 
-      throw :halt
+      skip
     # if the client tries to reregister, kill it with fire
-    elsif (event.alias?(:PASS) || event.alias?(:USER)) && thing.class != Incoming
-      thing.send :numeric, ERR_ALREADYREGISTRED
+    elsif (event.alias?(:PASS) || event.alias?(:USER)) && thing.class != Dispatcher::Client
+      thing.send ERR_ALREADYREGISTRED
 
-      throw :halt
+      skip
     end
   end
 
-  fallback do |event, thing, string|
+  default do |event, thing, string|
     whole, command = string.match(/^([^ ]+)/).to_a
 
-    thing.send :numeric, ERR_UNKNOWNCOMMAND, command
+    thing.send ERR_UNKNOWNCOMMAND, command
   end
+}
+
+=begin
+
+on killed do |thing, message|
+  case thing
+    when Client
+      thing.channels.each_value {|channel|
+        channel.users.delete(thing.nick)
+
+        if channel.empty?
+          @channels.delete(channel.name)
+        end
+      }
+
+      @nicks.delete(thing.nick)
+      
+    when Server
+
+    when Incoming
+      @nicks.delete(thing.data.nick)
+  end
+end
 
   observe :error do |thing, message, type=nil|
     thing.send :raw, case type

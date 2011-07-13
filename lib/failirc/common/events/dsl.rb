@@ -57,10 +57,10 @@ module DSL
     }
   end
 
-  def fallback (options = {}, &block)
+  def default (options = {}, &block)
     return unless @into
 
-    @chains[@into][:fallback] << Callback.new(options, &block)
+    @chains[@into][:default] << Callback.new(options, &block)
   end
 
   def before (options = {}, &block)

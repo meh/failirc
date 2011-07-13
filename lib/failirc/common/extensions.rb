@@ -47,6 +47,12 @@ class Object
       yield old, *args
     }
   end
+
+  def merge_instance_variables (object)
+    object.instance_variables.each {|var|
+      instance_variable_set(var, object.instance_variable_get(var))
+    }
+  end
 end
 
 module Kernel

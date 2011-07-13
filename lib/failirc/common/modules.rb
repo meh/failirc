@@ -29,16 +29,10 @@ class Modules
     @path  = path
 
     @list = []
-
-    unless @owner.class.const_defined? :Module
-      @owner.class_eval {
-        class Module < IRC::Modules::Module; end
-      }
-    end
   end
 
   def load (name, options={})
-    mod = @owner.class.const_get(:Module).new
+    mod = Module.new
 
     $:.each {|path|
       path = "#{path}/#{@path}/#{name}.rb"
