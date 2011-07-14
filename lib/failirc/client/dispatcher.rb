@@ -28,15 +28,14 @@ rescue NameError
 end
 
 require 'failirc/server/dispatcher/server'
-require 'failirc/server/dispatcher/client'
 
-module IRC; class Server
+module IRC; class Client
 
 class Dispatcher
-  attr_reader :server, :servers
+  attr_reader :client
 
-  def initialize (server)
-    @server = server
+  def initialize (client)
+    @client = client
 
     @servers = []
     @pipes   = IO.pipe
@@ -60,63 +59,39 @@ class Dispatcher
     !!@running
   end
 
-  def reset?
-    !!@reset
-  end
-
   def loop
     self.do while running?
   end
 
-  def listen (options)
-    @servers.push(Dispatcher::Server.new(self, options))
-    wakeup
-
-    IRC.debug "Starting listening on #{@servers.last.host}:#{@servers.last.port}#{' (SSL)' if @servers.last.ssl?}"
-  end
-
   def do
     begin
-      reading, _, erroring = IO.select([@pipes.first] + clients + servers, nil, clients)
+      reading, _, erroring = IO.select([@pipes.first] + servers, nil, servers)
     rescue Errno::EBADF
       return
     end
 
-    return unless running? or reset?
+    return unless running?
 
-    erroring.each {|client|
-      client.disconnect 'Input/output error'
+    erroring.each {|server|
+      server.disconnect 'Input/output error'
     }
 
     reading.each {|thing|
       case thing
-        when Dispatcher::Server then thing.accept
-        when Dispatcher::Client then thing.receive
+        when Dispatcher::Server then thing.receive
         when IO                 then thing.read_nonblock(2048) rescue nil
       end
     }
 
-    clients.each {|client|
-      client.handle
+    servers.each {|server|
+      server.handle
     }
   end
 
-  def clients
-    @reset = false
-
-    @clients ||= @servers.map {|s|
-      s.clients
-    }.flatten
-  end
-
   def wakeup (options = {})
-    if options[:reset]
-      @clients = nil
-      @reset   = true
-    end
-
     @pipes.last.write '?'
   end
+
 end
 
 end; end

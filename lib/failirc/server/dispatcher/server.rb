@@ -74,15 +74,15 @@ class Server < IO
         dispatcher.wakeup reset: true
       rescue OpenSSL::SSL::SSLError, Timeout::Error
         socket.write_nonblock "This is an SSL connection, faggot.\r\n" rescue nil
-        socket.close
+        socket.close rescue nil
 
         IRC.debug "#{host}[#{ip}/#{port}] tried to connect to a SSL connection and failed the handshake."
       rescue Errno::ECONNRESET
-        socket.close
+        socket.close rescue nil
 
         IRC.debug "#{host}[#{ip}/#{port}] connection reset."
       rescue Exception => e
-        socket.close
+        socket.close rescue nil
 
         IRC.debug e
       end

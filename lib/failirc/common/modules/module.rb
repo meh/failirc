@@ -25,16 +25,21 @@ class Module
   def self.for (what)
     scopes = what.scopes
 
-    klass = Class.new(Module)
-    klass.define_singleton_method :const_missing do |name|
-      scopes.each {|what|
-        return what.const_get(name) if what.const_defined?(name)
+    Class.new(Module).tap {|klass|
+      klass.define_singleton_method :const_missing do |name|
+        scopes.each {|what|
+          return what.const_get(name) if what.const_defined?(name)
+        }
+
+        scopes.first.const_get(name)
+      end
+    }.tap {|klass|
+      klass.class_eval {
+        define_method :inspect do
+          "#<Module: for(#{what.class.name})>"
+        end
       }
-
-      scopes.first.const_get(name)
-    end
-
-    klass
+    }
   end
 
   include Events::DSL

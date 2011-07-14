@@ -1,0 +1,17 @@
+# failirc client configuration
+---
+
+client:
+  nick:      scragarian
+  user:      scragarian
+  real_name: scragarian
+
+servers:
+  localhost:
+    port: 6697
+    ssl:  enabled
+
+modules:
+  base:
+    messages:
+      quit: FUR DIE LULZ

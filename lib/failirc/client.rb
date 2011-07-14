@@ -17,8 +17,6 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'resolv'
-
 require 'failirc/version'
 require 'failirc/common/utils'
 require 'failirc/common/events'
@@ -27,16 +25,16 @@ require 'failirc/common/modules'
 require 'failirc/common/modes'
 require 'failirc/common/mask'
 
-require 'failirc/server/dispatcher'
+require 'failirc/client/dispatcher'
 
 module IRC
 
-class Server
+class Client
   extend Forwardable
 
   attr_reader :options, :dispatcher, :created_on
 
-  def_delegators :@dispatcher, :listen, :running?
+  def_delegators :@dispatcher, :connect, :running?
   def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
   def_delegators :@workers, :do
   def_delegators :@modules, :load
@@ -44,28 +42,19 @@ class Server
   def initialize (options={})
     @options = HashWithIndifferentAccess.new(options)
 
-    @created_on = Time.new
-
     @dispatcher = Dispatcher.new(self)
     @events     = Events.new(self)
     @workers    = Workers.new(self)
-    @modules    = Modules.new(self, '/failirc/server/modules')
-
-    if (@options[:server][:listen] rescue nil)
-      @options[:server][:listen].each {|data|
-        listen(data)
-      }
-    end
+    @modules    = Modules.new(self, '/failirc/client/modules')
 
     if @options[:modules]
       @options[:modules].each {|name, data|
         begin
-          mod = @modules.load(name, data || {})
+          mod = @modules.load(name, data)
 
           if mod
-            server = self
-            mod.define_singleton_method :server do
-              server
+            mod.define_singleton_method :client do
+              self
             end
 
             hook mod
@@ -91,22 +80,6 @@ class Server
     fire :stop, self
 
     @dispatcher.stop
-  end
-
-  def host
-    @options[:server][:host] || 'localhost'
-  end
-
-  def ip
-    begin
-      Resolv.getaddress(host)
-    rescue
-      Resolv.getaddress('localhost')
-    end
-  end
-
-  def name
-    @options[:server][:name] || 'failirc'
   end
 end
 

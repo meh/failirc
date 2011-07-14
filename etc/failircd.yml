@@ -1,3 +1,6 @@
+# failirc server configuration
+---
+
 server:
   name: Fail IRC
 
@@ -21,7 +24,7 @@ modules:
       motd: >
         Welcome to a fail IRC.
 
-      ping timeout: 60
+      ping timeout: 5
       allowed nick: "nick.match(/^[0-9A-Za-z_\[\]\{\}\|\^`\-\\=\.]{1,23}$/)"
 
     messages:
@@ -51,5 +54,4 @@ modules:
     timeout: 30
     service: imageshack
     sites:
-      - name:  4chan
-        match: images\.4chan\.org
+      4chan: images\.4chan\.org

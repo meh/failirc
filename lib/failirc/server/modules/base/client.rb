@@ -53,15 +53,15 @@ module Client
       @connected_on = Time.now
       @registered   = false
 
-      extend Forwardable
-
-      def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
-      def_delegators :@modes, :can
     }
 
     class << obj
-      attr_reader   :channels, :mask, :connected_on
-      attr_accessor :password, :real_name, :modes  
+      extend Forwardable
+
+      attr_reader    :channels, :mask, :connected_on
+      attr_accessor  :password, :real_name, :modes
+      def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
+      def_delegators :@modes, :can
 
       def is_on_channel? (name)
         if name.is_a?(Channel)

@@ -142,13 +142,13 @@ class Client < IO
     connected_to.clients.delete(self)
     dispatcher.wakeup reset: true
 
+    @told = true
+
     begin
       flush
     rescue; ensure
       @socket.close rescue nil
     end
-
-    @told = true
   end
 
   def disconnected?
