@@ -79,8 +79,9 @@ class Client < IO
 
   def send (message)
     dispatcher.server.dispatch :output, self, message
-
     @output.push(message)
+
+    flush
   end
 
   def flush
@@ -121,8 +122,6 @@ class Client < IO
     server.do {
       begin
         server.dispatch :input, self, @input.pop
-
-        flush
       rescue Exception => e
         IRC.debug e
       end
@@ -143,12 +142,13 @@ class Client < IO
     connected_to.clients.delete(self)
     dispatcher.wakeup reset: true
 
-    @told = true
-
-    unless disconnected?
+    begin
       flush
-      @socket.close
+    rescue; ensure
+      @socket.close rescue nil
     end
+
+    @told = true
   end
 
   def disconnected?

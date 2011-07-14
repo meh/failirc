@@ -58,8 +58,12 @@ class Dispatcher
     wakeup
   end
 
+  def running?
+    @running
+  end
+
   def loop
-    while @running
+    while running?
       self.do
     end
   end

@@ -36,7 +36,7 @@ class Server
 
   attr_reader :options, :dispatcher, :created_on
 
-  def_delegators :@dispatcher, :listen
+  def_delegators :@dispatcher, :listen, :running?
   def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
   def_delegators :@workers, :do
   def_delegators :@modules, :load

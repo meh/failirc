@@ -46,6 +46,8 @@ on :start do |server|
   @servers    = {}
 
   Thread.new {
+    begin
+
     while server.running?
       @mutex.synchronize {
         # time to ping non active users
@@ -59,7 +61,7 @@ on :start do |server|
 
         # clear and refill the hash of clients to ping with all the connected clients
         @to_ping.clear
-        @to_ping.insert(-1, server.dispatcher.clients)
+        @to_ping.insert(-1, *server.dispatcher.clients)
       }
 
       sleep((options[:misc]['ping timeout'].to_f rescue 60))
@@ -72,6 +74,10 @@ on :start do |server|
 
         @pinged_out.clear
       }
+    end
+
+    rescue Exception => e
+      IRC.debug e
     end
   }
 end
