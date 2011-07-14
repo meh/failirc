@@ -53,6 +53,8 @@ class Client < IO
 
       begin; loop do
         input << @socket.read_nonblock(4096)
+
+        ap input
       end; rescue Errno::EAGAIN, IO::WaitReadable; end
 
       raise Errno::EPIPE if input.empty?
@@ -132,7 +134,7 @@ class Client < IO
   end
 
   def disconnect (message, options={})
-    return if disconnected? and !options[:force]
+    return if disconnected? and @told
 
     server.fire :disconnect, self, message
 
@@ -141,6 +143,8 @@ class Client < IO
     connected_to.clients.delete(self)
     dispatcher.wakeup reset: true
 
+    @told = true
+
     unless disconnected?
       flush
       @socket.close
@@ -148,6 +152,8 @@ class Client < IO
   end
 
   def disconnected?
+    return true if @told
+
     begin
       @socket.closed?
     rescue Exception
