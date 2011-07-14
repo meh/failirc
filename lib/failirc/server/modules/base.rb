@@ -17,6 +17,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'failirc/server/modules/base/support'
 require 'failirc/server/modules/base/errors'
 require 'failirc/server/modules/base/responses'
 
@@ -35,25 +36,6 @@ version    '0.1.0'
 identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
 
 on :start do |server|
-  @supported_modes = {
-    :client  => 'Nzo',
-    :channel => 'abcCehiIkKlLmnNoQsStuvVxyz'
-  }
-
-  @support = { 
-    CASEMAPPING: 'ascii',
-    SAFELIST:    true,
-    EXCEPTS:     'e',
-    INVEX:       'I',
-    CHANTYPES:   '&#+!',
-    CHANMODES:   'beI,kfL,lj,acCiKmnNQsStuVz',
-    PREFIX:      '(!xyohv)!~&@%+',
-    STATUSMSG:   '~&@%+',
-    FNC:         true,
-
-    CMDS: 'KNOCK'
-  }
-
   @mutex      = Mutex.new
   @joining    = {}
   @pinged_out = []
@@ -309,10 +291,10 @@ input {
       client.send RPL_HOSTEDBY, client
       client.send RPL_SERVCREATEDON
       client.send RPL_SERVINFO,
-        client:  @supported_modes[:client],
-        channel: @supported_modes[:channel]
+        client:  Support::Modes::Client,
+        channel: Support::Modes::Channel
 
-      @support.map {|(key, value)|
+      Support.to_hash.map {|(key, value)|
         value != true ? "#{key}=#{value}" : key
       }.join(' ')
 
