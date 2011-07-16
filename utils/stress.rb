@@ -67,7 +67,9 @@ end
     if value < number
       tmp, @number = number, value
 
-      slice!(tmp - value, length)
+      slice!(tmp - value, length).each {|socket|
+        socket.close
+      }
     else
       @number = value
     end
@@ -115,41 +117,41 @@ COMMANDS = {
 
 Thread.new {
   loop do
+    Thread.new {
+      @sockets.spawn
+    }
+
     begin
-      Thread.new {
-        @sockets.spawn
-      }
+      reading, = IO.select(@sockets)
+    rescue; next; end
 
-      begin
-        reading, = IO.select(@sockets)
-      rescue; next; end
-
-      reading.each {|socket|
-        if socket.class == IO
-          socket.read_nonblock 2048
-          next
-        end
-
-        line = socket.gets or socket.close and next
-
-        COMMANDS.each {|regex, block|
-          if matches = regex.match(line)
-            socket.instance_exec matches, &block
-          end
-        }
-      }
-
-      unless @input.empty?
-        line = @input.pop
-
-        @sockets.each {|socket|
-          next if socket.class == IO
-
-          socket.write_nonblock line
-        }
+    reading.each {|socket|
+      if socket.class == IO
+        socket.read_nonblock 2048
+        next
       end
-    rescue Exception => e
-      IRC.debug e
+
+      line = socket.gets or socket.close && next
+
+      COMMANDS.each {|regex, block|
+        if matches = regex.match(line)
+          begin
+            socket.instance_exec matches, &block
+          rescue Exception => e
+            IRC.debug e
+          end
+        end
+      }
+    }
+
+    unless @input.empty?
+      line = @input.pop
+
+      @sockets.each {|socket|
+        next if socket.class == IO
+
+        socket.write_nonblock line
+      }
     end
   end
 }
@@ -160,8 +162,9 @@ while (line = $stdin.gets) != 'exit'
       @input.push eval("%{#{$1}}")
       @sockets.wakeup
 
-    when /^clients\s+(.*?)/
+    when /^clients\s+(.*)$/
       @sockets.number = $1.to_i
+      @sockets.wakeup
 
   end
 end
