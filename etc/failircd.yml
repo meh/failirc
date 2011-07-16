@@ -24,7 +24,7 @@ modules:
       motd: >
         Welcome to a fail IRC.
 
-      ping timeout: 5
+      ping timeout: 60
       allowed nick: "nick.match(/^[0-9A-Za-z_\[\]\{\}\|\^`\-\\=\.]{1,23}$/)"
 
     messages:

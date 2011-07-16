@@ -4,6 +4,7 @@ require 'thread'
 require 'failirc/version'
 require 'failirc/common/utils'
 require 'getoptlong'
+require 'readline'
 
 args = GetoptLong.new(
   ['--version', '-v', GetoptLong::NO_ARGUMENT],
@@ -91,7 +92,7 @@ end
     to_spawn = @number - self.length + 1
 
     if to_spawn > 0
-      puts "Spawning #{to_spawn} connections to #{@server}:#{@port}"
+      Readline.puts "Spawning #{to_spawn} connections to #{@server}:#{@port}"
 
       1.upto(to_spawn) {
         socket = TCPSocket.new(@server, @port)
@@ -115,7 +116,7 @@ COMMANDS = {
   }
 }
 
-Thread.new {
+thread = Thread.new {
   loop do
     Thread.new {
       @sockets.spawn
@@ -156,15 +157,62 @@ Thread.new {
   end
 }
 
-while (line = $stdin.gets) != 'exit'
-  case line
-    when /^send\s+(.*?)$/
-      @input.push eval("%{#{$1}}")
-      @sockets.wakeup
+module Readline
+  Commands = ['exit', 'quit', 'send', 'clients']
+  Prefix   = '>> '.bold
 
-    when /^clients\s+(.*)$/
-      @sockets.number = $1.to_i
-      @sockets.wakeup
+  def self.supported?
+    require 'colorb'
+    require 'readline'
 
+    true
+  rescue Exception => e
+    false
   end
+
+  if supported?
+    self.completion_proc = proc {|s|
+      Commands.grep(/^#{Regexp.escape(s)}/)
+    }
+  end
+
+  def self.puts (text)
+    print "\r#{text}#{' ' * (Readline.get_screen_size.last - text.length - 1)}\n"
+    print Prefix
+  end
+
+  def self.readline_with_hist_management
+    begin
+      line = Readline.readline(Prefix, true)
+    rescue Exception => e
+      return
+    end
+
+    return unless line
+
+    if line =~ /^\s*$/ or Readline::HISTORY.to_a[-2] == line
+      Readline::HISTORY.pop
+    end
+
+    line
+  end
+end
+
+if Readline.supported?
+  while line = Readline.readline_with_hist_management
+    case line
+      when 'exit', 'quit'
+        exit!
+
+      when /^send\s+(.*?)$/
+        @input.push eval("%{#{$1}}")
+        @sockets.wakeup
+
+      when /^clients\s+(.*)$/
+        @sockets.number = $1.to_i
+        @sockets.wakeup
+    end
+  end
+else
+  thread.join
 end
