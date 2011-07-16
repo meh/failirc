@@ -120,7 +120,9 @@ Thread.new {
         @sockets.spawn
       }
 
-      reading, = IO.select(@sockets)
+      begin
+        reading, = IO.select(@sockets)
+      rescue; next; end
 
       reading.each {|socket|
         if socket.class == IO
@@ -128,7 +130,7 @@ Thread.new {
           next
         end
 
-        line = socket.gets
+        line = socket.gets or socket.close and next
 
         COMMANDS.each {|regex, block|
           if matches = regex.match(line)
