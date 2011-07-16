@@ -158,7 +158,7 @@ thread = Thread.new {
 }
 
 module Readline
-  Commands = ['exit', 'quit', 'send', 'clients']
+  Commands = ['!exit', '!quit', '!clients']
   Prefix   = '>> '.bold
 
   def self.supported?
@@ -172,6 +172,8 @@ module Readline
 
   if supported?
     self.completion_proc = proc {|s|
+      next unless s.start_with?('!')
+
       Commands.grep(/^#{Regexp.escape(s)}/)
     }
   end
@@ -200,17 +202,21 @@ end
 
 if Readline.supported?
   while line = Readline.readline_with_hist_management
-    case line
-      when 'exit', 'quit'
-        exit!
 
-      when /^send\s+(.*?)$/
-        @input.push eval("%{#{$1}}")
-        @sockets.wakeup
+    if line.start_with?('!')
+      case line[1 .. -1]
+        when 'exit', 'quit'
+          exit!
 
-      when /^clients\s+(.*)$/
-        @sockets.number = $1.to_i
-        @sockets.wakeup
+        when /^clients\s+(.*)$/
+          next if $1.to_i == 0
+
+          @sockets.number = $1.to_i
+          @sockets.wakeup
+      end
+    else
+      @input.push eval("%{#{line}}")
+      @sockets.wakeup
     end
   end
 else
