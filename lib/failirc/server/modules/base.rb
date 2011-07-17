@@ -45,9 +45,11 @@ on :start do |server|
   @clients    = {}
   @servers    = {}
 
-  Thread.new {
-    begin
+  server.define_singleton_method :clients do
+    @clients
+  end
 
+  Thread.new {
     while server.running?
       @mutex.synchronize {
         # time to ping non active users
@@ -75,33 +77,7 @@ on :start do |server|
         @pinged_out.clear
       }
     end
-
-    rescue Exception => e
-      IRC.debug e
-    end
   }
-end
-
-on :connect do |client|
-  client.extend Incoming
-  client.data.encoding = 'UTF-8'
-end
-
-on :disconnect do |thing, message|
-  next unless thing.client?
-
-  @nicks.delete(thing.nick)
-  
-  @to_ping.delete(thing)
-  @pinged_out.delete(thing)
-
-  thing.channels.select {|name, channel|
-    channel.has_flag?(:anonymous)
-  }.each_key {|name|
-    server.fire :part, thing, name, nil
-  }
-
-  thing.channels.unique_users.send ":#{thing.mask} QUIT :#{message}"
 end
 
 def check_encoding (string)
@@ -213,11 +189,16 @@ input {
 }
 
 input {
+  observe :connect do |client|
+    client.extend Incoming
+    client.data.encoding = 'UTF-8'
+  end
+
   # check for ping timeout and registration
   before priority: -123456789 do |event, thing, string|
     @mutex.synchronize {
-      @to_ping.delete(thing)
-      @pinged_out.delete(thing)
+      @to_ping.delete(~thing)
+      @pinged_out.delete(~thing)
     }
 
     if !event.alias?(:PING) && !event.alias?(:PONG) && !event.alias?(:WHO) && !event.alias?(:MODE)
@@ -241,6 +222,25 @@ input {
     whole, command = string.match(/^([^ ]+)/).to_a
 
     thing.send ERR_UNKNOWNCOMMAND, command
+  end
+
+  observe :error do |thing, message, type=nil|
+    thing.send case type
+      when :close then "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})"
+      else             "ERROR :#{message}"
+    end
+  end
+
+  on :away do |thing, string|
+    whole, message = string.match(/AWAY\s+(?::)(.*)$/i).to_a
+
+    if !whole || message.empty?
+      thing.data.away = false
+      thing.send RPL_UNAWAY
+    else
+      thing.data.away = message
+      thing.send RPL_NOWAWAY
+    end
   end
 
   # this method sends a MOTD string in an RFC compliant way
@@ -354,37 +354,6 @@ input {
     end
   end
 
-  on :nick do |thing, string|
-    whole, from, nick = string.match(/^(?::(.+?)\s+)?NICK\s+(?::)?(.+)$/i).to_a
-
-    # no nickname was passed, so tell the user is a faggot
-    if !nick
-      thing.send :numeric, ERR_NONICKNAMEGIVEN
-      return
-    end
-
-    @mutex.synchronize {
-      case thing 
-        when Client
-          server.fire :nick, thing, nick
-  
-        when Server
-  
-        when Incoming
-          if !nick_is_ok?(thing, nick)
-            thing.data.warned = nick
-            return
-          end
-
-          @nicks.delete(thing.data.nick)
-          @nicks << (thing.data.nick = nick)
-  
-          # try to register it
-          register(thing)
-      end
-    }
-  end
-
   def nick_is_ok? (thing, nick)
     if thing.client?
       if thing.nick == nick
@@ -411,13 +380,39 @@ input {
     return true
   end
 
+  on :nick do |thing, string|
+    next unless thing.incoming? or thing.client?
+
+    whole, from, nick = string.match(/^(?::(.+?)\s+)?NICK\s+(?::)?(.+)$/i).to_a
+
+    # no nickname was passed, so tell the user is a faggot
+    thing.send ERR_NONICKNAMEGIVEN and return unless nick
+
+    @mutex.synchronize {
+      if thing.incoming?
+          if !nick_is_ok?(thing, nick)
+            thing.data.warned = nick
+            return
+          end
+
+          @nicks.delete(thing.data.nick)
+          @nicks << (thing.data.nick = nick)
+  
+          # try to register it
+          register(thing)
+      elsif thing.client?
+        server.fire :nick, thing, nick
+      end
+    }
+  end
+
   observe :nick do |thing, nick|
     catch(:no_nick_change) { @mutex.synchronize {  
       next unless nick_is_ok?(thing, nick)
 
       thing.channels.each_value {|channel|
-        if channel.has_flag?(:no_nick_change) && !channel.user(thing).is_level_enough?('+')
-          thing.send :numeric, ERR_NONICKCHANGE, channel.name
+        if channel.modes.no_nick_change? && !channel.user(thing).is_level_enough?('+')
+          thing.send ERR_NONICKCHANGE, channel.name
 
           throw :no_nick_change
         end
@@ -463,6 +458,667 @@ input {
     end
   end
 
+  on :encoding do |thing, string|
+    next unless thing.client?
+
+    whole, encoding, nick = string.match(/ENCODING\s+(.+?)(?:\s+(.+))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :ENCODING and next unless whole
+
+    if !Encoding.name_list.include?(encoding)
+      server.fire :error, thing, "#{encoding} is not a valid encoding."
+      return
+    end
+
+    if nick
+      if thing.can.change_encoding? || thing.can.change_client_flags? 
+        if client = @clients[nick]
+          client.data.encoding        = encoding
+          client.data.encoding_tested = false
+        else
+          thing.send :numeric, ERR_NOSUCHNICK, nick
+        end
+      else
+        thing.send :numeric, ERR_NOPRIVILEGES
+      end
+    else
+      thing.data.encoding        = encoding
+      thing.data.encoding_tested = false
+    end
+  end
+
+  on :join do |thing, string|
+    return unless thing.client?
+
+    whole, channels, passwords = string.match(/JOIN\s+(.+?)(?:\s+(.+))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :JOIN and return unless whole
+
+    if channels == '0'
+      thing.channels.each_value {|channel|
+        server.fire :part, channel[thing.nick], channel.name, 'Left all channels'
+      }
+
+      return
+    end
+
+    channels  = channels.split(/,/)
+    passwords = (passwords || '').split(/,/)
+
+    channels.each {|channel|
+      channel.strip!
+
+      if @channels[channel] && @channels[channel].modes.password?
+        password = passwords.shift
+      else
+        password = nil
+      end
+
+      server.fire :join, thing, channel, password
+    }
+  end
+
+  observe :join do |thing, channel, password=nil|
+    @mutex.synchronize {
+      if !channel.channel_type
+        channel = "##{channel}"
+      end
+
+      if !channel.is_valid_channel?
+        thing.send ERR_BADCHANMASK, channel
+        return
+      end
+
+      return if thing.is_on_channel?(channel)
+
+      if @channels[channel]
+        channel = @channels[channel]
+      else
+        channel = @channels[channel] = Channel.new(server, channel)
+
+        channel.data.bans       = []
+        channel.data.exceptions = []
+        channel.data.invites    = []
+        channel.data.invited    = {}
+      end
+
+      if channel.modes.limit?
+        if channel.users.length >= channel.modes.limit.value
+          thing.send ERR_CHANNELISFULL, channel.name
+
+          if channel.modes.redirect?
+            server.fire :join, thing, channel.modes.redirect.value
+          end
+
+          return
+        end
+      end
+
+      if channel.modes.ssl_only? && !thing.modes.ssl?
+        thing.send ERR_SSLREQUIRED, channel.name
+        return
+      end
+
+      if channel.modes.password? && password != channel.modes.password.value
+        thing.send ERR_BADCHANNELKEY, channel.name
+        return
+      end
+  
+      if channel.modes.invite_only? && !channel.invited?(thing, true)
+        thing.send ERR_INVITEONLYCHAN, channel.name
+        return
+      end
+  
+      if channel.banned?(thing) && !channel.exception?(thing) && !channel.invited?(thing)
+        thing.send ERR_BANNEDFROMCHAN, channel.name
+        return
+      end
+    }
+  
+    server.fire :joined, thing, channel
+  end
+
+  observe :joined do |thing, channel|
+    empty = channel.empty?
+    user  = channel.add(thing)
+
+    if empty
+      server.fire :mode, server, channel, "+o #{user.nick}", false
+    else
+      channel.data.invited.delete(user.mask)
+    end
+
+    thing.channels.add(channel)
+
+    if user.channel.modes.anonymous?
+      mask = Mask.parse('anonymous!anonymous@anonymous.')
+    else
+      mask = user.mask
+    end
+
+    user.channel.send ":#{mask} JOIN :#{user.channel}"
+
+    if !user.channel.topic.nil?
+      server.dispatch user.client, "TOPIC #{user.channel}"
+    end
+
+    server.dispatch user.client, "NAMES #{user.channel}"
+  end
+
+  on :part do |thing, string|
+    whole, channels, message = string.match(/PART\s+(.+?)(?:\s+:(.*))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :PART and next unless whole
+
+    channels.split(/,/).each {|name|
+      server.fire :part, thing, name, message
+    }
+  end
+
+  observe :part do |thing, name, message=nil|
+    if !name.channel_type
+      name = "##{name}"
+    end
+
+    channel = @channels[name]
+
+    if !channel
+      thing.send ERR_NOSUCHCHANNEL, name
+    elsif !thing.is_on_channel?(name)
+      thing.send ERR_NOTONCHANNEL, name
+    else
+      server.fire :parted, channel.user(thing), message
+    end
+  end
+
+  observe :parted do |user, message|
+    text = (options[:messages][:part] || '#{message}').interpolate(binding)
+
+    if user.channel.modes.anonymous?
+      mask = Mask.parse('anonymous!anonymous@anonymous.')
+    else
+      mask = user.mask
+    end
+
+    user.channel.send ":#{mask} PART #{user.channel} :#{text}"
+
+    @mutex.synchronize {
+      user.channel.delete(user)
+      user.client.channels.delete(user.channel.name)
+
+      if user.channel.empty?
+        @channels.delete(user.channel.name)
+      end
+    }
+  end
+
+  on :kick do |thing, string|
+    whole, channel, user, message = string.match(/KICK\s+(.+?)\s+(.+?)(?:\s+:(.*))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :KICK and return unless whole
+
+    server.fire :kick, thing, channel, user, message
+  end
+
+  observe :kick do |from, channel, user, message|
+    if !channel.is_valid_channel?
+      from.send ERR_BADCHANMASK, channel
+      return
+    end
+
+    if !@channels[channel]
+      from.send ERR_NOSUCHCHANNEL, channel
+      return
+    end
+
+    if !@clients[user]
+      from.send ERR_NOSUCHNICK, user
+      return
+    end
+
+    channel = @channels[channel]
+    user    = channel[user]
+
+    if !user
+      from.send ERR_NOTONCHANNEL, channel.name
+      return
+    end
+
+    if from.channels[channel.name]
+      from = channel.user(from)
+    end
+
+    if from.can.kick?
+      if channel.modes.no_kicks?
+        from.send ERR_NOKICKS
+      else
+        server.fire :kicked, from, user, message
+      end
+    else
+      from.send ERR_CHANOPRIVSNEEDED, channel.name
+    end
+  end
+
+  observe :kicked do |from, user, message|
+    user.channel.send ":#{from.value.mask} KICK #{user.channel} #{user.nick} :#{message}"
+
+    @mutex.synchronize {
+      user.channel.delete(user)
+      user.client.channels.delete(user.channel)
+
+      if user.channel.empty?
+        @channels.delete(user.channel.name)
+      end
+    }
+  end
+
+  on :invite do |thing, string|
+    whole, nick, channel = string.match(/INVITE\s+(.+?)\s+(.+?)$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :INVITE and next unless whole
+
+    nick.strip!
+    channel.strip!
+
+    if !@clients[nick]
+      thing.send ERR_NOSUCHNICK, nick
+      return
+    end
+
+    if @channels[channel]
+      from = @channels[channel].user(thing) || thing
+
+      if !from.can.invite? && !from.is_on_channel?(channel)
+        thing.send ERR_NOTONCHANNEL, channel
+        return
+      end
+
+      if !from.can.invite?
+        thing.send ERR_CHANOPRIVSNEEDED, channel
+        return
+      end
+
+      if @channels[channel].users[nick]
+        thing.send ERR_USERONCHANNEL,
+          nick:    nick,
+          channel: channel
+
+        return
+      end
+
+      if @channels[channel].modes.no_invites?
+        thing.send ERR_NOINVITE, channel
+        return
+      end
+    end
+
+    client = @clients[nick]
+
+    if client.away?
+      thing.send RPL_AWAY, client
+    end
+
+    server.fire :invite, thing, client, channel
+  end
+
+  observe :invite do |from, client, channel|
+    from.send RPL_INVITING,
+      nick:    client.nick,
+      channel: channel
+
+    client.send ":#{from.mask} INVITE #{client.nick} :#{channel}"
+
+    server.fire :invited, from, client, channel
+  end
+
+  observe :invited do |from, client, channel|
+    if channel = @channels[channel]
+      channel.data.invited[client.mask] = true
+      server.fire :send, :notice, server, channel.level(?@), "#{from.nick} invited #{client.nick} into the channel."
+    end
+  end
+
+  on :knock do |thing, string|
+    whole, channel, message = string.match(/KNOCK\s+(.+?)(?:\s+:(.*))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :KNOCK and return unless whole
+
+    if !@channels[channel]
+      thing.send ERR_NOKNOCK,
+        channel: channel,
+        reason:  'Channel does not exist!'
+
+      return
+    end
+
+    channel = @channels[channel]
+
+    if !channel.modes.invite_only?
+      thing.send ERR_NOKNOCK,
+        channel: channel.name,
+        reason:  'Channel is not invite only!'
+
+      return
+    end
+
+    if channel.modes.no_knock?
+      thing.send ERR_NOKNOCK,
+        channel: channel.name,
+        reason:  'No knocks are allowed! (+K)'
+
+      return
+    end
+
+    server.fire :knocked, thing, channel, message
+  end
+
+  observe :knocked do |thing, channel, message|
+    server.fire :send, :notice, server, channel.level(?@), "[Knock] by #{thing.mask} (#{message ? message : 'no reason specified'})"
+    server.fire :send, :notice, server, thing, "Knocked on #{channel.name}"
+  end
+
+  on :names do |thing, string|
+    whole, channel = string.match(/NAMES\s+(.*)$/i).to_a
+
+    thing.send RPL_ENDOFNAMES, thing.nick and return unless whole
+
+    if channel = thing.channels[channel.strip]
+      thing = channel.user(thing)
+
+      if channel.modes.anonymous?
+        users = 'anonymous'
+      else
+        users = channel.users.map {|(_, user)|
+          if channel.modes.auditorium? && !user.is_level_enough?('%') && !thing.modes.ircop?
+            if user.level
+              user.to_s
+            end
+          else
+            user.to_s
+          end
+        }.compact.join(' ')
+      end
+
+      thing.send RPL_NAMREPLY,
+        channel: channel.name,
+        users:   users
+    end
+
+    thing.send RPL_ENDOFNAMES, channel
+  end
+
+  on :topic do |thing, string|
+    whole, channel, topic = string.match(/TOPIC\s+(.*?)(?:\s+:(.*))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :TOPIC and return unless whole
+
+    channel.strip!
+
+    if !@channels[channel] || (@channels[channel].modes.secret? && !thing.is_on_channel?(channel) && !thing.can.see_secrets?)
+      thing.send ERR_NOSUCHCHANNEL, channel
+      return
+    end
+
+    channel = @channels[channel]
+  
+    if topic
+      server.fire :topic, thing, channel, topic
+    else
+      if !channel.topic.nil?
+        thing.send RPL_TOPIC, channel.topic
+        thing.send RPL_TOPICSETON, channel.topic
+      else
+        thing.send RPL_NOTOPIC, channel
+      end
+    end
+  end
+
+  observe :topic do |from, channel, topic|
+    if !from.can.change_topic? && !from.is_on_channel?(channel) && !from.modes.ircop?
+      from.value.send :numeric, ERR_NOTONCHANNEL, channel
+      return
+    end
+
+    if channel.modes.topic_lock? && !channel.user(from.value).can.change_topic?
+      from.value.send ERR_CHANOPRIVSNEEDED, channel
+    else
+      if channel.modes.anonymous?
+        channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), topic
+      else
+        channel.topic = from, topic
+      end
+      
+      channel.send ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic.to_s}"
+    end
+  end
+
+  on :who do |thing, string|
+    whole, name, operator = string.match(/WHO\s+(.*?)(?:\s+(o))?$/i).to_a
+
+    thing.send RPL_ENDOFWHO and return unless whole
+
+    name ||= '*'
+
+    if name.is_valid_channel? && (channel = @channels[name])
+      if channel.modes.anonymous?
+        thing.send RPL_WHOREPLY,
+          channel: channel.name,
+
+          user: {
+            nick:      'anonymous',
+            user:      'anonymous',
+            host:      'anonymous.',
+            real_name: 'anonymous',
+          },
+
+          server: server.host,
+          hops:   0
+      else
+        channel.users.each_value {|user|
+          thing.send RPL_WHOREPLY,
+            channel: channel.name,
+
+            user: {
+              nick:      user.nick,
+              user:      user.user,
+              host:      user.host,
+              real_name: user.real_name,
+
+              level: user.level,
+            },
+
+            server: user.server.host,
+            hops:   0
+        }
+      end
+    elsif client = @clients[name]
+       thing.send RPL_WHOREPLY,
+        channel: '*',
+
+        user: {
+          nick:      client.nick,
+          user:      client.user,
+          host:      client.host,
+          real_name: client.real_name,
+        },
+
+        server: client.server.host,
+        hops:   0
+    end
+
+    thing.send RPL_ENDOFWHO, name
+  end
+
+  on :whois do |thing, string|
+    matches = string.match(/WHOIS\s+(.+?)(?:\s+(.+?))?$/i)
+
+    thing.send ERR_NEEDMOREPARAMS, :WHOIS and return unless whole
+
+    names  = (matches[2] || matches[1]).strip.split(/,/)
+    target = matches[2] ? matches[1].strip : nil
+
+    names.each {|name|
+      server.fire :whois, thing, name, target
+    }
+  end
+
+  observe :whois do |thing, name, target=nil|
+    unless client = @clients[name]
+      thing.send ERR_NOSUCHNICK, name
+      return
+    end
+
+    thing.send RPL_WHOISUSER, client
+
+    if thing.modes.ircop?
+      thing.send :numeric, RPL_WHOISMODES, client
+      thing.send :numeric, RPL_WHOISCONNECTING, client
+    end
+
+    if !client.channels.empty?
+      thing.send RPL_WHOISCHANNELS,
+        nick: client.nick,
+
+        channels: client.channels.map {|(name, channel)|
+          if ((!channel.modes.secret? && !channel.modes.private?) || thing.is_on_channel?(name)) && !channel.modes.anonymous?
+            "#{channel.user(client).level}#{channel.name}"
+          end
+        }.compact.join(' ')
+    end
+
+    thing.send RPL_WHOISSERVER, client
+
+    if client.ssl?
+      thing.send RPL_USINGSSL, client
+    end
+
+    if client.away?
+      thing.send RPL_AWAY, client
+    end
+
+    if client.data.message
+      thing.send RPL_WHOISOPERATOR, client
+    end
+
+    thing.send RPL_WHOISIDLE, client
+    thing.send RPL_ENDOFWHOIS, client
+  end
+
+  on :whowas do |thing, string|
+    thing.send 'PHONE'
+  end
+
+  on :ison do |thing, string|
+    whole, who = string.match(/ISON\s+(.+)$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :ISON and return unless whole
+
+    thing.send RPL_ISON, who.split(/\s+/).map {|nick|
+      nick if @clients[nick]
+    }.compact.join(' ')
+  end
+
+  on :list do |thing, string|
+    match, channels = string.match(/LIST(?:\s+(.*))?$/).to_a
+
+    channels = (channels || '').strip.split(/,/)
+
+    thing.send RPL_LISTSTART
+
+    if channels.empty?
+      channels = @channels
+    else
+      tmp = Channels.new(thing.server)
+
+      channels.each {|channel|
+        tmp.add(@channels[channel]) if @channels[channel]
+      }
+
+      channels = tmp
+    end
+
+    channels.each_value {|channel|
+      if !(channel.modes.secret? || channel.modes.private?) || thing.is_on_channel?(channel) || thing.can.see_secrets?
+        thing.send RPL_LIST,
+          name:  channel.name,
+          users: channel.has_flag?(:anonymous) ? 1 : channel.users.length,
+          modes: channel.modes.to_s.empty? ? '' : "[#{channel.modes.to_s}] ",
+          topic: channel.topic.text
+      end
+    }
+
+    thing.send RPL_LISTEND
+  end
+
+  on :version do |thing, string|
+    thing.send RPL_VERSION, options[:messages][:version].interpolate(binding)
+  end
+
+  on :map do |thing, string|
+    server.fire :send, :notice, server, thing, 'The X tells the point.'
+  end
+
+  on :oper do |thing, string|
+    matches = string.match(/OPER\s+(.*?)(?:\s+(.+?))?$/i)
+
+    thing.send ERR_NEEDMOREPARAMS, :OPER and return unless matches
+
+    password = matches[2] || matches[1]
+    name     = (matches[2]) ? matches[1] : nil
+
+    mask      = thing.mask.clone
+    mask.nick = name if name
+
+    server.options[:operators].each {|operator|
+      next unless Mask.parse(operator[:mask]).match(mask) && password == operator[:password]
+
+      operator[:flags].split(/\s*,\s*/).each {|flag|
+        thing.modes + flag.to_sym
+      }
+
+      thing.data.message = operator[:message] || 'is an IRC operator'
+
+      thing.send RPL_YOUREOPER
+      thing.send ":#{server} MODE #{thing.nick} #{thing.modes}"
+
+      server.fire :oper, true, thing, name, password
+
+      return
+    }
+
+    thing.send ERR_NOOPERHOST
+
+    server.fire :oper, false, thing, name, password
+  end
+
+  on :kill do |thing, string|
+    whole, target, message = string.match(/KILL\s+(.*?)(?:\s+:?(.*))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :KILL and return unless whole
+
+    client = @clients[target]
+
+    if !client
+      thing.send ERR_NOSUCHNICK, nick
+      return
+    end
+
+    server.fire :kill, thing, client, message
+  end
+
+  observe :kill do |from, client, message=nil|
+    if !from.can.kill?
+      from.value.send ERR_NOPRIVILEGES
+      return
+    end
+
+    sender = from.value
+    text   = options[:messages][:kill].interpolate(binding)
+
+    client.send ":#{client} QUIT :#{text}"
+    client.disconnect text
+  end
+
   on :quit do |thing, string|
     whole, message = string.match(/^QUIT(?:\s+:?(.*))?$/i).to_a
 
@@ -471,13 +1127,24 @@ input {
 
     thing.disconnect options[:messages][:quit].interpolate(binding)
   end
-}
 
-=begin
+  observe :disconnect do |thing, message|
+    if thing.client?
+      @nicks.delete(thing.nick)
+      
+      @to_ping.delete(thing)
+      @pinged_out.delete(thing)
 
-on killed do |thing, message|
-  case thing
-    when Client
+      thing.channels.select {|name, channel|
+        channel.modes.anonymous?
+      }.each_key {|name|
+        server.fire :part, thing, name, nil
+      }
+
+      thing.channels.clients.reject {|client|
+        client == thing
+      }.send ":#{thing.mask} QUIT :#{message}"
+
       thing.channels.each_value {|channel|
         channel.users.delete(thing.nick)
 
@@ -487,36 +1154,13 @@ on killed do |thing, message|
       }
 
       @nicks.delete(thing.nick)
-      
-    when Server
-
-    when Incoming
+    elsif thing.incoming?
       @nicks.delete(thing.data.nick)
-  end
-end
-
-  observe :error do |thing, message, type=nil|
-    thing.send :raw, case type
-      when :close; "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})"
-      else;        "ERROR :#{message}"
     end
   end
+}
 
-  on away do |thing, string|
-    whole, message = string.match(/AWAY\s+(?::)(.*)$/i).to_a
-
-    if !whole || message.empty?
-      thing.data.away = false
-      thing.send :numeric, RPL_UNAWAY
-    else
-      thing.data.away = message
-      thing.send :numeric, RPL_NOWAWAY
-    end
-  end
-  
-  on hibernate do |thing, string|
-
-  end
+=begin
 
   # MODE user/channel = +option,-option
   on mode do |thing, string|
@@ -1130,623 +1774,7 @@ end
     return unless kind == :extended
   end
 
-  on encoding do |thing, string|
-    whole, encoding, nick = string.match(/ENCODING\s+(.+?)(?:\s+(.+))?$/i).to_a
 
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :ENCODING
-      return
-    end
-
-    if !Encoding.name_list.include?(encoding)
-      server.fire :error, thing, "#{encoding} is not a valid encoding."
-      return
-    end
-
-    if nick
-      if thing.has_flag?(:operator)
-        if client = @clients[nick]
-          client.data.encoding        = encoding
-          client.data.encoding_tested = false
-        else
-          thing.send :numeric, ERR_NOSUCHNICK, nick
-        end
-      else
-        thing.send :numeric, ERR_NOPRIVILEGES
-      end
-    else
-      thing.data.encoding        = encoding
-      thing.data.encoding_tested = false
-    end
-  end
-
-  on join do |thing, string|
-    whole, channels, passwords = string.match(/JOIN\s+(.+?)(?:\s+(.+))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :JOIN
-      return
-    end
-
-    if channels == '0'
-      thing.channels.each_value {|channel|
-        server.fire :part, channel[thing.nick], 'Left all channels'
-      }
-
-      return
-    end
-
-    channels  = channels.split(/,/)
-    passwords = (passwords || '').split(/,/)
-
-    channels.each {|channel|
-      channel.strip!
-
-      if @channels[channel] && @channels[channel].has_flag?(:password)
-        password = passwords.shift
-      else
-        password = nil
-      end
-
-      server.fire :join, thing, channel, password
-    }
-  end
-
-  observe :join do |thing, channel, password=nil|
-    @mutex.synchronize {
-      if !channel.channel_type
-        channel = "##{channel}"
-      end
-
-      if !channel.is_valid_channel?
-        thing.send :numeric, ERR_BADCHANMASK, channel
-        return
-      end
-
-      return if thing.is_on_channel?(channel)
-
-      if @channels[channel]
-        channel = @channels[channel]
-      else
-        channel = @channels[channel] = Channel.new(server, channel)
-
-        channel.modes[:bans]       = []
-        channel.modes[:exceptions] = []
-        channel.modes[:invites]    = []
-        channel.modes[:invited]    = {}
-      end
-
-      if channel.has_flag?(:limit)
-        if channel.users.length >= channel.modes[:limit]
-          thing.send :numeric, ERR_CHANNELISFULL, channel.name
-
-          if channel.has_flag?(:redirect)
-            server.fire :join, thing, channel.modes[:redirect]
-          end
-
-          return
-        end
-      end
-
-      if channel.has_flag?(:ssl_only) && !thing.has_flag?(:ssl)
-        thing.send :numeric, ERR_SSLREQUIRED, channel.name
-        return
-      end
-
-      if channel.has_flag?(:password) && password != channel.modes[:password]
-        thing.send :numeric, ERR_BADCHANNELKEY, channel.name
-        return
-      end
-  
-      if channel.has_flag?(:invite_only) && !channel.invited?(thing, true)
-        thing.send :numeric, ERR_INVITEONLYCHAN, channel.name
-        return
-      end
-  
-      if channel.banned?(thing) && !channel.exception?(thing) && !channel.invited?(thing)
-        thing.send :numeric, ERR_BANNEDFROMCHAN, channel.name
-        return
-      end
-    }
-  
-    server.fire :joined, thing, channel
-  end
-
-  observe :joined do |thing, channel|
-    empty = channel.empty?
-    user  = channel.add(thing)
-
-    if empty
-      server.fire :mode, server, channel, "+o #{user.nick}", false
-    else
-      channel.modes[:invited].delete(user.mask)
-    end
-
-    thing.channels.add(channel)
-
-    if user.channel.has_flag?(:anonymous)
-      mask = Mask.parse('anonymous!anonymous@anonymous.')
-    else
-      mask = user.mask
-    end
-
-    user.channel.send :raw, ":#{mask} JOIN :#{user.channel}"
-
-    if !user.channel.topic.nil?
-      server.dispatch user.client, "TOPIC #{user.channel}"
-    end
-
-    server.dispatch user.client, "NAMES #{user.channel}"
-  end
-
-  on part do |thing, string|
-    whole, channels, message = string.match(/PART\s+(.+?)(?:\s+:(.*))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :PART
-      return
-    end
-
-    channels.split(/,/).each {|name|
-      server.fire :part, thing, name, message
-    }
-  end
-
-  observe :part do |thing, name, message=nil|
-    if !name.channel_type
-      name = "##{name}"
-    end
-
-    channel = @channels[name]
-
-    if !channel
-      thing.send :numeric, ERR_NOSUCHCHANNEL, name
-    elsif !thing.is_on_channel?(name)
-      thing.send :numeric, ERR_NOTONCHANNEL, name
-    else
-      server.fire :parted, channel.user(thing), message
-    end
-  end
-
-  observe :parted do |user, message|
-    return if user.client.data.quitting
-
-    text = (options[:messages][:part] || '#{message}').interpolate(binding)
-
-    if user.channel.has_flag?(:anonymous)
-      mask = Mask.parse('anonymous!anonymous@anonymous.')
-    else
-      mask = user.mask
-    end
-
-    user.channel.send :raw, ":#{mask} PART #{user.channel} :#{text}"
-
-    @mutex.synchronize {
-      user.channel.delete(user)
-      user.client.channels.delete(user.channel.name)
-
-      if user.channel.empty?
-        @channels.delete(user.channel.name)
-      end
-    }
-  end
-
-  on kick do |thing, string|
-    whole, channel, user, message = string.match(/KICK\s+(.+?)\s+(.+?)(?:\s+:(.*))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :KICK
-      return
-    end
-
-    server.fire :kick, thing, channel, user, message
-  end
-
-  observe :kick do |from, channel, user, message|
-    if !channel.is_valid_channel?
-      from.send :numeric, ERR_BADCHANMASK, channel
-      return
-    end
-
-    if !@channels[channel]
-      from.send :numeric, ERR_NOSUCHCHANNEL, channel
-      return
-    end
-
-    if !@clients[user]
-      from.send :numeric, ERR_NOSUCHNICK, user
-      return
-    end
-
-    channel = @channels[channel]
-    user    = channel[user]
-
-    if !user
-      from.send :numeric, ERR_NOTONCHANNEL, channel.name
-      return
-    end
-
-    if from.channels[channel.name]
-      from = channel.user(from)
-    end
-
-    if from.has_flag?(:can_kick)
-      if channel.has_flag?(:no_kicks)
-        from.send :numeric, ERR_NOKICKS
-      else
-        server.fire :kicked, ref{:from}, user, message
-      end
-    else
-      from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
-    end
-  end
-
-  observe :kicked do |from, user, message|
-    user.channel.send :raw, ":#{from.value.mask} KICK #{user.channel} #{user.nick} :#{message}"
-
-    @mutex.synchronize {
-      user.channel.delete(user)
-      user.client.channels.delete(user.channel)
-
-      if user.channel.empty?
-        @channels.delete(user.channel.name)
-      end
-    }
-  end
-
-  on invite do |thing, string|
-    whole, nick, channel = string.match(/INVITE\s+(.+?)\s+(.+?)$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :INVITE
-      return
-    end
-
-    nick.strip!
-    channel.strip!
-
-    if !@clients[nick]
-      thing.send :numeric, ERR_NOSUCHNICK, nick
-      return
-    end
-
-    if @channels[channel]
-      from = @channels[channel].user(thing) || thing
-
-      if !from.has_flag?(:can_invite) && !from.is_on_channel?(channel)
-        thing.send :numeric, ERR_NOTONCHANNEL, channel
-        return
-      end
-
-      if !from.has_flag?(:can_invite)
-        thing.send :numeric, ERR_CHANOPRIVSNEEDED, channel
-        return
-      end
-
-      if @channels[channel].users[nick]
-        thing.send :numeric, ERR_USERONCHANNEL, {
-          :nick    => nick,
-          :channel => channel,
-        }
-
-        return
-      end
-
-      if @channels[channel].has_flag?(:no_invites)
-        thing.send :numeric, ERR_NOINVITE, channel
-        return
-      end
-    end
-
-    client = @clients[nick]
-
-    if client.has_flag?(:away)
-      thing.send :numeric, RPL_AWAY, client
-    end
-
-    server.fire :invite, thing, client, channel
-  end
-
-  observe :invite do |from, client, channel|
-    from.send :numeric, RPL_INVITING, {
-      :nick    => client.nick,
-      :channel => channel,
-    }
-
-    target = channel
-
-    if channel = @channels[target]
-      channel.modes[:invited][client.mask] = true
-      server.fire :send, :notice, server, channel.level(?@), "#{from.nick} invited #{client.nick} into the channel."
-    end
-
-    client.send :raw, ":#{from.mask} INVITE #{client.nick} :#{target}"
-  end
-
-  on names do |thing, string|
-    whole, channel = string.match(/NAMES\s+(.*)$/i).to_a
-
-    if !whole
-      thing.send :numeric, RPL_ENDOFNAMES, thing.nick
-      return
-    end
-
-    if channel = thing.channels[channel.strip]
-      thing = channel.user(thing)
-
-      if channel.has_flag?(:anonymous)
-        users = 'anonymous'
-      else
-        users = channel.users.map {|(_, user)|
-          if channel.has_flag?(:auditorium) && !user.is_level_enough?('%') && !thing.has_flag?(:operator)
-            if user.modes[:level]
-              user.to_s
-            end
-          else
-            user.to_s
-          end
-        }.compact.join(' ')
-      end
-
-      thing.send :numeric, RPL_NAMREPLY, {
-        :channel => channel.name,
-        :users   => users,
-      }
-    end
-
-    thing.send :numeric, RPL_ENDOFNAMES, channel
-  end
-
-  on knock do |thing, string|
-    whole, channel, message = string.match(/KNOCK\s+(.+?)(?:\s+:(.*))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :KNOCK
-      return
-    end
-
-    if !@channels[channel]
-      thing.send :numeric, ERR_NOKNOCK, { :channel => channel, :reason => 'Channel does not exist!' }
-      return
-    end
-
-    channel = @channels[channel]
-
-    if !channel.has_flag?(:invite_only)
-      thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'Channel is not invite only!' }
-      return
-    end
-
-    if channel.has_flag?(:no_knock)
-      thing.send :numeric, ERR_NOKNOCK, { :channel => channel.name, :reason => 'No knocks are allowed! (+K)' }
-      return
-    end
-
-    server.fire :send, :notice, server, channel.level(?@), "[Knock] by #{thing.mask} (#{message ? message : 'no reason specified'})"
-    server.fire :send, :notice, server, thing, "Knocked on #{channel.name}"
-  end
-
-  on topic do |thing, string|
-    whole, channel, topic = string.match(/TOPIC\s+(.*?)(?:\s+:(.*))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :TOPIC
-      return
-    end
-
-    server.fire :topic, ref{:thing}, channel.strip, topic
-  end
-
-  observe :topic do |from, channel, topic|
-    if !@channels[channel] || (@channels[channel].has_flag?(:secret) && !from.value.is_on_channel?(channel))
-      from.send :numeric, ERR_NOSUCHCHANNEL, channel
-      return
-    end
-
-    channel = @channels[channel]
-
-    if !topic
-      if !channel.topic.nil?
-        from.value.send :numeric, RPL_TOPIC, channel.topic
-        from.value.send :numeric, RPL_TOPICSETON, channel.topic
-      else
-        from.value.send :numeric, RPL_NOTOPIC, channel
-      end
-
-      return
-    end
-    
-    if !from.value.has_flag?(:can_change_topic) && !from.value.is_on_channel?(channel) && !from.value.has_flag?(:operator)
-      from.value.send :numeric, ERR_NOTONCHANNEL, channel
-      return
-    end
-
-    if channel.has_flag?(:topic_lock) && !channel.user(from.value).has_flag?(:can_change_topic)
-      from.value.send :numeric, ERR_CHANOPRIVSNEEDED, channel
-    else
-      if channel.has_flag?(:anonymous)
-        channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), topic
-      else
-        channel.topic = from.value, topic
-      end
-      
-      channel.send :raw, ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic}"
-    end
-  end
-
-  on list do |thing, string|
-    match, channels = string.match(/LIST(?:\s+(.*))?$/).to_a
-
-    channels = (channels || '').strip.split(/,/)
-
-    thing.send :numeric, RPL_LISTSTART
-
-    if channels.empty?
-      channels = @channels
-    else
-      tmp = Channels.new(thing.server)
-
-      channels.each {|channel|
-        tmp.add(@channels[channel]) if @channels[channel]
-      }
-
-      channels = tmp
-    end
-
-    channels.each_value {|channel|
-      if !(channel.has_flag?(:secret) || channel.has_flag?(:private)) || thing.is_on_channel?(channel) || thing.has_flag?(:can_see_secrets)
-        thing.send :numeric, RPL_LIST, {
-          :name  => channel.name,
-          :users => channel.has_flag?(:anonymous) ? 1 : channel.users.length,
-          :modes => channel.modes.to_s.empty? ? '' : "[#{channel.modes.to_s}] ",
-          :topic => channel.topic.text,
-        }
-      end
-    }
-
-    thing.send :numeric, RPL_LISTEND
-  end
-
-  on who do |thing, string|
-    whole, name, operator = string.match(/WHO\s+(.*?)(?:\s+(o))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, RPL_ENDOFWHO
-      return
-    end
-
-    name ||= '*'
-
-    if name.is_valid_channel? && (channel = @channels[name])
-      if channel.has_flag?(:anonymous)
-        thing.send :numeric, RPL_WHOREPLY, {
-          :channel => channel.name,
-
-          :user => {
-            :nick      => 'anonymous',
-            :user      => 'anonymous',
-            :host      => 'anonymous.',
-            :real_name => 'anonymous',
-          },
-
-          :server => server.host,
-
-          :hops => 0
-        }
-      else
-        channel.users.each_value {|user|
-          thing.send :numeric, RPL_WHOREPLY, {
-            :channel => channel.name,
-
-            :user => {
-              :nick      => user.nick,
-              :user      => user.user,
-              :host      => user.host,
-              :real_name => user.real_name,
-
-              :level => user.modes[:level],
-            },
-
-            :server => user.server.host,
-
-            :hops => 0
-          }
-        }
-      end
-    elsif client = @clients[name]
-       thing.send :numeric, RPL_WHOREPLY, {
-        :channel => '*',
-
-        :user => {
-          :nick      => client.nick,
-          :user      => client.user,
-          :host      => client.host,
-          :real_name => client.real_name,
-        },
-
-        :server => client.server.host,
-
-        :hops => 0
-      }
-    end
-
-    thing.send :numeric, RPL_ENDOFWHO, name
-  end
-
-  on whois do |thing, string|
-    matches = string.match(/WHOIS\s+(.+?)(?:\s+(.+?))?$/i)
-
-    if !matches
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :WHOIS
-      return
-    end
-
-    names  = (matches[2] || matches[1]).strip.split(/,/)
-    target = matches[2] ? matches[1].strip : nil
-
-    names.each {|name|
-      server.fire :whois, thing, name, target
-    }
-  end
-
-  observe :whois do |thing, name, target=nil|
-    unless client = @clients[name]
-      thing.send :numeric, ERR_NOSUCHNICK, name
-      return
-    end
-
-    thing.send :numeric, RPL_WHOISUSER, client
-
-    if thing.has_flag?(:operator)
-      thing.send :numeric, RPL_WHOISMODES, client
-      thing.send :numeric, RPL_WHOISCONNECTING, client
-    end
-
-    if !client.channels.empty?
-      thing.send :numeric, RPL_WHOISCHANNELS, {
-        :nick     => client.nick,
-        :channels => client.channels.map {|(name, channel)|
-          if ((!channel.has_flag?(:secret) && !channel.has_flag?(:private)) || thing.is_on_channel?(name)) && !channel.modes[:anonymous]
-            "#{channel.user(client).modes[:level]}#{channel.name}"
-          end
-        }.compact.join(' ')
-      }
-    end
-
-    thing.send :numeric, RPL_WHOISSERVER, client
-
-    if client.has_flag?(:ssl)
-      thing.send :numeric, RPL_USINGSSL, client
-    end
-
-    if client.has_flag?(:away)
-      thing.send :numeric, RPL_AWAY, client
-    end
-
-    if client.has_flag?(:message)
-      thing.send :numeric, RPL_WHOISOPERATOR, client
-    end
-
-    thing.send :numeric, RPL_WHOISIDLE, client
-    thing.send :numeric, RPL_ENDOFWHOIS, client
-  end
-
-  on whowas do |thing, string|
-    thing.send :raw, 'PHONE'
-  end
-
-  on ison do |thing, string|
-    whole, who = string.match(/ISON\s+(.+)$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :ISON
-      return
-    end
-
-    thing.send :numeric, RPL_ISON, who.split(/\s+/).map {|nick|
-      nick if @clients[nick]
-    }.compact.join(' ')
-  end
 
   observe :send do |kind=:message, from, to, message|
     if from.is_a?(User)
@@ -1987,96 +2015,5 @@ end
     to.value.send :raw, ":#{mask} #{kind} #{level}#{name} :\x01#{text}\x01"
   end
 
-  on map do |thing, string|
-    server.fire :send, :notice, server, thing, 'The X tells the point.'
-  end
-
-  on :version do |thing, string|
-    thing.send :numeric, RPL_VERSION, options[:messages][:version].interpolate(binding)
-  end
-
-  on oper do |thing, string|
-    matches = string.match(/OPER\s+(.*?)(?:\s+(.+?))?$/i).to_a
-
-    if !matches
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :OPER
-      return
-    end
-
-    password = matches[2] || matches[1]
-    name     = (matches[2]) ? matches[1] : nil
-
-    mask = thing.mask.clone
-
-    mask.nick = name if name
-
-    server.options[:operators].each {|operator|
-      next unless Mask.parse(operator[:mask]).match(mask) && password == operator[:password]
-
-      operator[:flags].split(/\s*,\s*/).each {|flag|
-        thing.set_flag flag.to_sym, true, false, true
-      }
-
-      thing.modes[:message] = 'is an IRC operator'
-
-      thing.send :numeric, RPL_YOUREOPER
-      thing.send :raw, ":#{server} MODE #{thing.nick} #{thing.modes}"
-
-      server.fire :oper, true, thing, name, password
-
-      return
-    }
-
-    thing.send :numeric, ERR_NOOPERHOST
-    server.fire :oper, false, thing, name, password
-  end
-
-  on kill do |thing, string|
-    whole, target, message = string.match(/KILL\s+(.*?)(?:\s+:?(.*))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :KILL
-      return
-    end
-
-    client = @clients[target]
-
-    if !client
-      thing.send :numeric, ERR_NOSUCHNICK, nick
-      return
-    end
-
-    server.fire :kill, ref{:thing}, client, message
-  end
-
-  observe :kill do |from, client, message=nil|
-    if !from.value.has_flag?(:can_kill)
-      from.value.send :numeric, ERR_NOPRIVILEGES
-      return
-    end
-
-    sender = from.value
-    text   = options[:messages][:kill].interpolate(binding)
-
-    client.send :raw, ":#{client} QUIT :#{text}"
-    server.kill client, text
-  end
-
-  observe :killed do |thing, message|
-    return unless thing.is_a?(Client)
-
-    @nicks.delete(thing.data.nick)
-
-    @to_ping.delete(thing.socket)
-    @pinged_out.delete(thing.socket)
-
-    thing.channels.select {|name, channel|
-      channel.has_flag?(:anonymous)
-    }.each_key {|name|
-      server.fire :part, thing, name, nil
-    }
-
-    thing.channels.unique_users.send :raw, ":#{thing.mask} QUIT :#{message}"
-  end
 }
 =end

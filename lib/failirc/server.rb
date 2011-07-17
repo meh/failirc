@@ -108,6 +108,10 @@ class Server
   def name
     @options[:server][:name] || 'failirc'
   end
+
+  def to_s
+    host
+  end
 end
 
 end

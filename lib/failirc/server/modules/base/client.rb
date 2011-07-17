@@ -43,6 +43,8 @@ module Client
       @channels = Channels.new(server)
       @modes    = Modes.new
 
+      $stdout.puts Modes
+
       @mask      = Mask.new
       @mask.host = self.host
 
@@ -69,6 +71,10 @@ module Client
         else
           !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
         end
+      end
+
+      def away?
+        !!data.away
       end
 
       def identifier

@@ -29,8 +29,16 @@ class Modes
   end
 
   def self.define (&block)
-    Class.new(Modes) {
-      @@definitions = Definitions.new(&block)
+    Class.new(Modes).tap {|klass|
+      klass.define_singleton_method :definitions do
+        @definitions ||= Definitions.new(&block)
+      end
+
+      klass.instance_eval {
+        define_method :definitions do
+          klass.definitions
+        end
+      }
     }
   end
 
@@ -68,7 +76,7 @@ class Modes
 
     return @modes[name] if @modes[name]
 
-    definition = @@definitions.find(name)
+    definition = definitions.find(name)
 
     @modes[definition.name] = @modes[definition.code] = Mode.new(definition)
   end
@@ -102,7 +110,7 @@ class Modes
   end
 
   def supports? (name)
-    !!@@definitions.find(name)
+    !!definitions.find(name)
   end
 
   def can
@@ -144,7 +152,7 @@ class Modes
   end
 
   def inspect
-    @@definitions.to_s
+    definitions.to_s
   end
 end
 

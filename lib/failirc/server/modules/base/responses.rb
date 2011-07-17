@@ -31,7 +31,7 @@ RPL_NONE = {
 # The '-' or '+' characters represent whether the client has set an AWAY message or not respectively.
 RPL_USERHOST = {
   code: 302,
-  text: %q{:#{(value) ? "#{value.nick}=#{(value.modes[:oper]) ? '*' : ''} = #{(!value.modes[:away]) ? '+' : '-'}#{value.user}@#{value.host}" : ''}}
+  text: %q{:#{(value) ? "#{value.nick}=#{(value.modes.operator?) ? '*' : ''} = #{(!value.away?) ? '+' : '-'}#{value.user}@#{value.host}" : ''}}
 }
 
 # Reply format used by ISON to list replies to the query list.
@@ -42,7 +42,7 @@ RPL_ISON = {
 
 RPL_AWAY = {
   code: 301,
-  text: '#{value.nick} :#{value.modes[:away]}'
+  text: '#{value.nick} :#{value.data.away}'
 }
 
 RPL_UNAWAY = {
@@ -81,7 +81,7 @@ RPL_WHOISSERVER = {
 
 RPL_WHOISOPERATOR = {
   code: 313,
-  text: '#{value.nick} :#{value.modes[:message]}'
+  text: '#{value.nick} :#{value.data.message}'
 }
 
 RPL_WHOISIDLE = {
@@ -148,7 +148,7 @@ RPL_NOTOPIC = {
 # If the topic is set, RPL_TOPIC is sent back else RPL_NOTOPIC.
 RPL_TOPIC = {
   code: 332,
-  text: '#{value.channel.name} :#{value}'
+  text: '#{value.channel.name} :#{value.to_s}'
 }
 
 # Returned by the server to indicate that the attempted INVITE message was successful and is being passed onto the end client.

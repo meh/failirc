@@ -23,6 +23,7 @@ require 'versionub'
 require 'yaml'
 require 'memoized'
 require 'refining'
+require 'refr'
 
 class Module
   def scopes_for (name)
@@ -102,25 +103,6 @@ class Mutex
 
   alias lock_without_hack lock
   alias lock              lock_with_hack
-end
-
-class Reference
-  def initialize (name, vars)
-    @getter = eval "lambda { #{name} }", vars
-    @setter = eval "lambda { |v| #{name} = v }", vars
-  end
-  
-  def value
-    @getter.call
-  end
-  
-  def value= (val)
-    @setter.call(val)
-  end
-end
-
-def ref (&block)
-  Reference.new(block.call, block.binding)
 end
 
 class String

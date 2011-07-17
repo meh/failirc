@@ -17,34 +17,12 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-module IRC; class Modes
-
-class Definitions < Array
-  class Definition < Struct.new(:name, :code, :options)
-    attr_reader :parent
-
-    def initialize (parent, *args)
-      super(*args)
-
-      @parent = parent
-    end
+class String
+  def is_valid_channel?
+    !!self.to_s.match(/^[&#+!][^ ,:\a]{0,50}$/)
   end
 
-  def initialize (&block)
-    self.instance_exec(self, &block)
-  end
-
-  def method_missing (name, code, options={})
-    push Definition.new(self, name.to_sym, code.to_sym, options)
-  end
-
-  def find (name)
-    name = name.to_sym
-
-    super() {|definition|
-      name == definition.name or name == definition.code
-    }
+  def channel_type
+    self[0] if self.is_valid_channel?
   end
 end
-
-end; end

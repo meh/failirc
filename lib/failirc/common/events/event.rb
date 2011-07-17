@@ -45,11 +45,13 @@ class Event
 
   def call (*args, &block)
     @callbacks.each {|callback|
-      if @thing && @string && args.empty?
-        callback.call(@thing, @string)
-      else
-        callback.call(*args, &block)
-      end
+      begin
+        if @thing && @string && args.empty?
+          callback.call(Reference[@thing], Reference[@string])
+        else
+          callback.call(*args.map {|arg| Reference[arg]}, &block)
+        end
+      rescue LocalJumpError; end
     }
   end
 end

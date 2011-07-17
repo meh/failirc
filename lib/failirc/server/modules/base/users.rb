@@ -63,9 +63,10 @@ class Users < ThreadSafeHash
   end
 
   def add (user)
-    case user
-      when Client then self[user.nick] = User.new(user, @channel)
-      when User   then self[user.nick] = user
+    if user.is_a?(User)
+      self[user.nick] = user
+    else
+      self[user.nick] = User.new(user, @channel)
     end
   end
 

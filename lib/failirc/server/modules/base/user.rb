@@ -17,10 +17,11 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'failirc/server/modules/base/user/extensions'
+
 module IRC; class Server; module Base
 
 class User
-
   Modes = IRC::Modes.define {
     service :!,
       must:     :give_channel_service,
@@ -59,20 +60,15 @@ class User
     :v => '+'
   }
 
-  class ::String
-    def is_level?
-      Levels.has_value?(self) ? self : false
-    end
-  end
-
-  attr_reader :client, :channel, :modes
+  attr_reader  :client, :channel, :modes, :data
+  undef_method :send
 
   def initialize (client, channel)
     @client  = client
     @channel = channel
     @modes   = Modes.new
 
-    @data = InsensitiveStruct.ne
+    @data = InsensitiveStruct.new
 
     if block_given?
       yield self
@@ -102,11 +98,11 @@ class User
     level   = Levels.keys.index(level)
 
     if !level
-      return true
+      true
     elsif !highest
-      return false
+      false
     else
-      return highest <= level
+      highest <= level
     end
   end
 
@@ -116,13 +112,17 @@ class User
     }
   end
 
+  def level
+    @level
+  end
+
   # TODO: finish this shit
   def level= (level, value = true)
     level = Levels[level] ? level : Level.key(level)
   end
 
   def to_s
-    return "#{modes[:level]}#{nick}"
+    return "#{level}#{nick}"
   end
 
   def inspect

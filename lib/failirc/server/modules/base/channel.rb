@@ -17,47 +17,34 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'failirc/server/modules/base/channel/extensions'
 require 'failirc/server/modules/base/channel/topic'
 require 'failirc/server/modules/base/channel/modifier'
 
 module IRC; class Server; module Base
 
 class Channel
-  Modes = IRC::Modes.define {
+  Modes = IRC::Modes.define {|m|
     anonymous :a
+    no_colors :c
+    no_ctcps :C
+    invite_only :i
+    limit :l
+    redirect :L
+    password :k
+    no_knock :K
+    moderated :m
+    no_external_messages :n
+    no_nick_change :N
+    m.private :p
+    no_kicks :Q
+    secret :s
+    strip_colors :S
+    topic_lock :t
+    auditorium :u
+    no_invites :V
+    ssl_only :z
   }
-
-  Modes = {
-    :a => :anonymous,
-    :c => :no_colors,
-    :C => :no_ctcps,
-    :i => :invite_only,
-    :l => :limit,
-    :L => :redirect,
-    :k => :password,
-    :K => :no_knock,
-    :m => :moderated,
-    :n => :no_external_messages,
-    :N => :no_nick_change,
-    :p => :private,
-    :Q => :no_kicks,
-    :s => :secret,
-    :S => :strip_colors,
-    :t => :topic_lock,
-    :u => :auditorium,
-    :V => :no_invites,
-    :z => :ssl_only,
-  }
-
-  class ::String
-    def is_valid_channel?
-      !!self.to_s.match(/^[&#+!][^ ,:\a]{0,50}$/)
-    end
-
-    def channel_type
-      self[0] if self.is_valid_channel?
-    end
-  end
 
   attr_reader :server, :name, :type, :created_on, :modes, :topic, :data
   attr_writer :level
@@ -74,7 +61,7 @@ class Channel
     @modes      = Modes.new
     @topic      = Topic.new(self)
 
-    @data       = InsensitiveStruct.new
+    @data = InsensitiveStruct.new
   end
 
   def method_missing (id, *args, &block)
@@ -129,7 +116,7 @@ class Channel
   end
 
   def banned? (client)
-    modes[:bans].each {|ban|
+    data.bans.each {|ban|
       return true if ban.match(client.mask)
     }
 
@@ -137,7 +124,7 @@ class Channel
   end
 
   def exception? (client)
-    modes[:exceptions].each {|exception|
+    data.exceptions.each {|exception|
       return true if exception.match(client.mask)
     }
 
@@ -145,11 +132,11 @@ class Channel
   end
 
   def invited? (client, shallow=false)
-    return true if shallow && !channel.has_flag?(:invite_only)
+    return true if shallow && !channel.modes.invite_only?
 
     return true if channel.data.invited[client.mask]
 
-    modes[:invites].each {|invite|
+    data.invites.each {|invite|
       return true if invite.match(client.mask)
     }
 

@@ -17,34 +17,8 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-module IRC; class Modes
-
-class Definitions < Array
-  class Definition < Struct.new(:name, :code, :options)
-    attr_reader :parent
-
-    def initialize (parent, *args)
-      super(*args)
-
-      @parent = parent
-    end
-  end
-
-  def initialize (&block)
-    self.instance_exec(self, &block)
-  end
-
-  def method_missing (name, code, options={})
-    push Definition.new(self, name.to_sym, code.to_sym, options)
-  end
-
-  def find (name)
-    name = name.to_sym
-
-    super() {|definition|
-      name == definition.name or name == definition.code
-    }
+class String
+  def is_level?
+    Levels.has_value?(self) ? self : false
   end
 end
-
-end; end
