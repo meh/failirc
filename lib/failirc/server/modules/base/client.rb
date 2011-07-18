@@ -24,17 +24,22 @@ module Client
     ssl :Z,
       must: :do_god
 
+    god ??,
+      must:     :do_god,
+      inherits: :netadmin,
+      powers: [:do_god]
+
     netadmin :N,
       must:     :give_netadmin,
       inherits: :operator,
       powers:   [:give_netadmin, :give_ircop]
 
-    operator :o,
+    ircop :o,
       must: :give_ircop,
       powers: [
         :kill, :see_secrets,
-        :give_channel_owner, :give_channel_admin, :channel_moderation,
-        :change_user_modes, :change_client_modes
+        :give_channel_owner, :give_channel_admin, Powers::Channel::Moderation,
+        Powers::User::ChangeModes, Powers::Client::ChangeModes
       ]
   }
 

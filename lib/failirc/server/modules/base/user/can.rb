@@ -17,8 +17,16 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-class String
-  def is_level?
-    IRC::Server::Base::User::Level::Modes.has_value?(self) ? self : false
+module IRC; class Server; module Base; class User
+
+class Can < BasicObject
+  def initialize (user)
+    @user = user
+  end
+
+  def method_missing (*args, &block)
+    @user.modes.can.send(*args, &block) || @user.client.modes.can(*args, &block)
   end
 end
+
+end; end; end; end

@@ -148,7 +148,7 @@ RPL_NOTOPIC = {
 # If the topic is set, RPL_TOPIC is sent back else RPL_NOTOPIC.
 RPL_TOPIC = {
   code: 332,
-  text: '#{value.channel.name} :#{value.to_s}'
+  text: '#{value.channel.name} :#{value}'
 }
 
 # Returned by the server to indicate that the attempted INVITE message was successful and is being passed onto the end client.
@@ -194,7 +194,7 @@ RPL_NAMREPLY = {
 # The exception to this is when a NAMES message is sent with no parameters and all visible channels and contents are sent back in a series of RPL_NAMEREPLY messages with a RPL_ENDOFNAMES to mark the end.
 RPL_ENDOFNAMES = {
   code: 366,
-  text: '#{value.to_s} :End of /NAMES list'
+  text: '#{value} :End of /NAMES list'
 }
 
 RPL_LINKS = {

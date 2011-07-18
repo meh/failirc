@@ -19,6 +19,7 @@
 
 require 'failirc/server/modules/base/user/extensions'
 require 'failirc/server/modules/base/user/level'
+require 'failirc/server/modules/base/user/can'
 
 module IRC; class Server; module Base
 
@@ -40,7 +41,7 @@ class User
     operator :o,
       must:     :give_channel_operator,
       inherits: :halfop,
-      powers:   [:moderate_channel, :change_user_modes]
+      powers:   [Powers::Channel::Moderation, Powers::User::ChangeModes]
 
     halfop :h,
       must:     :give_channel_halfop,
@@ -54,9 +55,8 @@ class User
 
   extend Forwardable
 
-  attr_reader    :client, :channel, :modes, :level
-  def_delegators :@modes, :can
-  undef_method   :send
+  attr_reader  :client, :channel, :modes, :level
+  undef_method :send
 
   def initialize (client, channel)
     @client  = client
@@ -76,6 +76,11 @@ class User
     else
       super
     end
+  end
+
+  memoize
+  def can
+    Can.new(self)
   end
 
   def to_s

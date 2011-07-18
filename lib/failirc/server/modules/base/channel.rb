@@ -94,7 +94,7 @@ class Channel
       users = Users.new(self)
       
       @users.select {|_, user|
-        user.is_level_enough?(@level)
+        user.level.enough?(@level)
       }.each {|_, user|
         user    = user.clone
         channel = self
@@ -146,21 +146,25 @@ class Channel
     return false
   end
 
-  def to_s
-    @name
-  end
-
   def level?
     @level
   end
 
   def level (level)
-    return self unless User::Levels.has_value?(level)
+    return self unless User::Level::Modes.has_value?(level)
 
     result       = self.clone
     result.level = level
 
     result
+  end
+
+  def to_s
+    @name
+  end
+
+  def inspect
+    to_s
   end
 end
 

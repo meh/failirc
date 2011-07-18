@@ -51,8 +51,8 @@ class Mode
     result.flatten.compact.uniq
   end
 
-  def enabled?;  !!@value; end
-  def disabled?; !@value; end
+  def enabled?;  !!@value;  end
+  def disabled?; !enabled?; end
 
   def enable!;  @value = true; end
   def disable!; @value = false; end

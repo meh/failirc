@@ -22,7 +22,7 @@ require 'failirc/server/modules/base/errors'
 require 'failirc/server/modules/base/responses'
 
 require 'failirc/server/modules/base/extensions'
-require 'failirc/server/modules/base/flags'
+require 'failirc/server/modules/base/powers'
 require 'failirc/server/modules/base/incoming'
 require 'failirc/server/modules/base/servers'
 require 'failirc/server/modules/base/clients'
@@ -710,12 +710,9 @@ input {
       text = type
     end
 
-    case kind
-      when :message
-        kind  = :PRIVMSG
-
-      when :notice
-        kind = :NOTICE
+    kind = case ~kind
+      when :message then :PRIVMSG
+      when :notice  then :NOTICE
     end
 
     to.send ":#{mask} #{kind} #{name} :\x01#{text}\x01"
@@ -817,7 +814,7 @@ input {
       channel.invited.delete(user.mask)
     end
 
-    thing.channels.add(channel)
+    thing.channels.add(~channel)
 
     if user.channel.modes.anonymous?
       mask = Mask.parse('anonymous!anonymous@anonymous.')
@@ -1058,7 +1055,7 @@ input {
         users = 'anonymous'
       else
         users = channel.users.map {|(_, user)|
-          if channel.modes.auditorium? && !user.is_level_enough?('%') && !thing.modes.ircop?
+          if channel.modes.auditorium? && !user.level.enough?('%') && !thing.modes.ircop?
             if user.level
               user.to_s
             end
@@ -1073,7 +1070,7 @@ input {
         users:   users
     end
 
-    thing.send RPL_ENDOFNAMES, channel
+    thing.send RPL_ENDOFNAMES, channel.to_s
   end
 
   on :topic do |thing, string|

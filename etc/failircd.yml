@@ -16,7 +16,7 @@ server:
 operators:
   - mask:     "meh!*@*"
     password: password
-    flags:    netadmin
+    flags:    god
 
 modules:
   base:
