@@ -22,6 +22,7 @@ module IRC; class Modes
 class Mode
   extend Forwardable
 
+  attr_reader    :definition
   attr_accessor  :value
   def_delegators :@definition, :name, :code
 

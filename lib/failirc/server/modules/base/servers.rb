@@ -17,47 +17,12 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'failirc/server/modules/base/server'
+
 module IRC; class Server; module Base
 
-module Incoming; def self.extended (obj)
-  obj.instance_eval {
-    @temporary = InsensitiveStruct.new
-  }
+class Servers
 
-  obj.refine_method :send do |old, *args|
-    if args.first.is_a?(String)
-      old.call(args.first)
-    else
-      response, value = args
-
-      begin
-        old.call ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
-      rescue Exception => e
-        IRC.debug response[:text]
-        raise e
-      end
-    end
-  end
-
-  class << obj
-    attr_reader :temporary
-
-    def identifier
-      'faggot'
-    end
-
-    def incoming?
-      true
-    end
-
-    def client?
-      false
-    end
-
-    def server?
-      false
-    end
-  end
-end; end
+end
 
 end; end; end

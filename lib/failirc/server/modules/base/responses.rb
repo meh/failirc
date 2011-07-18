@@ -42,7 +42,7 @@ RPL_ISON = {
 
 RPL_AWAY = {
   code: 301,
-  text: '#{value.nick} :#{value.data.away}'
+  text: '#{value.nick} :#{value.away}'
 }
 
 RPL_UNAWAY = {
@@ -81,12 +81,12 @@ RPL_WHOISSERVER = {
 
 RPL_WHOISOPERATOR = {
   code: 313,
-  text: '#{value.nick} :#{value.data.message}'
+  text: '#{value.nick} :#{value.message}'
 }
 
 RPL_WHOISIDLE = {
   code: 317,
-  text: '#{value.nick} #{Time.now.tv_sec - value.data.last_action.on.tv_sec} #{value.connected_on.tv_sec} :seconds idle, signon time'
+  text: '#{value.nick} #{Time.now.tv_sec - value.last_action.on.tv_sec} #{value.connected_on.tv_sec} :seconds idle, signon time'
 }
 
 RPL_ENDOFWHOIS = {

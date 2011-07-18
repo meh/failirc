@@ -32,7 +32,7 @@ class Channel
     limit :l
     redirect :L
     password :k
-    no_knock :K
+    no_knocks :K
     moderated :m
     no_external_messages :n
     no_nick_change :N
@@ -46,7 +46,7 @@ class Channel
     ssl_only :z
   }
 
-  attr_reader :server, :name, :type, :created_on, :modes, :topic, :data
+  attr_reader :server, :name, :type, :created_on, :modes, :topic, :bans, :exceptions, :invites, :invited
   attr_writer :level
 
   def initialize (server, name)
@@ -61,7 +61,10 @@ class Channel
     @modes      = Modes.new
     @topic      = Topic.new(self)
 
-    @data = InsensitiveStruct.new
+    @bans       = []
+    @exceptions = []
+    @invites    = []
+    @invited    = {}
   end
 
   def method_missing (id, *args, &block)
@@ -116,7 +119,7 @@ class Channel
   end
 
   def banned? (client)
-    data.bans.each {|ban|
+    bans.each {|ban|
       return true if ban.match(client.mask)
     }
 
@@ -124,7 +127,7 @@ class Channel
   end
 
   def exception? (client)
-    data.exceptions.each {|exception|
+    exceptions.each {|exception|
       return true if exception.match(client.mask)
     }
 
@@ -134,9 +137,9 @@ class Channel
   def invited? (client, shallow=false)
     return true if shallow && !channel.modes.invite_only?
 
-    return true if channel.data.invited[client.mask]
+    return true if channel.invited[client.mask]
 
-    data.invites.each {|invite|
+    invites.each {|invite|
       return true if invite.match(client.mask)
     }
 

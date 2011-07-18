@@ -31,7 +31,7 @@ class Can
 
     modes.to_hash.values.uniq.select {|mode|
       mode.enabled?
-    }.any? {
+    }.any? {|mode|
       mode.powers.include?(name)
     }
   end

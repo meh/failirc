@@ -24,6 +24,7 @@ require 'failirc/server/modules/base/responses'
 require 'failirc/server/modules/base/extensions'
 require 'failirc/server/modules/base/flags'
 require 'failirc/server/modules/base/incoming'
+require 'failirc/server/modules/base/servers'
 require 'failirc/server/modules/base/clients'
 require 'failirc/server/modules/base/users'
 require 'failirc/server/modules/base/channels'
@@ -45,9 +46,14 @@ on :start do |server|
   @clients    = {}
   @servers    = {}
 
-  server.define_singleton_method :clients do
-    @clients
-  end
+  [:clients, :servers, :channels].each {|name|
+    server.define_singleton_method name do
+      instance_variable_get name
+    end
+  }
+
+  server.extend Base::Incoming
+  server.extend Base::Server
 
   Thread.new {
     while server.running?
@@ -102,12 +108,12 @@ input do before priority: -10001 do |event, thing, string|
   next unless thing.client?
 
   begin
-    string.force_encoding(thing.data.encoding)
+    string.force_encoding(thing.encoding)
 
     if !string.valid_encoding?
-      if !thing.data.encoding_tested && (tmp = check_encoding(string))
-        thing.data.encoding_tested = true
-        thing.data.encoding        = tmp
+      if !thing.encoding_tested && (tmp = check_encoding(string))
+        thing.encoding_tested = true
+        thing.encoding        = tmp
 
         string.force_encoding(tmp)
       else
@@ -117,7 +123,7 @@ input do before priority: -10001 do |event, thing, string|
 
     string.encode!('UTF-8')
   rescue
-    if thing.data.encoding
+    if thing.encoding
       server.fire :error, thing, 'The encoding you choose seems to not be the one you are using.'
     else
       server.fire :error, thing, 'Please specify the encoding you are using with ENCODING <encoding>'
@@ -135,8 +141,8 @@ end end
 output do after priority: 10001 do |event, thing, string|
   return unless thing.client?
 
-  if thing.data.encoding
-    string.encode!(thing.data.encoding,
+  if thing.encoding
+    string.encode!(thing.encoding,
       :invalid => :replace,
       :undef   => :replace
     )
@@ -191,7 +197,6 @@ input {
 input {
   observe :connect do |client|
     client.extend Incoming
-    client.data.encoding = 'UTF-8'
   end
 
   # check for ping timeout and registration
@@ -201,8 +206,8 @@ input {
       @pinged_out.delete(~thing)
     }
 
-    if !event.alias?(:PING) && !event.alias?(:PONG) && !event.alias?(:WHO) && !event.alias?(:MODE)
-      thing.data.last_action = Action.new(thing, event, string)
+    if thing.client? && !event.alias?(:PING) && !event.alias?(:PONG) && !event.alias?(:WHO) && !event.alias?(:MODE)
+      thing.last_action = Action.new(thing, event, string)
     end
 
     # if the client tries to do something without having registered, kill it with fire
@@ -235,10 +240,10 @@ input {
     whole, message = string.match(/AWAY\s+(?::)(.*)$/i).to_a
 
     if !whole || message.empty?
-      thing.data.away = false
+      thing.away = false
       thing.send RPL_UNAWAY
     else
-      thing.data.away = message
+      thing.away = message
       thing.send RPL_NOWAWAY
     end
   end
@@ -280,14 +285,14 @@ input {
     return unless thing.incoming?
 
     # if the client isn't registered but has all the needed attributes, register it
-    if thing.data.user && thing.data.nick
-      return false if thing.options[:password] && thing.options[:password] != thing.data.password
+    if thing.temporary.user && thing.temporary.nick
+      return false if thing.options[:password] && thing.options[:password] != thing.temporary.password
 
       (client = thing).extend Client
 
-      client.nick      = thing.data.nick
-      client.user      = thing.data.user
-      client.real_name = thing.data.real_name
+      client.nick      = thing.temporary.nick
+      client.user      = thing.temporary.user
+      client.real_name = thing.temporary.real_name
 
       @clients[client.nick] = client
 
@@ -324,10 +329,10 @@ input {
       next
     end
 
-    thing.data.password = password
+    thing.temporary.password = password
 
     if thing.options[:password]
-      if thing.data.password != thing.options[:password]
+      if thing.temporary.password != thing.options[:password]
         server.fire :error, thing, :close, 'Password mismatch'
         thing.disconnect 'Password mismatch'
         next
@@ -346,8 +351,8 @@ input {
     if !real_name
       thing.send :numeric, ERR_NEEDMOREPARAMS, :USER
     else
-      thing.data.user      = user
-      thing.data.real_name = real_name
+      thing.temporary.user      = user
+      thing.temporary.real_name = real_name
 
       # try to register it
       register(thing)
@@ -391,12 +396,12 @@ input {
     @mutex.synchronize {
       if thing.incoming?
           if !nick_is_ok?(thing, nick)
-            thing.data.warned = nick
+            thing.temporary.warned = nick
             return
           end
 
-          @nicks.delete(thing.data.nick)
-          @nicks << (thing.data.nick = nick)
+          @nicks.delete(thing.temporary.nick)
+          @nicks << (thing.temporary.nick = nick)
   
           # try to register it
           register(thing)
@@ -473,8 +478,8 @@ input {
     if nick
       if thing.can.change_encoding? || thing.can.change_client_flags? 
         if client = @clients[nick]
-          client.data.encoding        = encoding
-          client.data.encoding_tested = false
+          client.encoding                  = encoding
+          client.temporary.encoding_tested = false
         else
           thing.send :numeric, ERR_NOSUCHNICK, nick
         end
@@ -482,8 +487,8 @@ input {
         thing.send :numeric, ERR_NOPRIVILEGES
       end
     else
-      thing.data.encoding        = encoding
-      thing.data.encoding_tested = false
+      thing.encoding                  = encoding
+      thing.temporary.encoding_tested = false
     end
   end
 
@@ -492,11 +497,11 @@ input {
       from = from.client
     end
 
-    if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-      server.fire :ctcp, kind, from, to, match[1], match[3], level
+    if matches = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
+      server.fire :ctcp, :input, kind, from, to, matches[1], matches[3]
     else
       if kind == :notice
-        server.fire :notice, :input, from, to, message, level
+        server.fire :notice, :input, from, to, message
       elsif kind == :message
          server.fire :message, :input, from, to, message
       end
@@ -699,7 +704,7 @@ input {
       return
     end
 
-    if message
+    if message && !message.empty?
       text = "#{type} #{message}"
     else
       text = type
@@ -708,13 +713,12 @@ input {
     case kind
       when :message
         kind  = :PRIVMSG
-        level = nil
 
       when :notice
         kind = :NOTICE
     end
 
-    to.send ":#{mask} #{kind} #{level}#{name} :\x01#{text}\x01"
+    to.send ":#{mask} #{kind} #{name} :\x01#{text}\x01"
   end
 
   on :join do |thing, string|
@@ -765,11 +769,6 @@ input {
         channel = @channels[channel]
       else
         channel = @channels[channel] = Channel.new(server, channel)
-
-        channel.data.bans       = []
-        channel.data.exceptions = []
-        channel.data.invites    = []
-        channel.data.invited    = {}
       end
 
       if channel.modes.limit?
@@ -815,7 +814,7 @@ input {
     if empty
       server.fire :mode, server, channel, "+o #{user.nick}", false
     else
-      channel.data.invited.delete(user.mask)
+      channel.invited.delete(user.mask)
     end
 
     thing.channels.add(channel)
@@ -1003,7 +1002,7 @@ input {
 
   observe :invited do |from, client, channel|
     if channel = @channels[channel]
-      channel.data.invited[client.mask] = true
+      channel.invited[client.mask] = true
       server.fire :send, :notice, server, channel.level(?@), "#{from.nick} invited #{client.nick} into the channel."
     end
   end
@@ -1122,6 +1121,611 @@ input {
     end
   end
 
+  # MODE user/channel = +option,-option
+  on :mode do |thing, string|
+    whole, name, value = string.match(/MODE\s+([^ ]+)(?:\s+(?::)?(.*))?$/i).to_a
+
+    thing.send ERR_NEEDMOREPARAMS, :MODE and return unless whole
+
+    # long options, extended protocol
+    if value && value.match(/^=\s+(.*)$/)
+      if name.is_valid_channel?
+        if channel = @channels[name]
+          server.fire :mode, channel.user(thing) || thing, channel, value
+        else
+          thing.send ERR_NOSUCHCHANNEL, name
+        end
+      elsif match = name.match(/^([^@])@(.*)$/)
+        user    = match[1]
+        channel = match[2]
+
+        if tmp = @channels[channel]
+          channel = tmp
+
+          if tmp = @clients[user]
+            if tmp = channel.user(tmp)
+              server.fire :mode, thing, tmp, value
+            else
+              thing.send ERR_USERNOTINCHANNEL,
+                nick:    user,
+                channel: channel
+            end
+          else
+            thing.send ERR_NOSUCHNICK, user
+          end
+        else
+          thing.send ERR_NOSUCHCHANNEL, channel
+        end
+      else
+        if client = @clients[name]
+          server.fire :mode, thing, client, value
+        else
+          thing.send ERR_NOSUCHNICK, name
+        end
+      end
+    # usual shit
+    else
+      if name.is_valid_channel?
+        if channel = @channels[name]
+          if !value || value.empty?
+            thing.send RPL_CHANNELMODEIS, channel
+            thing.send RPL_CHANCREATEDON, channel
+          else
+            if thing.is_on_channel?(name)
+              thing = thing.channels[name].user(thing)
+            end
+
+            server.fire :mode, thing, channel, value
+          end
+        else
+          thing.send ERR_NOSUCHCHANNEL, name
+        end
+      else
+        if client = @clients[name]
+          server.fire :mode, thing, client, value
+        else
+          thing.send ERR_NOSUCHNICK, name
+        end
+      end
+    end
+  end
+
+  observe :mode do |from, thing, request, answer=true|
+    if match = request.match(/^=(.*)$/)
+      value = match[1].strip
+
+      if value == '?'
+        # TODO
+      else
+        modes = value.split(/[^\\],/)
+  
+        modes.each {|mode|
+          if mode.start_with?('-')
+            type = :-
+          else
+            type = :+
+          end
+  
+          mode.sub!(/^[+\-]/, '')
+  
+          mode = mode.split(/=/)
+  
+          server.fire :mode=, :extended, from, thing, type, *mode
+        }
+      end
+    else
+      output = {
+        :modes  => [],
+        :values => [],
+      }
+
+      return false unless match = request.match(/^\s*([+\-])?\s*([^ ]+)(?:\s+(.+))?$/)
+
+      type   = (match[1] || '+').to_sym
+      modes  = match[2].split(//)
+      values = (match[3] || '').strip.split(/ /)
+
+      modes.each {|mode|
+        server.fire :mode=, :normal, from, thing, type, mode, values, output
+      }
+
+      if from.client? || from.is_a?(User)
+        from = from.mask
+      end
+
+      if thing.is_a?(Channel)
+        name = thing.name
+
+        if thing.modes.anonymous?
+          from = Mask.parse('anonymous!anonymous@anonymous.')
+        end
+      else
+        name = thing.nick
+      end
+
+      if answer && (!output[:modes].empty? || !output[:values].empty?)
+        string = "#{type}#{output[:modes].join('')}"
+        
+        if !output[:values].empty?
+          string << " #{output[:values].join(' ')}"
+        end
+
+        thing.send ":#{from} MODE #{name} #{string}"
+      end
+    end
+  end
+
+  observe :mode= do |kind, from, thing, type, mode, values, output=nil|
+    return unless kind == :normal
+
+    type = ~type
+    mode = mode.to_sym
+
+    if thing.is_a?(Channel)
+      channel = thing
+
+      case mode
+
+      when :a
+        if channel.type != '&' && channel.type != '!'
+          server.fire :error, from, 'Only & and ! channels can use this mode.'
+          return
+        end
+
+        if from.can.change_anonymous_mode?
+          return if channel.modes.anonymous? == (type == :+)
+
+          channel.modes.send type, :anonymous
+          output[:modes].push(:a)
+        end
+
+      when :b
+        if values.empty?
+          channel.bans.each {|ban|
+            from.send RPL_BANLIST, ban
+          }
+          
+          from.send  RPL_ENDOFBANLIST, channel.name
+          return
+        end
+
+        if from.can.channel_ban?
+          mask = Mask.parse(values.shift)
+
+          if type == :+
+            if !channel.bans.any? {|ban| ban == mask}
+              channel.bans.push(Channel::Modifier.new(from, channel, mask))
+            end
+          else
+            result = channel.bans.delete_if {|ban|
+              ban == mask
+            }
+
+            mask = nil unless result
+          end
+
+          if mask
+            output[:modes].push(:b)
+            output[:values].push(mask.to_s)
+          end
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :c
+        if from.can.change_no_colors_mode?
+          return if channel.modes.no_colors? == (type == :+)
+
+          channel.modes.send type, :no_colors
+
+          output[:modes].push(:c)
+        else
+          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :C
+        if from.can.change_no_ctcps_mode?
+          return if channel.modes.no_ctcps? == (type == :+)
+
+          channel.modes.send type, :no_ctcps
+
+          output[:modes].push(:C)
+        else
+          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :e
+        if values.empty?
+          channel.exceptions.each {|exception|
+            from.send RPL_EXCEPTIONLIST, exception
+          }
+          
+          from.send RPL_ENDOFEXCEPTIONLIST, channel.name
+          return
+        end
+
+        if from.can.add_ban_exception?
+          mask = Mask.parse(values.shift)
+
+          if type == :+
+            if !channel.exceptions.any? {|exception| exception == mask}
+              channel.exceptions.push(Channel::Modifier.new(from, channel, mask))
+            end
+          else
+            result = channel.exceptions.delete_if {|exception|
+              exception == mask
+            }
+
+            mask = nil if !result
+          end
+
+          if mask
+            output[:modes].push(:e)
+            output[:values].push(mask.to_s)
+          end
+        else
+          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :h
+        if from.can.give_channel_halfop?
+          value = values.shift
+
+          if !value || !(user = channel.users[value])
+            from.send ERR_NOSUCHNICK, value
+            return
+          end
+
+          return if user.level.halfop? == (type == :+)
+
+          user.level.send type, :halfop
+
+          output[:modes].push(:h)
+          output[:values].push(value)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :i
+        if from.can.change_invite_only_mode?
+          return if channel.modes.invite_only? == (type == :+)
+
+          channel.modes.send type, :invite_only
+
+          output[:modes].push(:i)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :I
+        if values.empty?
+          channel.invites.each {|invitation|
+            from.send RPL_INVITELIST, invitation
+          }
+          
+          from.send RPL_ENDOFINVITELIST, channel.name
+          return
+        end
+
+        if from.can.add_invitation?
+          mask = Mask.parse(values.shift)
+
+          if type == :+
+            if !channel.invites.any? {|invitation| invitation == mask}
+              channel.invites.push(Channel::Modifier.new(from, channel, mask))
+            end
+          else
+            result = channel.invites.delete_if {|invitation|
+              invitation == mask
+            }
+
+            mask = nil if !result
+          end
+
+          if mask
+            output[:modes].push(:I)
+            output[:values].push(mask.to_s)
+          end
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :k
+        if from.can.change_channel_password?
+          value = values.shift
+
+          return if !value
+
+          if type == :+ && (password = value)
+            channel.modes + Modes[:password, password]
+          else
+            password = channel.modes.password.value
+
+            channel.modes - :password
+          end
+
+          if password
+            output[:modes].push(:k)
+            output[:values].push(password)
+          end
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :K
+        if from.can.change_no_knock_mode?
+          return if channel.modes.no_knocks? == (type == :+)
+
+          channel.modes.send type, :no_knocks
+
+          output[:modes].push(:K)
+           
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :l
+        if from.can.change_limit_mode?
+          return if channel.modes.limit? == (type == :+)
+
+          if type == :+
+            value = values.shift
+
+            return if !value || !value.match(/^\d+$/)
+
+            channel.modes + Modes[:limit, value.to_i]
+
+            output[:modes].push(:l)
+            output[:values].push(value)
+          else
+            channel.modes - :limit
+
+            output[:modes].push(:l)
+          end
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :L
+        if from.can.change_redirect_mode?
+          return if channel.modes.redirect? == (type == :+)
+
+          if type == :+
+            value = values.shift
+
+            return if !value || !value.is_valid_channel?
+
+            channel.modes + Modes[:redirect, value]
+
+            output[:modes].push(:L)
+            output[:values].push(value)
+          else
+            channel.modes - :redirect
+
+            output[:modes].push(:L)
+          end
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :m
+        if from.can.change_moderated_mode?
+          return if channel.modes.moderated? == (type == :+)
+
+          channel.modes.send type, :moderated
+
+          output[:modes].push(:m)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :n
+        if from.can.change_no_external_messages_mode?
+          return if channel.modes.no_external_messages? == (type == :+)
+
+          channel.modes.send type, :no_external_messages
+
+          output[:modes].push(:n)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :N
+        if from.can.change_no_nick_change_mode?
+          return if channel.modes.no_nick_change? == (type == :+)
+
+          channel.send type, :no_nick_change
+
+          output[:modes].push(:N)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :o
+        if from.can.give_channel_operator?
+          value = values.shift
+
+          if !value || !(user = channel.user(value))
+            from.send ERR_NOSUCHNICK, value
+            return
+          end
+
+          return if user.level.operator? == (type == :+)
+
+          user.level.send type, :operator
+
+          output[:modes].push(:o)
+          output[:values].push(value)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :p
+        if from.can.change_private_mode?
+          return if channel.modes.secret? || channel.modes.private? == (type == :+)
+
+          channel.modes.send type, :private
+
+          output[:modes].push(:p)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :Q
+        if from.can.change_no_kicks_mode?
+          return if channel.modes.no_kicks? == (type == :+)
+
+          channel.modes.send type, :no_kicks
+
+          output[:modes].push(:Q)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :s
+        if from.can.change_secret_mode?
+          return if channel.modes.private? || channel.modes.secret? == (type == :+)
+
+          channel.modes.send type, :secret
+
+          output[:modes].push(:s)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :S
+        if from.can.change_strip_colors_mode?
+          return if channel.modes.strip_colors? == (type == :+)
+
+          channel.modes.send type, :strip_colors
+
+          output[:modes].push(:S)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :t
+        if from.can.change_topic_lock_mode?
+          return if channel.modes.topic_lock? == (type == :+)
+
+          channel.modes.send type, :topic_lock
+
+          output[:modes].push(:t)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :u
+        if from.can.change_auditorium_mode?
+          return if channel.modes.auditorium? == (type == :+)
+
+          channel.modes.send type, :auditorium
+
+          output[:modes].push(:u)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :v
+        if from.can.give_channel_voice?
+          value = values.shift
+
+          if !value || !(user = channel.users[value])
+            from.send ERR_NOSUCHNICK, value
+            return
+          end
+
+          return if user.level.voice? == (type == :+)
+
+          user.level.send type, :voice
+
+          output[:modes].push(:v)
+          output[:values].push(value)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :V
+        if from.can.change_no_invites_mode?
+          return if channel.modes.no_invites? == (type == :+)
+
+          channel.modes.send type, :no_invites
+
+          output[:modes].push(:V)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :x
+        if from.can.give_channel_owner?
+          value = values.shift
+
+          if !value || !(user = channel.users[value])
+            from.send ERR_NOSUCHNICK, value
+            return
+          end
+
+          return if user.level.owner? == (type == :+)
+
+          user.level.send type, :owner
+
+          output[:modes].push(:x)
+          output[:values].push(value)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :y
+        if from.can.give_channel_admin?
+          value = values.shift
+
+          if !value || !(user = channel.users[value])
+            from.send ERR_NOSUCHNICK, value
+            return
+          end
+
+          return if user.level.admin? == (type == :+)
+
+          user.level.send type, :admin
+
+          output[:modes].push(:y)
+          output[:values].push(value)
+        else
+          from.send ERR_CHANOPRIVSNEEDED, channel.name
+        end
+
+      when :z
+        if from.can.change_ssl_mode?
+          return if channel.modes.ssl? == (type == :+)
+
+          if type == :+
+            begin
+              channel.users.each_value {|user|
+                raise if !user.ssl?
+              }
+
+              channel.modes + :ssl
+            rescue
+              from.send :numeric, ERR_ALLMUSTUSESSL
+              return
+            end
+          else
+            channel.modes - :ssl
+          end
+
+          output[:modes].push(:z)
+        else
+          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+        end
+      end
+    elsif thing.is_a?(Client)
+    end
+  end
+
+  observe :mode= do |kind, from, thing, type, mode, values, output=nil|
+    return unless kind == :extended
+  end
+
   on :who do |thing, string|
     whole, name, operator = string.match(/WHO\s+(.*?)(?:\s+(o))?$/i).to_a
 
@@ -1226,7 +1830,7 @@ input {
       thing.send RPL_AWAY, client
     end
 
-    if client.data.message
+    if client.message
       thing.send RPL_WHOISOPERATOR, client
     end
 
@@ -1306,7 +1910,7 @@ input {
         thing.modes + flag.to_sym
       }
 
-      thing.data.message = operator[:message] || 'is an IRC operator'
+      thing.message = operator[:message] || 'is an IRC operator'
 
       thing.send RPL_YOUREOPER
       thing.send ":#{server} MODE #{thing.nick} #{thing.modes}"
@@ -1386,624 +1990,8 @@ input {
 
         @nicks.delete(thing.nick)
       elsif thing.incoming?
-        @nicks.delete(thing.data.nick)
+        @nicks.delete(thing.temporary.nick)
       end
     }
   end
 }
-
-=begin
-
-  # MODE user/channel = +option,-option
-  on mode do |thing, string|
-    whole, name, value = string.match(/MODE\s+([^ ]+)(?:\s+(?::)?(.*))?$/i).to_a
-
-    if !whole
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :MODE
-      return
-    end
-
-    # long options, extended protocol
-    if value && value.match(/^=\s+(.*)$/)
-      if name.is_valid_channel?
-        if channel = server.channels[name]
-          server.fire :mode, channel.user(thing) || thing, channel, value
-        else
-          thing.send :numeric, ERR_NOSUCHCHANNEL, name
-        end
-      elsif match = name.match(/^([^@])@(.*)$/)
-        user    = match[1]
-        channel = match[2]
-
-        if tmp = @channels[channel]
-          channel = tmp
-
-          if tmp = @clients[user]
-            if tmp = channel.user(tmp)
-              server.fire :mode, thing, tmp, value
-            else
-              thing.send :numeric, ERR_USERNOTINCHANNEL, {
-                :nick    => user,
-                :channel => channel,
-              }
-            end
-          else
-            thing.send :numeric, ERR_NOSUCHNICK, user
-          end
-        else
-          thing.send :numeric, ERR_NOSUCHCHANNEL, channel
-        end
-      else
-        if client = @clients[name]
-          server.fire :mode, thing, client, value
-        else
-          thing.send :numeric, ERR_NOSUCHNICK, name
-        end
-      end
-    # usual shit
-    else
-      if name.is_valid_channel?
-        if channel = @channels[name]
-          if !value || value.empty?
-            thing.send :numeric, RPL_CHANNELMODEIS, channel
-            thing.send :numeric, RPL_CHANCREATEDON, channel
-          else
-            if thing.is_on_channel?(name)
-              thing = thing.channels[name].user(thing)
-            end
-
-            server.fire :mode, thing, channel, value
-          end
-        else
-          thing.send :numeric, ERR_NOSUCHCHANNEL, name
-        end
-      else
-        if client = @clients[name]
-          server.fire :mode, thing, client, value
-        else
-          thing.send :numeric, ERR_NOSUCHNICK, name
-        end
-      end
-    end
-  end
-
-  observe :mode do |from, thing, request, answer=true|
-    if match = request.match(/^=(.*)$/)
-      value = match[1].strip
-
-      if value == '?'
-        # TODO
-      else
-        modes = value.split(/[^\\],/)
-  
-        modes.each {|mode|
-          if mode.start_with?('-')
-            type = '-'
-          else
-            type = '+'
-          end
-  
-          mode.sub!(/^[+\-]/, '')
-  
-          mode = mode.split(/=/)
-  
-          server.fire :mode=, :extended, from, thing, type, *mode
-        }
-      end
-    else
-      output = {
-        :modes  => [],
-        :values => [],
-      }
-
-      return false unless match = request.match(/^\s*([+\-])?\s*([^ ]+)(?:\s+(.+))?$/)
-
-      type   = match[1] || '+'
-      modes  = match[2].split(//)
-      values = (match[3] || '').strip.split(/ /)
-
-      modes.each {|mode|
-        server.fire :mode=, :normal, from, thing, type, mode, values, output
-      }
-
-      if from.is_a?(Client) || from.is_a?(User)
-        from = from.mask
-      end
-
-      if thing.is_a?(Channel)
-        name = thing.name
-
-        if thing.modes[:anonymous]
-          from = Mask.parse('anonymous!anonymous@anonymous.')
-        end
-      else
-        name = thing.nick
-      end
-
-      if answer && (!output[:modes].empty? || !output[:values].empty?)
-        string = "#{type}#{output[:modes].join('')}"
-        
-        if !output[:values].empty?
-          string << " #{output[:values].join(' ')}"
-        end
-
-        thing.send :raw, ":#{from} MODE #{name} #{string}"
-      end
-    end
-  end
-
-  observe :mode= do |kind, from, thing, type, mode, values, output=nil|
-    return unless kind == :normal
-
-    mode = mode.to_sym
-
-    if thing.is_a?(Channel)
-      case mode
-
-      when :a
-        if thing.type != '&' && thing.type != '!'
-          server.fire :error, from, 'Only & and ! channels can use this mode.'
-          return
-        end
-
-        if from.can.change_anonymous_mode?
-          return if thing.check_flag?(:a) == (type == '+')
-
-          thing.set_flag(:a, type == '+')
-          output[:modes].push(:a)
-        end
-
-      when :b
-        if values.empty?
-          thing.modes[:bans].each {|ban|
-            from.send :numeric, RPL_BANLIST, ban
-          }
-          
-          from.send :numeric, RPL_ENDOFBANLIST, thing.name
-          return
-        end
-
-        if from.can.channel_ban?
-          mask = Mask.parse(values.shift)
-
-          if type == '+'
-            if !thing.modes[:bans].any? {|ban| ban == mask}
-              thing.modes[:bans].push(Channel::Modifier.new(from, thing, mask))
-            end
-          else
-            result = thing.modes[:bans].delete_if {|ban|
-              ban == mask
-            }
-
-            mask = nil unless result
-          end
-
-          if mask
-            output[:modes].push(:b)
-            output[:values].push(mask.to_s)
-          end
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :c
-        if from.can.change_nocolors_mode?
-          return if thing.has_flag?(:c) == (type == '+')
-
-          thing.set_flag(:c, type == '+')
-
-          output[:modes].push(:c)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :C
-        if from.has_flag?(:can_change_noctcp_mode)
-          return if thing.has_flag?(:C) == (type == '+')
-
-          thing.set_flag(:C, type == '+')
-
-          output[:modes].push(:C)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :e
-        if values.empty?
-          thing.modes[:exceptions].each {|exception|
-            from.send :numeric, RPL_EXCEPTIONLIST, exception
-          }
-          
-          from.send :numeric, RPL_ENDOFEXCEPTIONLIST, thing.name
-          return
-        end
-
-        if from.has_flag?(:can_add_ban_exception)
-          mask = Mask.parse(values.shift)
-
-          if type == '+'
-            if !thing.modes[:exceptions].any? {|exception| exception == mask}
-              thing.modes[:exceptions].push(Channel::Modifier.new(from, thing, mask))
-            end
-          else
-            result = thing.modes[:exceptions].delete_if {|exception|
-              exception == mask
-            }
-
-            mask = nil if !result
-          end
-
-          if mask
-            output[:modes].push(:e)
-            output[:values].push(mask.to_s)
-          end
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :h
-        if from.has_flag?(:can_give_channel_half_operator)
-          value = values.shift
-
-          if !value || !(user = thing.users[value])
-            from.send :numeric, ERR_NOSUCHNICK, value
-            return
-          end
-
-          return if user.has_flag?(:h, true) == (type == '+')
-
-          user.set_level :h, (type == '+')
-
-          output[:modes].push(:h)
-          output[:values].push(value)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :i
-        if from.has_flag?(:can_change_invite_only_mode)
-          return if thing.has_flag?(:i) == (type == '+')
-
-          thing.set_flag :i, type == '+'
-
-          output[:modes].push('i')
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :I
-        if values.empty?
-          thing.modes[:invites].each {|invitation|
-            from.send :numeric, RPL_INVITELIST, invitation
-          }
-          
-          from.send :numeric, RPL_ENDOFINVITELIST, thing.name
-          return
-        end
-
-        if from.has_flag?(:can_add_invitation)
-          mask = Mask.parse(values.shift)
-
-          if type == '+'
-            if !thing.modes[:invites].any? {|invitation| invitation == mask}
-              thing.modes[:invites].push(Channel::Modifier.new(from, thing, mask))
-            end
-          else
-            result = thing.modes[:invites].delete_if {|invitation|
-              invitation == mask
-            }
-
-            mask = nil if !result
-          end
-
-          if mask
-            output[:modes].push(:I)
-            output[:values].push(mask.to_s)
-          end
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :k
-        if from.has_flag?(:can_change_channel_password)
-          value = values.shift
-
-          return if !value
-
-          if type == '+' && (password = value)
-            thing.set_flag :k, password
-          else
-            password = thing.modes[:password]
-
-            thing.set_flag :k, false
-          end
-
-          if password
-            output[:modes].push(:k)
-            output[:values].push(password)
-          end
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :K
-        if from.has_flag?(:can_change_noknock_mode)
-          return if thing.has_flag?(:K) == (type == '+')
-
-          thing.set_flag :K, type == '+'
-
-          output[:modes].push(:K)
-           
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :l
-        if from.has_flag?(:can_change_limit_mode)
-          return if thing.has_flag?(:l) == (type == '+')
-
-          if type == '+'
-            value = values.shift
-
-            return if !value || !value.match(/^\d+$/)
-
-            thing.set_flag :l, value.to_i
-
-            output[:modes].push(:l)
-            output[:values].push(value)
-          else
-            thing.set_flag :l, false
-
-            output[:modes].push(:l)
-          end
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :L
-        if from.has_flag?(:can_change_redirect_mode)
-          return if thing.has_flag?(:L) == (type == '+')
-
-          if type == '+'
-            value = values.shift
-
-            return if !value || !value.is_valid_channel?
-
-            thing.set_flag :L, value
-
-            output[:modes].push(:L)
-            output[:values].push(value)
-          else
-            thing.set_flag :L, false
-
-            output[:modes].push(:L)
-          end
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :m
-        if from.has_flag?(:can_change_moderated_mode)
-          return if thing.has_flag?(:m) == (type == '+')
-
-          thing.set_flag :m, type == '+'
-
-          output[:modes].push(:m)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :n
-        if from.has_flag?(:can_change_no_external_messages_mode)
-          return if thing.has_flag?(:n) == (type == '+')
-
-          thing.set_flag :n, type == '+'
-
-          output[:modes].push(:n)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :N
-        if from.has_flag?(:can_change_no_nick_change_mode)
-          return if thing.has_flag?(:N) == (type == '+')
-
-          thing.set_flag :N, type == '+'
-
-          output[:modes].push(:N)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :o
-        if from.has_flag?(:can_give_channel_operator)
-          value = values.shift
-
-          if !value || !(user = thing.user(value))
-            from.send :numeric, ERR_NOSUCHNICK, value
-            return
-          end
-
-          return if user.has_flag?(:o, true) == (type == '+')
-
-          user.set_level :o, (type == '+')
-
-          output[:modes].push(:o)
-          output[:values].push(value)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :p
-        if from.has_flag?(:can_change_private_mode)
-          return if thing.modes[:secret] || thing.has_flag?(:p) == (type == '+')
-
-          thing.set_flag :p, type == '+'
-
-          output[:modes].push(:p)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-
-      when :Q
-        if from.has_flag?(:can_change_nokicks_mode)
-          return if thing.has_flag?(:Q) == (type == '+')
-
-          thing.set_flag :Q, type == '+'
-
-          output[:modes].push(:Q)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :s
-        if from.has_flag?(:can_change_secret_mode)
-          return if thing.has_flag?(:s) == (type == '+') || thing.modes[:private]
-
-          thing.set_flag :s, type == '+'
-
-          output[:modes].push(:s)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :S
-        if from.has_flag?(:can_change_strip_colors_mode)
-          return if thing.has_flag?(:S) == (type == '+')
-
-          thing.set_flag :S, type == '+'
-
-          output[:modes].push(:S)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :t
-        if from.has_flag?(:can_change_topic_mode)
-          return if thing.has_flag?(:t) == (type == '+')
-
-          thing.set_flag :t, type == '+'
-
-          output[:modes].push(:t)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :u
-        if from.has_flag?(:can_change_auditorium_mode)
-          return if thing.has_flag?(:u) == (type == '+')
-
-          thing.set_flag :u, type == '+'
-
-          output[:modes].push(:u)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :v
-        if from.has_flag?(:can_give_voice)
-          value = values.shift
-
-          if !value || !(user = thing.users[value])
-            from.send :numeric, ERR_NOSUCHNICK, value
-            return
-          end
-
-          return if user.has_flag?(:v, true) == (type == '+')
-
-          user.set_level :v, (type == '+')
-
-          output[:modes].push(:v)
-          output[:values].push(value)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :V
-        if from.has_flag?(:can_change_noinvites_mode)
-          return if thing.has_flag?(:V) == (type == '+')
-
-          thing.set_flag :V, type == '+'
-
-          output[:modes].push('V')
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :x
-        if from.has_flag?(:can_give_channel_owner)
-          value = values.shift
-
-          if !value || !(user = thing.users[value])
-            from.send :numeric, ERR_NOSUCHNICK, value
-            return
-          end
-
-          return if user.has_flag?(:x, true) == (type == '+')
-
-          user.set_level :x, (type == '+')
-
-          output[:modes].push(:x)
-          output[:values].push(value)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :y
-        if from.has_flag?(:can_give_channel_admin)
-          value = values.shift
-
-          if !value || !(user = thing.users[value])
-            from.send :numeric, ERR_NOSUCHNICK, value
-            return
-          end
-
-          return if user.has_flag?(:y, true) == (type == '+')
-
-          user.set_level :y, (type == '+')
-
-          output[:modes].push(:y)
-          output[:values].push(value)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-
-      when :z
-        if from.has_flag?(:can_change_ssl_mode)
-          return if thing.has_flag?(:z) == (type == '+')
-
-          if type == '+'
-            ok = true
-
-            thing.users.each_value {|user|
-              if !user.has_flag?(:ssl)
-                ok = false
-                break
-              end
-            }
-
-            if ok
-              thing.set_flag :z, true
-            else
-              from.send :numeric, ERR_ALLMUSTUSESSL
-              return
-            end
-          else
-            thing.set_flag :z, false
-          end
-
-          output[:modes].push(:z)
-        else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, thing.name
-        end
-      end
-    elsif thing.is_a?(Client)
-    end
-  end
-
-  observe :mode= do |kind, from, thing, type, mode, values, output=nil|
-    return unless kind == :extended
-  end
-}
-=end

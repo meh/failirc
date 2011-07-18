@@ -18,6 +18,7 @@
 #++
 
 require 'failirc/server/modules/base/user/extensions'
+require 'failirc/server/modules/base/user/level'
 
 module IRC; class Server; module Base
 
@@ -51,24 +52,18 @@ class User
       powers: [:talk]
   }
 
-  Levels = {
-    :! => '!',
-    :x => '~',
-    :y => '&',
-    :o => '@',
-    :h => '%',
-    :v => '+'
-  }
+  extend Forwardable
 
-  attr_reader  :client, :channel, :modes, :data
-  undef_method :send
+  attr_reader    :client, :channel, :modes, :level
+  def_delegators :@modes, :can
+  undef_method   :send
 
   def initialize (client, channel)
     @client  = client
     @channel = channel
     @modes   = Modes.new
 
-    @data = InsensitiveStruct.new
+    @level = Level.new(self)
 
     if block_given?
       yield self
@@ -81,44 +76,6 @@ class User
     else
       super
     end
-  end
-
-  def is_level_enough? (level)
-    return true if !level || (level.is_a?(String) && level.empty?)
-
-    if level.is_a?(String)
-      level = Levels.key level
-    end
-
-    highest = highest_level
-
-    return false unless highest
-
-    highest = Levels.keys.index(highest)
-    level   = Levels.keys.index(level)
-
-    if !level
-      true
-    elsif !highest
-      false
-    else
-      highest <= level
-    end
-  end
-
-  def highest_level
-    Levels.each_key {|level|
-      return level if modes[level]
-    }
-  end
-
-  def level
-    @level
-  end
-
-  # TODO: finish this shit
-  def level= (level, value = true)
-    level = Levels[level] ? level : Level.key(level)
   end
 
   def to_s

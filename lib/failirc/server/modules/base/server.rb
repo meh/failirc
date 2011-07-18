@@ -19,45 +19,32 @@
 
 module IRC; class Server; module Base
 
-module Incoming; def self.extended (obj)
-  obj.instance_eval {
-    @temporary = InsensitiveStruct.new
-  }
+module Server
+  class Can < BasicObject
+    def method_missing (*)
+      true
+    end
+  end
 
-  obj.refine_method :send do |old, *args|
-    if args.first.is_a?(String)
-      old.call(args.first)
-    else
-      response, value = args
+  def self.extended (obj)
+    class << obj
+      def can
+        Can.new
+      end
 
-      begin
-        old.call ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
-      rescue Exception => e
-        IRC.debug response[:text]
-        raise e
+      def incoming?
+        false
+      end
+
+      def server?
+        true
+      end
+
+      def to_s
+        host
       end
     end
   end
-
-  class << obj
-    attr_reader :temporary
-
-    def identifier
-      'faggot'
-    end
-
-    def incoming?
-      true
-    end
-
-    def client?
-      false
-    end
-
-    def server?
-      false
-    end
-  end
-end; end
+end
 
 end; end; end

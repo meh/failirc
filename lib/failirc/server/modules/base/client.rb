@@ -53,13 +53,14 @@ module Client
       @connected_on = Time.now
       @registered   = false
 
+      @encoding = 'UTF-8'
     }
 
     class << obj
       extend Forwardable
 
-      attr_reader    :channels, :mask, :connected_on
-      attr_accessor  :password, :real_name, :modes
+      attr_reader    :channels, :mask, :connected_on, :modes
+      attr_accessor  :password, :real_name, :message, :away, :encoding, :last_action
       def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
       def_delegators :@modes, :can
 
@@ -72,7 +73,7 @@ module Client
       end
 
       def away?
-        !!data.away
+        !!away
       end
 
       def identifier
