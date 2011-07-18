@@ -47,6 +47,10 @@ module IRC
     $stderr.puts output
   end
 
+  if ENV['DEBUG']
+    require 'ruby-debug'
+  end
+
   module SSLUtils
     def self.self_signed_certificate (bits, comment)
       rsa = OpenSSL::PKey::RSA.new(bits)

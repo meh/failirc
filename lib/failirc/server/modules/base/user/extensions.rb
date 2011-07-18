@@ -19,6 +19,6 @@
 
 class String
   def is_level?
-    Levels.has_value?(self) ? self : false
+    IRC::Server::Base::User::Levels.has_value?(self) ? self : false
   end
 end

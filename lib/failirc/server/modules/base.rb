@@ -487,6 +487,236 @@ input {
     end
   end
 
+  observe :send do |kind=:message, from, to, message|
+    if from.is_a?(User)
+      from = from.client
+    end
+
+    if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
+      server.fire :ctcp, kind, from, to, match[1], match[3], level
+    else
+      if kind == :notice
+        server.fire :notice, :input, from, to, message, level
+      elsif kind == :message
+         server.fire :message, :input, from, to, message
+      end
+    end
+  end
+
+  on :privmsg do |thing, string|
+    whole, receiver, message = string.match(/PRIVMSG\s+(.*?)(?:\s+:(.*))?$/i).to_a
+
+    if !receiver
+      thing.send ERR_NORECIPIENT, :PRIVMSG
+      return
+    end
+
+    if !message
+      thing.send ERR_NOTEXTTOSEND
+      return
+    end
+
+    if (level = receiver[0].is_level?) || receiver.is_valid_channel?
+      if level
+        receiver[0] = ''
+      end
+
+      channel = @channels[receiver]
+
+      if !channel
+        thing.send ERR_NOSUCHNICK, receiver
+        return
+      end
+
+      thing = channel.user(thing) || thing
+
+      if channel.modes.moderated? && thing.can.talk?
+        thing.send ERR_YOUNEEDVOICE, channel.name
+        return
+      end
+
+      if channel.banned?(thing) && !channel.exception?(thing)
+        thing.send ERR_YOUAREBANNED, channel.name
+        return
+      end
+
+      if thing.is_a?(User)
+        server.fire :send, thing, channel.level(level), message
+      else
+        if @channels[receiver].modes.no_external_messages?
+          thing.send ERR_NOEXTERNALMESSAGES, channel.name
+        else
+          server.fire :send, thing, channel.level(level), message
+        end
+      end
+    else
+      client = @clients[receiver]
+
+      if !client
+        thing.send ERR_NOSUCHNICK, receiver
+      else
+        server.fire :send, thing, client, message
+      end
+    end
+  end
+
+  observe :message do |chain=:input, from, to, message|
+    return unless chain == :input
+
+    if to.is_a?(Channel)
+      if to.modes.strip_colors?
+        message.gsub!(/\x03((\d{1,2})?(,\d{1,2})?)?/, '')
+      end
+
+      if to.modes.no_colors? && message.include("\x03")
+        from.send ERR_NOCOLORS, to.name
+        return
+      end
+      
+      to.users.each_value {|user|
+        next if from == user.client
+
+        server.fire :message, :output, from, user, message
+      }
+    elsif to.client?
+      server.fire :message, :output, from, to, message
+    end
+  end
+
+  observe :message do |chain=:input, from, to, message|
+    return unless chain == :output
+
+    mask = from.mask
+
+    if to.is_a?(User)
+      name = to.channel.name
+
+      if to.channel.modes.anonymous?
+        mask = Mask.parse('anonymous!anonymous@anonymous.')
+      end
+    elsif to.client?
+      name = to.nick
+    else
+      return
+    end
+
+    to.send ":#{mask} PRIVMSG #{name} :#{message}"
+  end
+
+  on :notice do |thing, string|
+    whole, receiver, message = string.match(/NOTICE\s+(.*?)\s+:(.*)$/i).to_a
+
+    return unless whole
+
+    if (level = receiver[0].is_level?) || receiver.is_valid_channel?
+      if level
+        receiver[0] = ''
+      end
+
+      if !(channel = @channels[receiver])
+        # unrealircd sends an error if it can't find nick/channel, what should I do?
+        return
+      end
+
+      if !channel.modes.no_external_messages? || channel.user(thing)
+        service :send, :notice, thing, channel.level(level), message
+      end
+    elsif client = @clients[receiver]
+      server.fire :send, :notice, thing, client, message
+    end
+  end
+
+  observe :notice do |chain=:input, from, to, message|
+    return unless chain == :input
+
+    if to.is_a?(Channel)
+      to.users.each_value {|user|
+        next if from == user.client
+
+        server.fire :notice, :output, from, user, message
+      }
+
+    elsif to.client?
+      server.fire :notice, :output, from, to, message, level
+    end
+  end
+
+  observe :notice do |chain=:input, from, to, message|
+    return unless chain == :output
+
+    if to.is_a?(User)
+      name  = to.channel.name
+      level = to.channel.level?
+
+      if to.channel.modes.anonymous?
+        from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
+      end
+    elsif to.client?
+      name  = to.nick
+      level = nil
+    else
+      return
+    end
+
+    to.send :raw, ":#{from} NOTICE #{level}#{name} :#{message}"
+  end
+
+  observe :ctcp do |chain=:input, kind=:message, from, to, type, message|
+    return unless chain == :input
+
+    if to.is_a?(Channel)
+      if to.modes.no_ctcps?
+        from.send ERR_NOCTCPS, to.name
+
+        skip
+      end
+
+      to.users.each_value {|user|
+        next if from == user.client
+
+        server.fire :ctcp, :output, kind, from, user, type, message
+      }
+
+    elsif to.client? || to.is_a?(User)
+      server.fire :ctcp, :output, kind, from, to, type, message
+    end
+  end
+
+  observe :ctcp do |chain=:input, kind=:message, from, to, type, message|
+    return unless chain == :output
+
+    mask = from.mask
+
+    if to.is_a?(User)
+      name = to.channel.name
+
+      if to.channel.modes.anonymous?
+        mask = Mask.parse('anonymous!anonymous@anonymous.')
+      end
+    elsif to.client?
+      name = to.nick
+    else
+      return
+    end
+
+    if message
+      text = "#{type} #{message}"
+    else
+      text = type
+    end
+
+    case kind
+      when :message
+        kind  = :PRIVMSG
+        level = nil
+
+      when :notice
+        kind = :NOTICE
+    end
+
+    to.send ":#{mask} #{kind} #{level}#{name} :\x01#{text}\x01"
+  end
+
   on :join do |thing, string|
     return unless thing.client?
 
@@ -580,7 +810,7 @@ input {
 
   observe :joined do |thing, channel|
     empty = channel.empty?
-    user  = channel.add(thing)
+    user  = channel.add(~thing)
 
     if empty
       server.fire :mode, server, channel, "+o #{user.nick}", false
@@ -596,13 +826,13 @@ input {
       mask = user.mask
     end
 
-    user.channel.send ":#{mask} JOIN :#{user.channel}"
+    user.channel.send ":#{mask} JOIN :#{user.channel.to_s}"
 
     if !user.channel.topic.nil?
-      server.dispatch user.client, "TOPIC #{user.channel}"
+      server.dispatch user.client, "TOPIC #{user.channel.to_s}"
     end
 
-    server.dispatch user.client, "NAMES #{user.channel}"
+    server.dispatch user.client, "NAMES #{user.channel.to_s}"
   end
 
   on :part do |thing, string|
@@ -700,7 +930,7 @@ input {
   end
 
   observe :kicked do |from, user, message|
-    user.channel.send ":#{from.value.mask} KICK #{user.channel} #{user.nick} :#{message}"
+    user.channel.send ":#{from.mask} KICK #{user.channel} #{user.nick} :#{message}"
 
     @mutex.synchronize {
       user.channel.delete(user)
@@ -875,12 +1105,12 @@ input {
 
   observe :topic do |from, channel, topic|
     if !from.can.change_topic? && !from.is_on_channel?(channel) && !from.modes.ircop?
-      from.value.send :numeric, ERR_NOTONCHANNEL, channel
+      from.send :numeric, ERR_NOTONCHANNEL, channel
       return
     end
 
-    if channel.modes.topic_lock? && !channel.user(from.value).can.change_topic?
-      from.value.send ERR_CHANOPRIVSNEEDED, channel
+    if channel.modes.topic_lock? && !channel.user(from).can.change_topic?
+      from.send ERR_CHANOPRIVSNEEDED, channel
     else
       if channel.modes.anonymous?
         channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), topic
@@ -952,7 +1182,7 @@ input {
   on :whois do |thing, string|
     matches = string.match(/WHOIS\s+(.+?)(?:\s+(.+?))?$/i)
 
-    thing.send ERR_NEEDMOREPARAMS, :WHOIS and return unless whole
+    thing.send ERR_NEEDMOREPARAMS, :WHOIS and return unless matches
 
     names  = (matches[2] || matches[1]).strip.split(/,/)
     target = matches[2] ? matches[1].strip : nil
@@ -1041,7 +1271,7 @@ input {
       if !(channel.modes.secret? || channel.modes.private?) || thing.is_on_channel?(channel) || thing.can.see_secrets?
         thing.send RPL_LIST,
           name:  channel.name,
-          users: channel.has_flag?(:anonymous) ? 1 : channel.users.length,
+          users: channel.modes.anonymous? ? 1 : channel.users.length,
           modes: channel.modes.to_s.empty? ? '' : "[#{channel.modes.to_s}] ",
           topic: channel.topic.text
       end
@@ -1108,11 +1338,11 @@ input {
 
   observe :kill do |from, client, message=nil|
     if !from.can.kill?
-      from.value.send ERR_NOPRIVILEGES
+      from.send ERR_NOPRIVILEGES
       return
     end
 
-    sender = from.value
+    sender = from
     text   = options[:messages][:kill].interpolate(binding)
 
     client.send ":#{client} QUIT :#{text}"
@@ -1129,34 +1359,36 @@ input {
   end
 
   observe :disconnect do |thing, message|
-    if thing.client?
-      @nicks.delete(thing.nick)
-      
-      @to_ping.delete(thing)
-      @pinged_out.delete(thing)
+    @mutex.synchronize {
+      if thing.client?
+        @nicks.delete(thing.nick)
+        
+        @to_ping.delete(thing)
+        @pinged_out.delete(thing)
 
-      thing.channels.select {|name, channel|
-        channel.modes.anonymous?
-      }.each_key {|name|
-        server.fire :part, thing, name, nil
-      }
+        thing.channels.select {|name, channel|
+          channel.modes.anonymous?
+        }.each_key {|name|
+          server.fire :part, thing, name, nil
+        }
 
-      thing.channels.clients.reject {|client|
-        client == thing
-      }.send ":#{thing.mask} QUIT :#{message}"
+        thing.channels.clients.reject {|nick, client|
+          client == ~thing
+        }.send ":#{thing.mask} QUIT :#{message}"
 
-      thing.channels.each_value {|channel|
-        channel.users.delete(thing.nick)
+        thing.channels.each_value {|channel|
+          channel.users.delete(thing.nick)
 
-        if channel.empty?
-          @channels.delete(channel.name)
-        end
-      }
+          if channel.empty?
+            @channels.delete(channel.name)
+          end
+        }
 
-      @nicks.delete(thing.nick)
-    elsif thing.incoming?
-      @nicks.delete(thing.data.nick)
-    end
+        @nicks.delete(thing.nick)
+      elsif thing.incoming?
+        @nicks.delete(thing.data.nick)
+      end
+    }
   end
 }
 
@@ -1314,7 +1546,7 @@ input {
           return
         end
 
-        if from.has_flag?(:can_change_anonymous_mode)
+        if from.can.change_anonymous_mode?
           return if thing.check_flag?(:a) == (type == '+')
 
           thing.set_flag(:a, type == '+')
@@ -1331,7 +1563,7 @@ input {
           return
         end
 
-        if from.has_flag?(:can_channel_ban)
+        if from.can.channel_ban?
           mask = Mask.parse(values.shift)
 
           if type == '+'
@@ -1355,7 +1587,7 @@ input {
         end
 
       when :c
-        if from.has_flag?(:can_change_nocolors_mode)
+        if from.can.change_nocolors_mode?
           return if thing.has_flag?(:c) == (type == '+')
 
           thing.set_flag(:c, type == '+')
@@ -1773,247 +2005,5 @@ input {
   observe :mode= do |kind, from, thing, type, mode, values, output=nil|
     return unless kind == :extended
   end
-
-
-
-  observe :send do |kind=:message, from, to, message|
-    if from.is_a?(User)
-      from = from.client
-    end
-
-    if match = message.match(/^\x01([^ ]*)( (.*?))?\x01$/)
-      server.fire :ctcp, kind, ref{:from}, ref{:to}, match[1], match[3], level
-    else
-      if kind == :notice
-        server.fire :notice, :input, ref{:from}, ref{:to}, message, level
-      elsif kind == :message
-         server.fire :message, :input, ref{:from}, ref{:to}, message
-      end
-    end
-  end
-
-  on privmsg do |thing, string|
-    whole, receiver, message = string.match(/PRIVMSG\s+(.*?)(?:\s+:(.*))?$/i).to_a
-
-    if !receiver
-      thing.send :numeric, ERR_NORECIPIENT, :PRIVMSG
-      return
-    end
-
-    if !message
-      thing.send :numeric, ERR_NOTEXTTOSEND
-      return
-    end
-
-    if (level = receiver[0].is_level?) || receiver.is_valid_channel?
-      if level
-        receiver[0] = ''
-      end
-
-      channel = @channels[receiver]
-
-      if !channel
-        thing.send :numeric, ERR_NOSUCHNICK, receiver
-        return
-      end
-
-      thing = channel.user(thing) || thing
-
-      if channel.has_flag?(:moderated) && thing.has_flag?(:can_talk)
-        thing.send :numeric, ERR_YOUNEEDVOICE, channel.name
-        return
-      end
-
-      if channel.banned?(thing) && !channel.exception?(thing)
-        thing.send :numeric, ERR_YOUAREBANNED, channel.name
-        return
-      end
-
-      if thing.is_a?(User)
-        server.fire :send, thing, channel.level(level), message
-      else
-        if @channels[receiver].has_flag?(:no_external_messages)
-          thing.send :numeric, ERR_NOEXTERNALMESSAGES, channel.name
-        else
-          server.fire :send, thing, channel.level(level), message
-        end
-      end
-    else
-      client = @clients[receiver]
-
-      if !client
-        thing.send :numeric, ERR_NOSUCHNICK, receiver
-      else
-        server.fire :send, thing, client, message
-      end
-    end
-  end
-
-  observe :message do |chain=:input, from, to, message|
-    return unless chain == :input
-
-    case to.value
-      when Channel
-        if to.value.has_flag?(:strip_colors)
-          message.gsub!(/\x03((\d{1,2})?(,\d{1,2})?)?/, '')
-        end
-
-        if to.value.has_flag?(:no_colors) && message.include("\x03")
-          from.value.send :numeric, ERR_NOCOLORS, to.value.name
-          return
-        end
-        
-        to.value.users.each_value {|user|
-          next if user.client == from.value
-
-          server.fire :message, :output, from, ref{:user}, message
-        }
-
-      when Client
-        server.fire :message, :output, from, to, message
-    end
-  end
-
-  observe :message do |chain=:input, from, to, message|
-    return unless chain == :output
-
-    mask = from.value.mask
-
-    case to.value
-      when User
-        name = to.value.channel.name
-
-        if to.value.channel.has_flag?(:anonymous)
-          mask = Mask.parse('anonymous!anonymous@anonymous.')
-        end
-
-      when Client
-        name = to.value.nick
-
-      else return
-    end
-
-    to.value.send :raw, ":#{mask} PRIVMSG #{name} :#{message}"
-  end
-
-  on notice do |thing, string|
-    whole, receiver, message = string.match(/NOTICE\s+(.*?)\s+:(.*)$/i).to_a
-
-    return unless whole
-
-    if (level = receiver[0].is_level?) || receiver.is_valid_channel?
-      if level
-        receiver[0] = ''
-      end
-
-      if !(channel = @channels[receiver])
-        # unrealircd sends an error if it can't find nick/channel, what should I do?
-        return
-      end
-
-      if !channel.has_flag?(:no_external_messages)|| channel.user(thing)
-        service :send, :notice, thing, channel.level(level), message
-      end
-    elsif client = @clients[receiver]
-      server.fire :send, :notice, thing, client, message
-    end
-  end
-
-  observe :notice do |chain=:input, from, to, message|
-    return unless chain == :input
-
-    case to.value
-      when Channel
-        to.value.users.each_value {|user|
-          next if user.client == from.value
-
-          server.fire :notice, :output, from, ref{:user}, message
-        }
-
-      when Client
-        server.fire :notice, :output, from, to, message, level
-    end
-  end
-
-  observe :notice do |chain=:input, from, to, message|
-    return unless chain == :output
-
-    case to.value
-      when User
-        name  = to.value.channel.name
-        level = to.value.channel.level?
-
-        if to.value.channel.has_flag?(:anonymous)
-          from = Mask.new 'anonymous', 'anonymous', 'anonymous.'
-        end
-
-      when Client
-        name  = to.value.nick
-        level = nil
-
-      else return
-    end
-
-    to.value.send :raw, ":#{from.value} NOTICE #{level}#{name} :#{message}"
-  end
-
-  observe :ctcp do |chain=:input, kind=:message, from, to, type, message|
-    return unless chain == :input
-
-    case to.value
-      when Channel
-        if to.value.has_flag?(:no_ctcps)
-          from.value.send :numeric, ERR_NOCTCPS, to.value.name
-          return false
-        end
-
-        to.value.users.each_value {|user|
-          next if user.client == from.value
-
-          server.fire :ctcp, :output, kind, from, ref{:user}, type, message
-        }
-
-      when Client, User
-        server.fire :ctcp, :output, kind, from, to, type, message
-    end
-  end
-
-  observe :ctcp do |chain=:input, kind=:message, from, to, type, message|
-    return unless chain == :output
-
-    mask = from.value.mask
-
-    case to.value
-      when User
-        name = to.value.channel.name
-
-        if to.value.channel.has_flag?(:anonymous)
-          mask = Mask.parse('anonymous!anonymous@anonymous.')
-        end
-
-      when Client
-        name = to.value.nick
-
-      else return
-    end
-
-    if message
-      text = "#{type} #{message}"
-    else
-      text = type
-    end
-
-    case kind
-      when :message
-        kind  = :PRIVMSG
-        level = nil
-
-      when :notice
-        kind = :NOTICE
-    end
-
-    to.value.send :raw, ":#{mask} #{kind} #{level}#{name} :\x01#{text}\x01"
-  end
-
 }
 =end

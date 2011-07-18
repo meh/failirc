@@ -194,7 +194,7 @@ RPL_NAMREPLY = {
 # The exception to this is when a NAMES message is sent with no parameters and all visible channels and contents are sent back in a series of RPL_NAMEREPLY messages with a RPL_ENDOFNAMES to mark the end.
 RPL_ENDOFNAMES = {
   code: 366,
-  text: '#{value} :End of /NAMES list'
+  text: '#{value.to_s} :End of /NAMES list'
 }
 
 RPL_LINKS = {

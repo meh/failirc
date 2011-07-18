@@ -43,8 +43,6 @@ module Client
       @channels = Channels.new(server)
       @modes    = Modes.new
 
-      $stdout.puts Modes
-
       @mask      = Mask.new
       @mask.host = self.host
 

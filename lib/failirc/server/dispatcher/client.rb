@@ -53,8 +53,6 @@ class Client < IO
 
       begin; loop do
         input << @socket.read_nonblock(4096)
-
-        ap input
       end; rescue Errno::EAGAIN, IO::WaitReadable; end
 
       raise Errno::EPIPE if input.empty?
@@ -78,6 +76,8 @@ class Client < IO
   end; alias recv receive
 
   def send (message)
+    return if disconnected?(true)
+
     dispatcher.server.dispatch :output, self, message
     @output.push(message)
 
@@ -85,7 +85,7 @@ class Client < IO
   end
 
   def flush
-    return if @output.empty?
+    return if @output.empty? or disconnected?(true)
 
     begin
       @socket.write_nonblock("#{@last}\r\n") if @last
@@ -115,7 +115,7 @@ class Client < IO
   end
 
   def handle
-    return if @handling or @input.empty?
+    return if disconnected?(true) or @handling or @input.empty?
 
     @handling = true
 
@@ -135,14 +135,14 @@ class Client < IO
   def disconnect (message, options={})
     return if disconnected? and @told
 
+    @told = true
+
     server.fire :disconnect, self, message
 
     IRC.debug "#{self} disconnecting because: #{message}"
 
     connected_to.clients.delete(self)
     dispatcher.wakeup reset: true
-
-    @told = true
 
     begin
       flush
@@ -151,8 +151,8 @@ class Client < IO
     end
   end
 
-  def disconnected?
-    return true if @told
+  def disconnected? (real=false)
+    return true if @told and not real
 
     begin
       @socket.closed?

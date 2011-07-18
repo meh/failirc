@@ -64,7 +64,7 @@ class Server < IO
       begin
         if ssl?
           socket = timeout((self.server.options[:server][:timeout] || 15).to_i) do
-            ssl = OpenSSL::SSL::SSLSocket.new(socket, server.context)
+            ssl = OpenSSL::SSL::SSLSocket.new(socket, @context)
             ssl.accept
             ssl
           end
