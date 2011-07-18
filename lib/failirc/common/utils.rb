@@ -20,6 +20,10 @@
 require 'failirc/common/extensions'
 
 module IRC
+  if ENV['DEBUG']
+    require 'ruby-debug'
+  end
+
   def self.debug (argument, options={})
     return if !ENV['DEBUG'] && !options[:force]
 
@@ -47,10 +51,6 @@ module IRC
     $stderr.puts output
   end
 
-  if ENV['DEBUG']
-    require 'ruby-debug'
-  end
-
   module SSLUtils
     def self.self_signed_certificate (bits, comment)
       rsa = OpenSSL::PKey::RSA.new(bits)
@@ -62,7 +62,7 @@ module IRC
       cert.subject    = name
       cert.issuer     = name
       cert.not_before = Time.now
-      cert.not_after  = Time.now + (365*24*60*60)
+      cert.not_after  = Time.now + (365 * 24 * 60 * 60)
       cert.public_key = rsa.public_key
     
       ef                    = OpenSSL::X509::ExtensionFactory.new(nil, cert)

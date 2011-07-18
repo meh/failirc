@@ -433,7 +433,7 @@ input {
       if thing.channels.empty?
         thing.send ":#{mask} NICK :#{nick}"
       else
-        thing.channels.unique_users.send ":#{mask} NICK :#{nick}"
+        thing.channels.clients.send ":#{mask} NICK :#{nick}"
       end
     } }
   end
@@ -726,7 +726,7 @@ input {
 
     if channels == '0'
       thing.channels.each_value {|channel|
-        server.fire :part, channel[thing.nick], channel.name, 'Left all channels'
+        server.fire :part, channel.user(thing), channel.name, 'Left all channels'
       }
 
       return
@@ -870,7 +870,7 @@ input {
       mask = user.mask
     end
 
-    user.channel.send ":#{mask} PART #{user.channel} :#{text}"
+    user.channel.send ":#{mask} PART #{user.channel.to_s} :#{text}"
 
     @mutex.synchronize {
       user.channel.delete(user)
