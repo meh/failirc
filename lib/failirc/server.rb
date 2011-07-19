@@ -42,8 +42,6 @@ class Server
   def_delegators :@modules, :load
 
   def initialize (options={})
-    @options = HashWithIndifferentAccess.new(options)
-
     @created_on = Time.new
 
     @dispatcher = Dispatcher.new(self)
@@ -51,11 +49,19 @@ class Server
     @workers    = Workers.new(self)
     @modules    = Modules.new(self, '/failirc/server/modules')
 
-    if (@options[:server][:listen] rescue nil)
-      @options[:server][:listen].each {|data|
-        listen(data)
-      }
+    if options.is_a?(Hash)
+      @options = HashWithIndifferentAccess.new(options)
+    else
+      @path = options
+      rehash
     end
+
+    server = self
+    @modules.module.class_eval {
+      define_method :server do
+        server
+      end
+    }
 
     if @options[:modules]
       @options[:modules].each {|name, data|
@@ -63,11 +69,6 @@ class Server
           mod = @modules.load(name, data || {})
 
           if mod
-            server = self
-            mod.define_singleton_method :server do
-              server
-            end
-
             hook mod
 
             IRC.debug "#{name} loaded"
@@ -79,6 +80,21 @@ class Server
         end
       }
     end
+
+    if (@options[:server][:listen] rescue nil)
+      @options[:server][:listen].each {|data|
+        listen(data)
+      }
+    end
+  end
+
+  def rehash
+    old, @options = @options, HashWithIndifferentAccess.new(YAML.parse_file(@path).transform)
+
+    @modules.each {|mod|
+      mod.options.clear.merge!(@options[:modules][mod.name])
+      mod.rehash((old[:modules][mod.name] rescue nil))
+    }
   end
   
   def start

@@ -1,5 +1,6 @@
-#--
-# Copyleft meh. [http://meh.paranoid.pk | meh@paranoici.org]
+# failirc, a fail IRC library.
+#
+# Copyleft meh. [http://meh.doesntexist.org | meh@paranoici.org]
 #
 # This file is part of failirc.
 #
@@ -15,18 +16,11 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
-#++
 
-module IRC; class Server; module Base; class User
+version '0.0.1'
 
-class Can < BasicObject
-  def initialize (user)
-    @user = user
-  end
-
-  def method_missing (*args, &block)
-    @user.modes.can.send(*args, &block) || @user.client.modes.can.send(*args, &block)
-  end
+on :connected do |client|
+  [options].flatten.compact.each {|channel|
+    server.fire :join, client, channel
+  }
 end
-
-end; end; end; end

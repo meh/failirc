@@ -32,7 +32,6 @@ require 'failirc/server/modules/base/action'
 
 extend Base
 
-name       'base'
 version    '0.1.0'
 identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
 
@@ -47,8 +46,10 @@ on :start do |server|
   @servers    = {}
 
   [:clients, :servers, :channels].each {|name|
+    mod = self
+
     server.define_singleton_method name do
-      instance_variable_get name
+      mod.instance_variable_get name
     end
   }
 
@@ -750,6 +751,8 @@ input {
   end
 
   observe :join do |thing, channel, password=nil|
+    return unless thing.client?
+
     @mutex.synchronize {
       if !channel.channel_type
         channel = "##{channel}"
@@ -822,13 +825,15 @@ input {
       mask = user.mask
     end
 
-    user.channel.send ":#{mask} JOIN :#{user.channel.to_s}"
+    debugger
+
+    user.channel.send ":#{mask} JOIN :#{user.channel}"
 
     if !user.channel.topic.nil?
-      server.dispatch user.client, "TOPIC #{user.channel.to_s}"
+      server.dispatch user.client, "TOPIC #{user.channel}"
     end
 
-    server.dispatch user.client, "NAMES #{user.channel.to_s}"
+    server.dispatch user.client, "NAMES #{user.channel}"
   end
 
   on :part do |thing, string|
@@ -866,7 +871,7 @@ input {
       mask = user.mask
     end
 
-    user.channel.send ":#{mask} PART #{user.channel.to_s} :#{text}"
+    user.channel.send ":#{mask} PART #{user.channel} :#{text}"
 
     @mutex.synchronize {
       user.channel.delete(user)
@@ -1070,7 +1075,7 @@ input {
         users:   users
     end
 
-    thing.send RPL_ENDOFNAMES, channel.to_s
+    thing.send RPL_ENDOFNAMES, channel
   end
 
   on :topic do |thing, string|
@@ -1114,7 +1119,7 @@ input {
         channel.topic = from, topic
       end
       
-      channel.send ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic.to_s}"
+      channel.send ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic}"
     end
   end
 

@@ -21,18 +21,18 @@ require 'failirc/common/modules/module'
 
 module IRC
 
-class Modules
-  attr_reader :owner, :list
+class Modules < Array
+  attr_reader :owner, :module
 
   def initialize (owner, path)
     @owner = owner
     @path  = path
 
-    @list = []
+    @module = Module.for(@owner)
   end
 
   def load (name, options={})
-    mod = Module.for(@owner).new(options)
+    mod = @module.new(name, options)
 
     $:.each {|path|
       path = "#{path}/#{@path}/#{name}.rb"
@@ -41,7 +41,7 @@ class Modules
         begin
           mod.instance_eval(File.read(path), File.realpath(path), 1)
 
-          return @list.push(mod).last
+          return push(mod).last
         rescue Exception => e
           IRC.debug e
 

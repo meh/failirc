@@ -35,23 +35,25 @@ modules:
 
   firewall:
 
-  tinyurl:
-    timeout: 5
-    length:  42
-
   cloaking:
     keys:
       - jsdhfjhsdjfhjsadhf8829348h98ashd9uasd
       - 23895yu9134h 9uhs9aduhf9ashd f2 99urhsaj
       - 938jhrfjsadnlbkdsfgkj
 
-  autojoin:
-    channel: "#lol"
+  autojoin: "#lol"
 
-  netlog:
+#  wordfilter:
+#    filters:
+#      netlog:
 
-  reupload:
-    timeout: 30
-    service: imageshack
-    sites:
-      4chan: images\.4chan\.org
+  shorten:
+    service: isgd
+    timeout: 5
+    length:  42
+
+#  reupload:
+#    service: imageshack
+#    timeout: 30
+#    matches:
+#      4chan: images\.4chan\.org

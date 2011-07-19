@@ -48,7 +48,7 @@ args.each {|option, value|
   end
 }
 
-ircd = IRC::Server.new(YAML.parse_file(options[:config]).transform)
+ircd = IRC::Server.new(options[:config])
 
 [:INT, :KILL].each {|sig|
   trap sig.to_s do

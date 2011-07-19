@@ -42,8 +42,11 @@ class Modes
     }
   end
 
+  attr_reader :extended
+
   def initialize (data=nil)
-    @modes = HashWithIndifferentAccess.new
+    @modes    = HashWithIndifferentAccess.new
+    @extended = InsensitiveStruct.new
 
     if data.is_a?(Modes)
       @modes.merge!(data.to_hash)

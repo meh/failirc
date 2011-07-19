@@ -20,18 +20,20 @@
 module IRC; class Events
 
 class Callback
+  include Comparable
+
   attr_reader :method, :options
 
   def initialize (options={}, &block)
     @block   = block
     @options = options
+
+    raise ArgumentError, 'options has to be a Hash' unless @options.is_a?(Hash)
   end
 
-  [:priority].each {|name|
-    define_method name do
-      @options[name]
-    end
-  }
+  def <=> (value)
+    (options[:priority] || 0) <=> (value.options[:priority] || 0)
+  end
 
   def call (*args, &block)
     begin

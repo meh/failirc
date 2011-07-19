@@ -17,28 +17,27 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
+require 'timeout'
+require 'shortie'
+
 version '0.0.1'
 
-on :start do
-  @log = options[:file] ? File.open(options[:file]) : $stdout
+on :message, priority: -100 do |chain=:input, from, to, message|
+  return unless chain == :input
 
-  @mutex = Mutex.new
-end
+  message.scan(%r{https?://\S+}).each {|uri|
+    next if uri.length <= (options[:length] ? options[:length].to_i : 42)
 
-on :stop do
-  @log.close unless @log == $stdout
-end
-
-on :log do |string|
-  @mutex.synchronize {
-    @log.puts "[#{Time.now}] #{string}"
-    @log.flush
+    begin timeout(options[:timeout] ? options[:timeout].to_f : 5) {
+      message.gsub!(/#{Regexp.escape(uri)}/, Shortie::Service.find_by_key(options[:service]).shorten(uri))
+    } rescue Timeout::Error end
   }
 end
 
-def dispatch (event, thing, string)
-  server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing.to_s} #{string.inspect}"
-end
+on :message, priority: -100 do |chain=:input, from, to, message|
+  return unless chain == :output
 
-input  { before priority: -10000, &method(:dispatch) }
-output { after  priority:  10000, &method(:dispatch) }
+  if to.modes.extended.tinyurl_preview
+    message.gsub!('http://tinyurl.com', 'http://preview.tinyurl.com')
+  end
+end

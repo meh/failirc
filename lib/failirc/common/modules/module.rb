@@ -19,7 +19,7 @@
 
 require 'failirc/common/events'
 
-module IRC; class Modules
+module IRC; class Modules < Array
 
 class Module
   def self.for (what)
@@ -44,15 +44,24 @@ class Module
 
   include Events::DSL
 
-  attr_reader :options
+  attr_reader :name, :options
 
-  def initialize (options={})
+  def initialize (name, options={})
+    @name    = name
     @options = options
 
     Events::DSL.initialize(self)
   end
 
-  [:name, :version, :identifier].each {|var|
+  def rehash (options=nil, &block)
+    if block
+      @rehash = block
+    else
+      @rehash.call(options) if @rehash
+    end
+  end
+
+  [:version, :identifier].each {|var|
     data = {}
 
     define_method var do |*args|

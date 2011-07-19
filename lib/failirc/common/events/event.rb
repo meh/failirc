@@ -27,9 +27,7 @@ class Event
     @chain   = chain
     @aliases = aliases
 
-    @callbacks = callbacks.sort {|a, b|
-      a.priority <=> b.priority
-    }
+    @callbacks = callbacks.sort
   end
 
   def on (thing, string)
