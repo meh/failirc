@@ -17,15 +17,22 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'timeout'
 require 'shortie'
 
 version '0.0.1'
 
+class Shortie::Service
+  class << self
+    memoize :find_by_key
+  end
+
+  memoize :shorten
+end
+
 on :message, priority: -100 do |chain=:input, from, to, message|
   return unless chain == :input
 
-  message.scan(%r{https?://\S+}).each {|uri|
+  message.scan(%r{https?://\S+}).uniq.each {|uri|
     next if uri.length <= (options[:length] ? options[:length].to_i : 42)
 
     begin timeout(options[:timeout] ? options[:timeout].to_f : 5) {
