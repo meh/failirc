@@ -46,15 +46,17 @@ class Channel
     ssl_only :z
   }
 
-  attr_reader :server, :name, :type, :created_on, :modes, :topic, :bans, :exceptions, :invites, :invited
-  attr_writer :level
+  extend Forwardable
+
+  attr_reader    :server, :name, :created_on, :modes, :topic, :bans, :exceptions, :invites, :invited
+  attr_writer    :level
+  def_delegators :@users, :send
 
   def initialize (server, name)
     raise ArgumentError.new('It is not a valid channel name') unless name.is_valid_channel?
 
     @server = server
     @name   = name
-    @type   = name[0, 1]
 
     @created_on = Time.now
     @users      = Users.new(self)
@@ -75,6 +77,7 @@ class Channel
     end
   end
 
+  memoize
   def type
     @name[0, 1]
   end
@@ -96,10 +99,8 @@ class Channel
       @users.select {|_, user|
         user.level.enough?(@level)
       }.each {|_, user|
-        user    = user.clone
-        channel = self
-
-        user.instance_eval '@channel = channel'
+        user = user.clone
+        user.instance_variable_set :@channel, self
 
         users.add(user)
       }
@@ -112,10 +113,6 @@ class Channel
 
   def user (client)
     @users[client]
-  end
-
-  def send (*args)
-    users.send(*args)
   end
 
   def banned? (client)

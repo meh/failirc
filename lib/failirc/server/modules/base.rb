@@ -825,8 +825,6 @@ input {
       mask = user.mask
     end
 
-    debugger
-
     user.channel.send ":#{mask} JOIN :#{user.channel}"
 
     if !user.channel.topic.nil?
