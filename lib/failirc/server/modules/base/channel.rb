@@ -55,8 +55,8 @@ class Channel
   def initialize (server, name)
     raise ArgumentError.new('It is not a valid channel name') unless name.is_valid_channel?
 
-    @server = server
-    @name   = name
+    @server = Reference.normalize(server)
+    @name   = Reference.normalize(name)
 
     @created_on = Time.now
     @users      = Users.new(self)

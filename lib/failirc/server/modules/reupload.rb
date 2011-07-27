@@ -43,7 +43,7 @@ def reupload (url, time=5, service=:imageshack)
   return result || url
 end
 
-on :message, priorty: -102 do |chain=:input, from, to, message|
+on :message, priority: -102 do |chain=:input, from, to, message|
   return unless chain == :input
 
   message.scan(%r{https?://\S+}).uniq.each {|uri|

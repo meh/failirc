@@ -35,13 +35,13 @@ on :message, priority: -100 do |chain=:input, from, to, message|
   message.scan(%r{https?://\S+}).uniq.each {|uri|
     next if uri.length <= (options[:length] ? options[:length].to_i : 42)
 
-    begin timeout(options[:timeout] ? options[:timeout].to_f : 5) {
+    begin timeout (options[:timeout] || 5).to_f do
       message.gsub!(/#{Regexp.escape(uri)}/, Shortie::Service.find_by_key(options[:service]).shorten(uri))
-    } rescue Timeout::Error end
+    end rescue Timeout::Error end
   }
 end
 
-on :message, priority: 100 do |chain=:input, from, to, message|
+on :message, priority: -100 do |chain=:input, from, to, message|
   return unless chain == :output
 
   if to.modes.extended.tinyurl_preview

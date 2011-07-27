@@ -34,7 +34,7 @@ class Topic
 
   def text= (value)
     @semaphore.synchronize {
-      @text  = value
+      @text   = Reference.normalize(value)
       @set_on = Time.now
     }
   end
