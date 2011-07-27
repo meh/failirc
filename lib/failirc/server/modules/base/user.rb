@@ -84,11 +84,11 @@ class User
   end
 
   def to_s
-    return "#{level}#{nick}"
+    "#{level}#{nick}"
   end
 
   def inspect
-    return "#<User: #{client.inspect} #{channel.inspect} #{modes.inspect}>"
+    "#<User: #{client.inspect} #{channel.inspect} #{modes.inspect}>"
   end
 end
 

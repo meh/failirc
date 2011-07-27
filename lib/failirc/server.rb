@@ -34,7 +34,7 @@ module IRC
 class Server
   extend Forwardable
 
-  attr_reader :options, :dispatcher, :created_on
+  attr_reader :options, :dispatcher, :workers, :created_on
 
   def_delegators :@dispatcher, :listen, :running?
   def_delegators :@events, :register, :dispatch, :observe, :fire, :hook

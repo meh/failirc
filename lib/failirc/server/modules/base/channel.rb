@@ -157,7 +157,11 @@ class Channel
   end
 
   def to_s
-    @name
+    name
+  end
+  
+  def inspect
+    "#<Channel: #{to_s} #{users}>"
   end
 end
 

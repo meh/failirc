@@ -32,7 +32,7 @@ class Callback
   end
 
   def <=> (value)
-    (options[:priority] || 0) <=> (value.options[:priority] || 0)
+    (value.options[:priority] || 0) <=> (options[:priority] || 0)
   end
 
   def call (*args, &block)

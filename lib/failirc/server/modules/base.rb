@@ -49,7 +49,7 @@ on :start do |server|
     mod = self
 
     server.define_singleton_method name do
-      mod.instance_variable_get name
+      mod.instance_variable_get "@#{name}"
     end
   }
 
@@ -768,7 +768,7 @@ input {
       if @channels[channel]
         channel = @channels[channel]
       else
-        channel = @channels[channel] = Channel.new(server, channel)
+        channel = @channels[channel] = Channel.new(server, ~channel)
       end
 
       if channel.modes.limit?
@@ -1112,9 +1112,9 @@ input {
       from.send ERR_CHANOPRIVSNEEDED, channel
     else
       if channel.modes.anonymous?
-        channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), topic
+        channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), ~topic
       else
-        channel.topic = from, topic
+        channel.topic = from, ~topic
       end
       
       channel.send ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic}"

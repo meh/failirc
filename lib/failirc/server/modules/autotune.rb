@@ -1,5 +1,6 @@
-#--
-# Copyleft meh. [http://meh.paranoid.pk | meh@paranoici.org]
+# failirc, a fail IRC library.
+#
+# Copyleft meh. [http://meh.doesntexist.org | meh@paranoici.org]
 #
 # This file is part of failirc.
 #
@@ -15,27 +16,13 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
-#++
 
-require 'actionpool'
+version '0.0.1'
 
-module IRC
-
-class Workers
-  extend Forwardable
-
-  attr_reader    :parent
-  def_delegators :@pool, :max, :max=, :min, :min=
-
-  def initialize (parent, range = 2 .. 4)
-    @parent = parent
-
-    @pool = ActionPool::Pool.new(:min_threads => range.begin, :max_threads => range.end)
-  end
-
-  def do (*args, &block)
-    @pool.process(*args, &block)
-  end
+on :connect do
+  server.workers.max = ((options[:minimum] || 10).to_i + server.clients.length / (options[:rate] || 10).to_i).to_i
 end
 
+on :disconnect do
+  server.workers.max = ((options[:minimum] || 10).to_i + server.clients.length / (options[:rate] || 10).to_i).to_i
 end
