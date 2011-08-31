@@ -24,7 +24,7 @@ module Incoming; def self.extended (obj)
     @temporary = InsensitiveStruct.new
   }
 
-  obj.refine_method :send do |old, *args|
+  obj.refine_singleton_method :send do |old, *args|
     if args.first.is_a?(String)
       old.call(args.first)
     else

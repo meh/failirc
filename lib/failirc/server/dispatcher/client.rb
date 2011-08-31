@@ -59,15 +59,15 @@ class Client < IO
         @input.push(string)
       }
     rescue IOError
-      disconnect 'Input/output error', :force => true
+      disconnect 'Input/output error'
     rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-      disconnect 'Client exited', :force => true
+      disconnect 'Client exited'
     rescue Errno::ECONNRESET
-      disconnect 'Connection reset by peer', :force => true
+      disconnect 'Connection reset by peer'
     rescue Errno::ETIMEDOUT
-      disconnect 'Ping timeout', :force => true
+      disconnect 'Ping timeout'
     rescue Errno::EHOSTUNREACH
-      disconnect 'No route to host', :force => true
+      disconnect 'No route to host'
     rescue Exception => e
       IRC.debug e
     end

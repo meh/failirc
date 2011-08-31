@@ -22,11 +22,8 @@ require 'shortie'
 version '0.0.1'
 
 class Shortie::Service
-  class << self
-    memoize :find_by_key
-  end
-
-  memoize :shorten
+  singleton_memoize :find_by_key
+  memoize           :shorten
 end
 
 on :message, priority: -100 do |chain=:input, from, to, message|

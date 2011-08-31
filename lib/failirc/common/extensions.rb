@@ -385,3 +385,9 @@ class ThreadSafeHash < CaseInsensitiveHash
 
   def_threaded :[], :[]=, :delete, :each, :each_value, :each_key
 end
+
+class OpenSSL::SSL::SSLSocket
+  def method_missing (*args, &block)
+    to_io.__send__ *args, &block
+  end
+end

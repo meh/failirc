@@ -109,7 +109,7 @@ class Dispatcher
     }.flatten
   end
 
-  def wakeup (options = {})
+  def wakeup (options={})
     if options[:reset]
       @clients = nil
       @reset   = true
