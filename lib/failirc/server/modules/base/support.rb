@@ -20,29 +20,29 @@
 module IRC; class Server; module Base
 
 module Support
-  module Modes
-    Client  = 'NZo'
-    Channel = 'abcCehiIkKlLmnNoQsStuvVxyz'
-  end
+	module Modes
+		Client  = 'NZo'
+		Channel = 'abcCehiIkKlLmnNoQsStuvVxyz'
+	end
 
-  CASEMAPPING = 'ascii'
-  SAFELIST    = true
-  EXCEPTS     = 'e'
-  INVEX       = 'I'
-  CHANTYPES   = '&#+!'
-  CHANMODES   = 'beI,kfL,lj,acCiKmnNQsStuVz'
-  PREFIX      = '(!xyohv)!~&@%+'
-  STATUSMSG   = '~&@%+'
-  FNC         = true
-  CMDS        = 'KNOCK'
+	CASEMAPPING = 'ascii'
+	SAFELIST    = true
+	EXCEPTS     = 'e'
+	INVEX       = 'I'
+	CHANTYPES   = '&#+!'
+	CHANMODES   = 'beI,kfL,lj,acCiKmnNQsStuVz'
+	PREFIX      = '(!xyohv)!~&@%+'
+	STATUSMSG   = '~&@%+'
+	FNC         = true
+	CMDS        = 'KNOCK'
 
-  def self.to_hash
-    Hash[self.constants.reject {|const|
-      true if const == :Modes
-    }.map {|const|
-      [const, const_get(const)]
-    }]
-  end
+	def self.to_hash
+		Hash[self.constants.reject {|const|
+			true if const == :Modes
+		}.map {|const|
+			[const, const_get(const)]
+		}]
+	end
 end
 
 

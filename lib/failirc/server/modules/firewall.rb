@@ -20,24 +20,23 @@
 version '0.0.1'
 
 on :start do
-  @log = options[:file] ? File.open(options[:file]) : $stdout
+	@log = options[:file] ? File.open(options[:file]) : $stdout
 
-  @mutex = Mutex.new
+	@mutex = RecursiveMutex.new
 end
 
 on :stop do
-  @log.close unless @log == $stdout
+	@log.close unless @log == $stdout
 end
 
 on :log do |string|
-  @mutex.synchronize {
-    @log.puts "[#{Time.now}] #{string}"
-    @log.flush
-  }
+	@mutex.synchronize {
+		@log.print "[#{Time.now}] #{string}\n"
+	}
 end
 
 def dispatch (event, thing, string)
-  server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing.to_s} #{string.inspect}"
+	server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing.to_s} #{string.inspect}"
 end
 
 input  { before priority: -10000, &method(:dispatch) }

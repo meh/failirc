@@ -18,376 +18,371 @@
 #++
 
 require 'thread'
+require 'thread/extra'
 require 'forwardable'
 require 'versionub'
 require 'yaml'
-require 'memoized'
+require 'call-me/memoize'
 require 'refining'
 require 'refr'
+require 'socket'
+require 'openssl'
+require 'timeout'
+require 'threadpool'
+
+begin
+	OpenSSL::SSL::SSLSocket.instance_method :read_nonblock
+rescue NameError
+	require 'openssl/nonblock'
+end
 
 class Module
-  def scopes_for (name)
-    scopes  = []
+	def scopes_for (name)
+		scopes  = []
 
-    pieces = "Object::#{name}".split('::')
-    until pieces.empty?
-      scopes << eval(pieces.join('::')) rescue nil
-      pieces.pop
-    end
+		pieces = "Object::#{name}".split('::')
+		until pieces.empty?
+			scopes << eval(pieces.join('::')) rescue nil
+			pieces.pop
+		end
 
-    scopes.compact!
-    scopes.uniq!
+		scopes.compact!
+		scopes.uniq!
 
-    scopes
-  end
+		scopes
+	end
 
-  def scopes
-    scopes_for(self.name)
-  end
+	def scopes
+		scopes_for(self.name)
+	end
 end
 
 class Class
-  def scopes
-    Module.scopes_for(self.name)
-  end
+	def scopes
+		Module.scopes_for(self.name)
+	end
 end
 
 class Object
-  def scopes
-    self.class.scopes
-  end; alias __scopes__ scopes
+	def scopes
+		self.class.scopes
+	end; alias __scopes__ scopes
 
-  def numeric?
-    true if Float(self) rescue false
-  end
+	def numeric?
+		true if Float(self) rescue false
+	end
 
-  def merge_instance_variables (object)
-    object.instance_variables.each {|var|
-      instance_variable_set(var, object.instance_variable_get(var))
-    }
-  end
+	def merge_instance_variables (object)
+		object.instance_variables.each {|var|
+			instance_variable_set(var, object.instance_variable_get(var))
+		}
+	end
 end
 
 module Kernel
-  def suppress_warnings
-    exception = nil
-    tmp, $VERBOSE = $VERBOSE, nil
+	def suppress_warnings
+		exception = nil
+		tmp, $VERBOSE = $VERBOSE, nil
 
-    begin
-      result = yield
-    rescue Exception => e
-      exception = e
-    end
+		begin
+			result = yield
+		rescue Exception => e
+			exception = e
+		end
 
-    $VERBOSE = tmp
+		$VERBOSE = tmp
 
-    if exception
-      raise exception
-    else
-      result
-    end
-  end
-end
-
-class Mutex
-  def lock_with_hack
-    lock_without_hack
-  rescue ThreadError => e
-    if e.message != "deadlock; recursive locking"
-      raise
-    else
-      unlock
-      lock_without_hack
-    end
-  end
-
-  alias lock_without_hack lock
-  alias lock              lock_with_hack
+		if exception
+			raise exception
+		else
+			result
+		end
+	end
 end
 
 class String
-  def interpolate (on=nil)
-    begin
-      if !on || on.is_a?(Binding)
-        (on || binding).eval("%{#{self}}")
-      else
-        on.instance_eval("%{#{self}}")
-      end
-    rescue Exception => e
-      IRC.debug e
-      self
-    end
-  end
+	def interpolate (on=nil)
+		begin
+			if !on || on.is_a?(Binding)
+				(on || binding).eval("%{#{self}}")
+			else
+				on.instance_eval("%{#{self}}")
+			end
+		rescue Exception => e
+			IRC.debug e
+			self
+		end
+	end
 end
 
 module StructLike
-  def method_missing (id, *args)
-    @data ||= {}
+	def method_missing (id, *args)
+		@data ||= {}
 
-    id = id.to_s.sub(/[=?]$/, '').to_sym
+		id = id.to_s.sub(/[=?]$/, '').to_sym
 
-    if args.length == 0
-      return @data[id]
-    else
-      if respond_to? "#{id}="
-        send "#{id}=", *args
-      else
-        value = (args.length > 1) ? args : args.first
+		if args.length == 0
+			return @data[id]
+		else
+			if respond_to? "#{id}="
+				send "#{id}=", *args
+			else
+				value = (args.length > 1) ? args : args.first
 
-        if value.nil?
-          @data.delete(id)
-        else
-          @data[id] = value
-        end
-      end
-    end
-  end
+				if value.nil?
+					@data.delete(id)
+				else
+					@data[id] = value
+				end
+			end
+		end
+	end
 
-  def to_hash
-    @data.clone
-  end
+	def to_hash
+		@data.clone
+	end
 end
 
 class InsensitiveStruct
-  include StructLike
+	include StructLike
 
-  def initialize (data={})
-    @data = {}
+	def initialize (data={})
+		@data = {}
 
-    data.each {|name, value|
-      self.send name, value
-    }
-  end
+		data.each {|name, value|
+			__send__ name, value
+		}
+	end
 end
 
 class Hash
-  # Return a new hash with all keys converted to strings.
-  def stringify_keys
-    dup.stringify_keys!
-  end
+	# Return a new hash with all keys converted to strings.
+	def stringify_keys
+		dup.stringify_keys!
+	end
 
-  # Destructively convert all keys to strings.
-  def stringify_keys!
-    keys.each do |key|
-      self[key.to_s] = delete(key)
-    end
-    self
-  end
+	# Destructively convert all keys to strings.
+	def stringify_keys!
+		keys.each do |key|
+			self[key.to_s] = delete(key)
+		end
+		self
+	end
 
-  # Return a new hash with all keys converted to symbols, as long as
-  # they respond to +to_sym+.
-  def symbolize_keys
-    dup.symbolize_keys!
-  end
+	# Return a new hash with all keys converted to symbols, as long as
+	# they respond to +to_sym+.
+	def symbolize_keys
+		dup.symbolize_keys!
+	end
 
-  # Destructively convert all keys to symbols, as long as they respond
-  # to +to_sym+.
-  def symbolize_keys!
-    keys.each do |key|
-      self[(key.to_sym rescue key) || key] = delete(key)
-    end
-    self
-  end
+	# Destructively convert all keys to symbols, as long as they respond
+	# to +to_sym+.
+	def symbolize_keys!
+		keys.each do |key|
+			self[(key.to_sym rescue key) || key] = delete(key)
+		end
+		self
+	end
 
-  alias_method :to_options,  :symbolize_keys
-  alias_method :to_options!, :symbolize_keys!
+	alias_method :to_options,  :symbolize_keys
+	alias_method :to_options!, :symbolize_keys!
 
-  # Validate all keys in a hash match *valid keys, raising ArgumentError on a mismatch.
-  # Note that keys are NOT treated indifferently, meaning if you use strings for keys but assert symbols
-  # as keys, this will fail.
-  #
-  # ==== Examples
-  #   { :name => "Rob", :years => "28" }.assert_valid_keys(:name, :age) # => raises "ArgumentError: Unknown key(s): years"
-  #   { :name => "Rob", :age => "28" }.assert_valid_keys("name", "age") # => raises "ArgumentError: Unknown key(s): name, age"
-  #   { :name => "Rob", :age => "28" }.assert_valid_keys(:name, :age) # => passes, raises nothing
-  def assert_valid_keys(*valid_keys)
-    unknown_keys = keys - [valid_keys].flatten
-    raise(ArgumentError, "Unknown key(s): #{unknown_keys.join(", ")}") unless unknown_keys.empty?
-  end
+	# Validate all keys in a hash match *valid keys, raising ArgumentError on a mismatch.
+	# Note that keys are NOT treated indifferently, meaning if you use strings for keys but assert symbols
+	# as keys, this will fail.
+	#
+	# ==== Examples
+	#   { :name => "Rob", :years => "28" }.assert_valid_keys(:name, :age) # => raises "ArgumentError: Unknown key(s): years"
+	#   { :name => "Rob", :age => "28" }.assert_valid_keys("name", "age") # => raises "ArgumentError: Unknown key(s): name, age"
+	#   { :name => "Rob", :age => "28" }.assert_valid_keys(:name, :age) # => passes, raises nothing
+	def assert_valid_keys(*valid_keys)
+		unknown_keys = keys - [valid_keys].flatten
+		raise(ArgumentError, "Unknown key(s): #{unknown_keys.join(", ")}") unless unknown_keys.empty?
+	end
 end
 
 class HashWithIndifferentAccess < Hash
-  def extractable_options?
-    true
-  end
+	def extractable_options?
+		true
+	end
 
-  def initialize(constructor = {})
-    if constructor.is_a?(Hash)
-      super()
-      update(constructor)
-    else
-      super(constructor)
-    end
-  end
+	def initialize(constructor = {})
+		if constructor.is_a?(Hash)
+			super()
+			update(constructor)
+		else
+			super(constructor)
+		end
+	end
 
-  def default(key = nil)
-    if key.is_a?(Symbol) && include?(key = key.to_s)
-      self[key]
-    else
-      super
-    end
-  end
+	def default(key = nil)
+		if key.is_a?(Symbol) && include?(key = key.to_s)
+			self[key]
+		else
+			super
+		end
+	end
 
-  def self.new_from_hash_copying_default(hash)
-    HashWithIndifferentAccess.new(hash).tap do |new_hash|
-      new_hash.default = hash.default
-    end
-  end
+	def self.new_from_hash_copying_default(hash)
+		HashWithIndifferentAccess.new(hash).tap do |new_hash|
+			new_hash.default = hash.default
+		end
+	end
 
-  alias_method :regular_writer, :[]= unless method_defined?(:regular_writer)
-  alias_method :regular_update, :update unless method_defined?(:regular_update)
+	alias_method :regular_writer, :[]= unless method_defined?(:regular_writer)
+	alias_method :regular_update, :update unless method_defined?(:regular_update)
 
-  # Assigns a new value to the hash:
-  #
-  #   hash = HashWithIndifferentAccess.new
-  #   hash[:key] = "value"
-  #
-  def []=(key, value)
-    regular_writer(convert_key(key), convert_value(value))
-  end
+	# Assigns a new value to the hash:
+	#
+	#   hash = HashWithIndifferentAccess.new
+	#   hash[:key] = "value"
+	#
+	def []=(key, value)
+		regular_writer(convert_key(key), convert_value(value))
+	end
 
-  alias_method :store, :[]=
+	alias_method :store, :[]=
 
-  # Updates the instantized hash with values from the second:
-  #
-  #   hash_1 = HashWithIndifferentAccess.new
-  #   hash_1[:key] = "value"
-  #
-  #   hash_2 = HashWithIndifferentAccess.new
-  #   hash_2[:key] = "New Value!"
-  #
-  #   hash_1.update(hash_2) # => {"key"=>"New Value!"}
-  #
-  def update(other_hash)
-    other_hash.each_pair { |key, value| regular_writer(convert_key(key), convert_value(value)) }
-    self
-  end
+	# Updates the instantized hash with values from the second:
+	#
+	#   hash_1 = HashWithIndifferentAccess.new
+	#   hash_1[:key] = "value"
+	#
+	#   hash_2 = HashWithIndifferentAccess.new
+	#   hash_2[:key] = "New Value!"
+	#
+	#   hash_1.update(hash_2) # => {"key"=>"New Value!"}
+	#
+	def update(other_hash)
+		other_hash.each_pair { |key, value| regular_writer(convert_key(key), convert_value(value)) }
+		self
+	end
 
-  alias_method :merge!, :update
+	alias_method :merge!, :update
 
-  # Checks the hash for a key matching the argument passed in:
-  #
-  #   hash = HashWithIndifferentAccess.new
-  #   hash["key"] = "value"
-  #   hash.key? :key  # => true
-  #   hash.key? "key" # => true
-  #
-  def key?(key)
-    super(convert_key(key))
-  end
+	# Checks the hash for a key matching the argument passed in:
+	#
+	#   hash = HashWithIndifferentAccess.new
+	#   hash["key"] = "value"
+	#   hash.key? :key  # => true
+	#   hash.key? "key" # => true
+	#
+	def key?(key)
+		super(convert_key(key))
+	end
 
-  alias_method :include?, :key?
-  alias_method :has_key?, :key?
-  alias_method :member?, :key?
+	alias_method :include?, :key?
+	alias_method :has_key?, :key?
+	alias_method :member?, :key?
 
-  # Fetches the value for the specified key, same as doing hash[key]
-  def fetch(key, *extras)
-    super(convert_key(key), *extras)
-  end
+	# Fetches the value for the specified key, same as doing hash[key]
+	def fetch(key, *extras)
+		super(convert_key(key), *extras)
+	end
 
-  # Returns an array of the values at the specified indices:
-  #
-  #   hash = HashWithIndifferentAccess.new
-  #   hash[:a] = "x"
-  #   hash[:b] = "y"
-  #   hash.values_at("a", "b") # => ["x", "y"]
-  #
-  def values_at(*indices)
-    indices.collect {|key| self[convert_key(key)]}
-  end
+	# Returns an array of the values at the specified indices:
+	#
+	#   hash = HashWithIndifferentAccess.new
+	#   hash[:a] = "x"
+	#   hash[:b] = "y"
+	#   hash.values_at("a", "b") # => ["x", "y"]
+	#
+	def values_at(*indices)
+		indices.collect {|key| self[convert_key(key)]}
+	end
 
-  # Returns an exact copy of the hash.
-  def dup
-    HashWithIndifferentAccess.new(self)
-  end
+	# Returns an exact copy of the hash.
+	def dup
+		HashWithIndifferentAccess.new(self)
+	end
 
-  # Merges the instantized and the specified hashes together, giving precedence to the values from the second hash
-  # Does not overwrite the existing hash.
-  def merge(hash)
-    self.dup.update(hash)
-  end
+	# Merges the instantized and the specified hashes together, giving precedence to the values from the second hash
+	# Does not overwrite the existing hash.
+	def merge(hash)
+		self.dup.update(hash)
+	end
 
-  # Performs the opposite of merge, with the keys and values from the first hash taking precedence over the second.
-  # This overloaded definition prevents returning a regular hash, if reverse_merge is called on a HashWithDifferentAccess.
-  def reverse_merge(other_hash)
-    super self.class.new_from_hash_copying_default(other_hash)
-  end
+	# Performs the opposite of merge, with the keys and values from the first hash taking precedence over the second.
+	# This overloaded definition prevents returning a regular hash, if reverse_merge is called on a HashWithDifferentAccess.
+	def reverse_merge(other_hash)
+		super self.class.new_from_hash_copying_default(other_hash)
+	end
 
-  def reverse_merge!(other_hash)
-    replace(reverse_merge( other_hash ))
-  end
+	def reverse_merge!(other_hash)
+		replace(reverse_merge( other_hash ))
+	end
 
-  # Removes a specified key from the hash.
-  def delete(key)
-    super(convert_key(key))
-  end
+	# Removes a specified key from the hash.
+	def delete(key)
+		super(convert_key(key))
+	end
 
-  def stringify_keys!; self end
-  def stringify_keys; dup end
-  undef :symbolize_keys!
-  def symbolize_keys; to_hash.symbolize_keys end
-  def to_options!; self end
+	def stringify_keys!; self end
+	def stringify_keys; dup end
+	undef :symbolize_keys!
+	def symbolize_keys; to_hash.symbolize_keys end
+	def to_options!; self end
 
-  # Convert to a Hash with String keys.
-  def to_hash
-    Hash.new(default).merge!(self)
-  end
+	# Convert to a Hash with String keys.
+	def to_hash
+		Hash.new(default).merge!(self)
+	end
 
-  protected
-    def convert_key(key)
-      key.kind_of?(Symbol) ? key.to_s : key
-    end
+	protected
+		def convert_key(key)
+			key.kind_of?(Symbol) ? key.to_s : key
+		end
 
-    def convert_value(value)
-      case value
-      when Hash
-        self.class.new_from_hash_copying_default(value)
-      when Array
-        value.collect { |e| e.is_a?(Hash) ? self.class.new_from_hash_copying_default(e) : e }
-      else
-        value
-      end
-    end
+		def convert_value(value)
+			case value
+			when Hash
+				self.class.new_from_hash_copying_default(value)
+			when Array
+				value.collect { |e| e.is_a?(Hash) ? self.class.new_from_hash_copying_default(e) : e }
+			else
+				value
+			end
+		end
 end
 
 class CaseInsensitiveHash < Hash
-  def self.def_insensitive (*methods)
-    methods.each {|method|
-      define_method method do |key, *args, &block|
-        if key.is_a?(String) || key.is_a?(Symbol)
-          key = key.to_s.downcase
-        end
+	def self.def_insensitive (*methods)
+		methods.each {|method|
+			define_method method do |key, *args, &block|
+				if key.is_a?(String) || key.is_a?(Symbol)
+					key = key.to_s.downcase
+				end
 
-        super(key, *args, &block)
-      end
-    }
-  end
+				super(key, *args, &block)
+			end
+		}
+	end
 
-  def_insensitive :[], :[]=, :delete
+	def_insensitive :[], :[]=, :delete
 end
 
 class ThreadSafeHash < CaseInsensitiveHash
-  def self.def_threaded (*methods)
-    methods.each {|method|
-      define_method method do |*args, &block|
-        @semaphore.synchronize {
-          super(*args, &block)
-        }
-      end
-    }
-  end
+	def self.def_threaded (*methods)
+		methods.each {|method|
+			define_method method do |*args, &block|
+				@semaphore.synchronize {
+					super(*args, &block)
+				}
+			end
+		}
+	end
 
-  def initialize (*args)
-    @semaphore = Mutex.new
+	def initialize (*args)
+		@semaphore = RecursiveMutex.new
 
-    super
-  end
+		super
+	end
 
-  def_threaded :[], :[]=, :delete, :each, :each_value, :each_key
+	def_threaded :[], :[]=, :delete, :each, :each_value, :each_key
 end
 
 class OpenSSL::SSL::SSLSocket
-  def method_missing (*args, &block)
-    to_io.__send__ *args, &block
-  end
+	def method_missing (*args, &block)
+		to_io.__send__ *args, &block
+	end
 end

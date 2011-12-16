@@ -22,26 +22,26 @@ require 'shortie'
 version '0.0.1'
 
 class Shortie::Service
-  singleton_memoize :find_by_key
-  memoize           :shorten
+	singleton_memoize :find_by_key
+	memoize           :shorten
 end
 
 on :message, priority: -100 do |chain=:input, from, to, message|
-  return unless chain == :input
+	return unless chain == :input
 
-  message.scan(%r{https?://\S+}).uniq.each {|uri|
-    next if uri.length <= (options[:length] ? options[:length].to_i : 42)
+	message.scan(%r{https?://\S+}).uniq.each {|uri|
+		next if uri.length <= (options[:length] ? options[:length].to_i : 42)
 
-    begin timeout (options[:timeout] || 5).to_f do
-      message.gsub!(/#{Regexp.escape(uri)}/, Shortie::Service.find_by_key(options[:service]).shorten(uri))
-    end rescue Timeout::Error end
-  }
+		begin timeout (options[:timeout] || 5).to_f do
+			message.gsub!(/#{Regexp.escape(uri)}/, Shortie::Service.find_by_key(options[:service]).shorten(uri))
+		end rescue Timeout::Error end
+	}
 end
 
 on :message, priority: -100 do |chain=:input, from, to, message|
-  return unless chain == :output
+	return unless chain == :output
 
-  if to.modes.extended.tinyurl_preview
-    message.gsub!('http://tinyurl.com', 'http://preview.tinyurl.com')
-  end
+	if to.modes.extended.tinyurl_preview
+		message.gsub!('http://tinyurl.com', 'http://preview.tinyurl.com')
+	end
 end

@@ -24,38 +24,38 @@ require 'failirc/server'
 require 'getoptlong'
 
 args = GetoptLong.new(
-  ['--version', '-v', GetoptLong::NO_ARGUMENT],
-  ['--verbose', '-V', GetoptLong::NO_ARGUMENT],
-  ['--config', '-f', GetoptLong::REQUIRED_ARGUMENT]
+	['--version', '-v', GetoptLong::NO_ARGUMENT],
+	['--verbose', '-V', GetoptLong::NO_ARGUMENT],
+	['--config', '-f', GetoptLong::REQUIRED_ARGUMENT]
 )
 
 options = {
-  :verbose => false,
-  :config  => '/etc/failircd.conf',
+	:verbose => false,
+	:config  => '/etc/failircd.conf',
 }
 
 args.each {|option, value|
-  case option
-    when '--version'
-      puts "Fail IRCd #{IRC.version}"
-      exit 0
+	case option
+		when '--version'
+			puts "Fail IRCd #{IRC.version}"
+			exit 0
 
-    when '--verbose'
-      options[:verbose] = true
+		when '--verbose'
+			options[:verbose] = true
 
-    when '--config'
-      options[:config] = value
-  end
+		when '--config'
+			options[:config] = value
+	end
 }
 
 ircd = IRC::Server.new(options[:config])
 
 [:INT, :KILL].each {|sig|
-  trap sig.to_s do
-    puts 'FailIRC stopping, bye'
+	trap sig.to_s do
+		puts 'FailIRC stopping, bye'
 
-    ircd.stop
-  end
+		ircd.stop
+	end
 }
 
 ircd.start

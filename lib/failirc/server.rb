@@ -22,7 +22,6 @@ require 'resolv'
 require 'failirc/version'
 require 'failirc/common/utils'
 require 'failirc/common/events'
-require 'failirc/common/workers'
 require 'failirc/common/modules'
 require 'failirc/common/modes'
 require 'failirc/common/mask'
@@ -32,102 +31,102 @@ require 'failirc/server/dispatcher'
 module IRC
 
 class Server
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader :options, :dispatcher, :workers, :created_on
+	attr_reader :options, :dispatcher, :pool, :created_on
 
-  def_delegators :@dispatcher, :listen, :running?
-  def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
-  def_delegators :@workers, :do
-  def_delegators :@modules, :load
+	def_delegators :@dispatcher, :listen, :running?
+	def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
+	def_delegators :@pool, :do
+	def_delegators :@modules, :load
 
-  def initialize (options={})
-    @created_on = Time.new
+	def initialize (options={})
+		@created_on = Time.new
 
-    @dispatcher = Dispatcher.new(self)
-    @events     = Events.new(self)
-    @workers    = Workers.new(self)
-    @modules    = Modules.new(self, '/failirc/server/modules')
+		@dispatcher = Dispatcher.new(self)
+		@events     = Events.new(self)
+		@pool       = ThreadPool.new
+		@modules    = Modules.new(self, '/failirc/server/modules')
 
-    if options.is_a?(Hash)
-      @options = HashWithIndifferentAccess.new(options)
-    else
-      @path = options
-      rehash
-    end
+		if options.is_a?(Hash)
+			@options = HashWithIndifferentAccess.new(options)
+		else
+			@path = options
+			rehash
+		end
 
-    server = self
-    @modules.module.class_eval {
-      define_method :server do
-        server
-      end
-    }
+		server = self
+		@modules.module.class_eval {
+			define_method :server do
+				server
+			end
+		}
 
-    if @options[:modules]
-      @options[:modules].each {|name, data|
-        begin
-          mod = @modules.load(name, data || {})
+		if @options[:modules]
+			@options[:modules].each {|name, data|
+				begin
+					mod = @modules.load(name, data || {})
 
-          if mod
-            hook mod
+					if mod
+						hook mod
 
-            IRC.debug "#{name} loaded"
-          else
-            IRC.debug "#{name} had some errors"
-          end
-        rescue LoadError
-          IRC.debug "#{name} not found"
-        end
-      }
-    end
+						IRC.debug "#{name} loaded"
+					else
+						IRC.debug "#{name} had some errors"
+					end
+				rescue LoadError
+					IRC.debug "#{name} not found"
+				end
+			}
+		end
 
-    if (@options[:server][:listen] rescue nil)
-      @options[:server][:listen].each {|data|
-        listen(data)
-      }
-    end
-  end
+		if (@options[:server][:listen] rescue nil)
+			@options[:server][:listen].each {|data|
+				listen(data)
+			}
+		end
+	end
 
-  def rehash
-    old, @options = @options, HashWithIndifferentAccess.new(YAML.parse_file(@path).transform)
+	def rehash
+		old, @options = @options, HashWithIndifferentAccess.new(YAML.parse_file(@path).transform)
 
-    @modules.each {|mod|
-      mod.options.clear.merge!(@options[:modules][mod.name])
-      mod.rehash((old[:modules][mod.name] rescue nil))
-    }
-  end
-  
-  def start
-    fire :start, self
+		@modules.each {|mod|
+			mod.options.clear.merge!(@options[:modules][mod.name])
+			mod.rehash((old[:modules][mod.name] rescue nil))
+		}
+	end
+	
+	def start
+		fire :start, self
 
-    @dispatcher.start
-  end
+		@dispatcher.start
+	end
 
-  def stop
-    fire :stop, self
+	def stop
+		fire :stop, self
 
-    @dispatcher.stop
-  end
+		@dispatcher.stop
+	end
 
-  def host
-    @options[:server][:host] || 'localhost'
-  end
+	def host
+		@options[:server][:host] || 'localhost'
+	end
 
-  def ip
-    begin
-      Resolv.getaddress(host)
-    rescue
-      Resolv.getaddress('localhost')
-    end
-  end
+	def ip
+		begin
+			Resolv.getaddress(host)
+		rescue
+			Resolv.getaddress('localhost')
+		end
+	end
 
-  def name
-    @options[:server][:name] || 'failirc'
-  end
+	def name
+		@options[:server][:name] || 'failirc'
+	end
 
-  def to_s
-    host
-  end
+	def to_s
+		host
+	end
 end
 
 end

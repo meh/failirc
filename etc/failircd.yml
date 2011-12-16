@@ -11,7 +11,7 @@ server:
 
   timeout: 15
 
-  workers: 2 .. 4
+  workers: 4
 
 operators:
   - mask:     "meh!*@*"
@@ -25,7 +25,7 @@ modules:
         Welcome to a fail IRC.
 
       ping timeout: 60
-      allowed nick: "nick.match(/^[0-9A-Za-z_\[\]\{\}\|\^`\-\\=\.]{1,23}$/)"
+      allowed nick: 'nick.match(/^[0-9A-Za-z_\[\]\{\}\|\^`\-\\=\.]{1,23}$/)'
 
     messages:
       part:    "#{message}"
@@ -33,7 +33,7 @@ modules:
       quit:    "Quit: #{message}"
       kill:    "Killed by #{sender.nick}: #{message.empty? ? 'No reason' : message}"
 
-  autotune: 
+  autotune:
     minimum: 10
     rate:    10
 

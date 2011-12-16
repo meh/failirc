@@ -20,13 +20,13 @@
 module IRC; class Server; module Base; class User
 
 class Can < BasicObject
-  def initialize (user)
-    @user = user
-  end
+	def initialize (user)
+		@user = user
+	end
 
-  def method_missing (*args, &block)
-    @user.modes.can.send(*args, &block) || @user.client.modes.can.send(*args, &block)
-  end
+	def method_missing (*args, &block)
+		@user.modes.can.send(*args, &block) || @user.client.modes.can.send(*args, &block)
+	end
 end
 
 end; end; end; end

@@ -36,7 +36,7 @@ version    '0.1.0'
 identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
 
 on :start do |server|
-  @mutex      = Mutex.new
+  @mutex      = RecursiveMutex.new
   @joining    = {}
   @pinged_out = []
   @to_ping    = []
@@ -57,6 +57,8 @@ on :start do |server|
   server.extend Base::Server
 
   Thread.new {
+    next
+
     while server.running?
       @mutex.synchronize {
         # time to ping non active users
@@ -1089,7 +1091,7 @@ input {
     end
 
     channel = @channels[channel]
-  
+
     if topic
       server.fire :topic, thing, channel, topic
     else

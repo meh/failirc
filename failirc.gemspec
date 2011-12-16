@@ -14,10 +14,10 @@ Gem::Specification.new {|s|
   s.executables  = ['failircd', 'failbot']
   s.has_rdoc     = true
 
-  s.add_dependency('openssl-nonblock')
-  s.add_dependency('versionub')
-  s.add_dependency('actionpool')
-  s.add_dependency('memoized')
-  s.add_dependency('refining')
-  s.add_dependency('refr')
+  s.add_dependency 'openssl-nonblock'
+  s.add_dependency 'versionub'
+  s.add_dependency 'threadpool'
+  s.add_dependency 'call-me'
+  s.add_dependency 'refining'
+  s.add_dependency 'refr'
 }

@@ -20,14 +20,14 @@
 module IRC; class Server; module Base
 
 class Action
-  attr_reader :client, :event, :string, :on
+	attr_reader :client, :event, :string, :on
 
-  def initialize (client, event, string)
-    @client = client
-    @event  = event
-    @string = string
-    @on     = Time.now
-  end
+	def initialize (client, event, string)
+		@client = client
+		@event  = event
+		@string = string
+		@on     = Time.now
+	end
 end
 
 end; end; end

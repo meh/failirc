@@ -20,9 +20,9 @@
 version '0.0.1'
 
 on :connect do
-  server.workers.max = ((options[:minimum] || 10).to_i + server.clients.length / (options[:rate] || 10).to_i).to_i
+	server.pool.resize ((options[:minimum] || 10).to_i + server.clients.length / (options[:rate] || 10).to_i).to_i
 end
 
 on :disconnect do
-  server.workers.max = ((options[:minimum] || 10).to_i + server.clients.length / (options[:rate] || 10).to_i).to_i
+	server.pool.resize ((options[:minimum] || 10).to_i + server.clients.length / (options[:rate] || 10).to_i).to_i
 end

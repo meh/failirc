@@ -22,15 +22,15 @@ require 'failirc/server/modules/base/client'
 module IRC; class Server; module Base
 
 class Clients < Hash
-  def initialize (server, *args)
-    super(*args)
-  end
+	def initialize (server, *args)
+		super(*args)
+	end
 
-  def send (*args)
-    each_value {|client|
-      client.send(*args)
-    }
-  end
+	def send (*args)
+		each_value {|client|
+			client.send(*args)
+		}
+	end
 end
 
 end; end; end

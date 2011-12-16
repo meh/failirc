@@ -20,26 +20,26 @@
 module IRC; class Server; module Base; class Channel
 
 class Modifier
-  attr_reader :set_by, :set_on, :channel, :mask
+	attr_reader :set_by, :set_on, :channel, :mask
 
-  def initialize (by, channel, mask)
-    @set_by  = by.mask.clone
-    @set_on  = Time.now
-    @channel = channel
-    @mask    = mask
-  end
+	def initialize (by, channel, mask)
+		@set_by  = by.mask.clone
+		@set_on  = Time.now
+		@channel = channel
+		@mask    = mask
+	end
 
-  def == (mask)
-    @mask == mask
-  end
+	def == (mask)
+		@mask == mask
+	end
 
-  def match (mask)
-    @mask.match(mask)
-  end
+	def match (mask)
+		@mask.match(mask)
+	end
 
-  def to_s
-    "#{channel} #{mask} #{set_by.nick} #{set_on.tv_sec}"
-  end
+	def to_s
+		"#{channel} #{mask} #{set_by.nick} #{set_on.tv_sec}"
+	end
 end
 
 end; end; end; end

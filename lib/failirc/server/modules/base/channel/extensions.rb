@@ -18,11 +18,11 @@
 #++
 
 class String
-  def is_valid_channel?
-    !!self.to_s.match(/^[&#+!][^ ,:\a]{0,50}$/)
-  end
+	def is_valid_channel?
+		!!self.to_s.match(/^[&#+!][^ ,:\a]{0,50}$/)
+	end
 
-  def channel_type
-    self[0] if self.is_valid_channel?
-  end
+	def channel_type
+		self[0] if self.is_valid_channel?
+	end
 end

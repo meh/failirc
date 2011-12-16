@@ -20,148 +20,156 @@
 module IRC; class Server; class Dispatcher
 
 class Client < IO
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader    :connected_to, :socket, :ip, :host, :port
-  def_delegators :@connected_to, :server, :dispatcher, :options
+	attr_reader    :connected_to, :socket, :ip, :host, :port
+	def_delegators :@connected_to, :server, :dispatcher, :options
 
-  def initialize (connected_to, socket)
-    @connected_to = connected_to
-    @socket       = socket
+	def initialize (connected_to, socket)
+		@connected_to = connected_to
+		@socket       = socket
 
-    @input  = Queue.new
-    @output = Queue.new
+		@input  = Queue.new
+		@output = Queue.new
 
-    @ip   = @socket.peeraddr[3] rescue nil
-    @host = @socket.peeraddr[2] rescue nil
-    @port = @socket.addr[1]     rescue nil
+		@ip   = @socket.peeraddr[3] rescue nil
+		@host = @socket.peeraddr[2] rescue nil
+		@port = @socket.addr[1]     rescue nil
 
-    super(@socket.to_i)
-  end
+		super(@socket.to_i)
+	end
 
-  def ssl?
-    socket.is_a?(OpenSSL::SSL::SSLSocket)
-  end
+	def ssl?
+		socket.is_a?(OpenSSL::SSL::SSLSocket)
+	end
 
-  def receive
-    return if disconnected?
+	def receive
+		return if disconnected?
 
-    begin
-      input = ''
+		begin
+			input = ''
 
-      begin; loop do
-        input << @socket.read_nonblock(4096)
-      end; rescue Errno::EAGAIN, IO::WaitReadable; end
+			begin; loop do
+				input << @socket.read_nonblock(4096)
+			end; rescue Errno::EAGAIN, IO::WaitReadable; end
 
-      raise Errno::EPIPE if input.empty?
+			raise Errno::EPIPE if input.empty?
 
-      input.split(/[\r\n]+/).each {|string|
-        @input.push(string)
-      }
-    rescue IOError
-      disconnect 'Input/output error'
-    rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-      disconnect 'Client exited'
-    rescue Errno::ECONNRESET
-      disconnect 'Connection reset by peer'
-    rescue Errno::ETIMEDOUT
-      disconnect 'Ping timeout'
-    rescue Errno::EHOSTUNREACH
-      disconnect 'No route to host'
-    rescue Exception => e
-      IRC.debug e
-    end
-  end; alias recv receive
+			input.split(/[\r\n]+/).each {|string|
+				@input.push(string)
+			}
+		rescue IOError
+			disconnect 'Input/output error'
+		rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+			disconnect 'Client exited'
+		rescue Errno::ECONNRESET
+			disconnect 'Connection reset by peer'
+		rescue Errno::ETIMEDOUT
+			disconnect 'Ping timeout'
+		rescue Errno::EHOSTUNREACH
+			disconnect 'No route to host'
+		rescue Exception => e
+			IRC.debug e
+		end
+	end; alias recv receive
 
-  def send (message)
-    return if disconnected?(true)
+	def send (message)
+		return if disconnected?(true)
 
-    dispatcher.server.dispatch :output, self, message
-    @output.push(message)
+		dispatcher.server.dispatch :output, self, message
+		@output.push(message)
 
-    flush
-  end
+		flush
+	end
 
-  def flush
-    return if @output.empty? or disconnected?(true)
+	def flush
+		return if @output.empty? or disconnected?(true)
 
-    begin
-      @socket.write_nonblock("#{@last}\r\n") if @last
+		begin
+			@socket.write_nonblock("#{@last}\r\n") if @last
 
-      until @output.empty?
-        @last = @output.pop
-        @last.force_encoding 'ASCII-8BIT'
+			until @output.empty?
+				@last = @output.pop
+				@last.force_encoding 'ASCII-8BIT'
 
-        @socket.write_nonblock("#{@last}\r\n")
-      end
+				@socket.write_nonblock("#{@last}\r\n")
+			end
 
-      @last = nil
-    rescue IOError
-      disconnect 'Input/output error'
-    rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-      disconnect 'Client exited'
-    rescue Errno::ECONNRESET
-      disconnect 'Connection reset by peer'
-    rescue Errno::ETIMEDOUT
-      disconnect 'Ping timeout'
-    rescue Errno::EHOSTUNREACH
-      disconnect 'No route to host'
-    rescue Errno::EAGAIN, IO::WaitWritable
-    rescue Exception => e
-      IRC.debug e
-    end
-  end
+			@last = nil
+		rescue IOError
+			disconnect 'Input/output error'
+		rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
+		 disconnect 'Client exited'
+		rescue Errno::ECONNRESET
+			disconnect 'Connection reset by peer'
+		rescue Errno::ETIMEDOUT
+			disconnect 'Ping timeout'
+		rescue Errno::EHOSTUNREACH
+			disconnect 'No route to host'
+		rescue Errno::EAGAIN, IO::WaitWritable
+		rescue Exception => e
+			IRC.debug e
+		end
+	end
 
-  def handle
-    return if disconnected?(true) or @handling or @input.empty?
+	def handle
+		return if disconnected?(true) or @handling or @input.empty?
 
-    @handling = true
+		@handling = true
 
-    server.do {
-      begin
-        server.dispatch :input, self, @input.pop
-      rescue Exception => e
-        IRC.debug e
-      end
+		server.do {
+			begin
+				server.dispatch :input, self, @input.pop
+			rescue Exception => e
+				IRC.debug e
+			end
 
-      @handling = false
+			@handling = false
 
-      dispatcher.wakeup unless @input.empty?
-    }
-  end
+			dispatcher.wakeup unless @input.empty?
+		}
+	end
 
-  def disconnect (message, options={})
-    return if disconnected? and @told
+	def disconnect (message, options={})
+		return if disconnected? and @told
 
-    @told = true
+		@told = true
 
-    server.fire :disconnect, self, message
+		callback = proc {
+			server.fire :disconnect, self, message
 
-    IRC.debug "#{self} disconnecting because: #{message}"
+			IRC.debug "#{self} disconnecting because: #{message}"
 
-    connected_to.clients.delete(self)
-    dispatcher.wakeup reset: true
+			connected_to.clients.delete(self)
+			dispatcher.wakeup reset: true
 
-    begin
-      flush
-    rescue; ensure
-      @socket.close rescue nil
-    end
-  end
+			begin
+				flush
+			rescue; ensure
+				@socket.close rescue nil
+			end
+		}
 
-  def disconnected? (real=false)
-    return true if @told and not real
+		if options[:now!]
+			callback.call
+		else
+			server.do &callback
+		end
+	end
 
-    begin
-      @socket.closed?
-    rescue Exception
-      true
-    end
-  end
+	def disconnected? (real=false)
+		return true if @told and not real
 
-  def to_s
-    "#{host}"
-  end
+		begin
+			@socket.closed?
+		rescue Exception
+			true
+		end
+	end
+
+	def to_s
+		"#{host}"
+	end
 end
 
 end; end; end

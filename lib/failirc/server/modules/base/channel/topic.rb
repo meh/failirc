@@ -20,40 +20,40 @@
 module IRC; class Server; module Base; class Channel
 
 class Topic
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader    :channel, :text, :set_by
-  attr_accessor  :set_on
-  def_delegators :@channel, :server
+	attr_reader    :channel, :text, :set_by
+	attr_accessor  :set_on
+	def_delegators :@channel, :server
 
-  def initialize (channel)
-    @channel = channel
+	def initialize (channel)
+		@channel = channel
 
-    @semaphore = Mutex.new
-  end
+		@semaphore = RecursiveMutex.new
+	end
 
-  def text= (value)
-    @semaphore.synchronize {
-      @text   = Reference.normalize(value)
-      @set_on = Time.now
-    }
-  end
+	def text= (value)
+		@semaphore.synchronize {
+			@text   = Reference.normalize(value)
+			@set_on = Time.now
+		}
+	end
 
-  def set_by= (value)
-    if value.is_a?(Mask)
-      @set_by = value
-    else
-      @set_by = value.mask.clone
-    end
-  end
+	def set_by= (value)
+		if value.is_a?(Mask)
+			@set_by = value
+		else
+			@set_by = value.mask.clone
+		end
+	end
 
-  def to_s
-    text
-  end
+	def to_s
+		text
+	end
 
-  def nil?
-    text.nil?
-  end
+	def nil?
+		text.nil?
+	end
 end
 
 end; end; end; end

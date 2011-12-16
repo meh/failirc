@@ -20,84 +20,84 @@
 module IRC; class Server; module Base
 
 module Client
-  Modes = IRC::Modes.define {
-    ssl :Z,
-      must: :do_god
+	Modes = IRC::Modes.define {
+		ssl :Z,
+			must: :do_god
 
-    god ??,
-      must:     :do_god,
-      inherits: :netadmin,
-      powers: [:do_god]
+		god ??,
+			must:     :do_god,
+			inherits: :netadmin,
+			powers: [:do_god]
 
-    netadmin :N,
-      must:     :give_netadmin,
-      inherits: :operator,
-      powers:   [:give_netadmin, :give_ircop]
+		netadmin :N,
+			must:     :give_netadmin,
+			inherits: :operator,
+			powers:   [:give_netadmin, :give_ircop]
 
-    ircop :o,
-      must: :give_ircop,
-      powers: [
-        :kill, :see_secrets,
-        :give_channel_owner, :give_channel_admin, Powers::Channel::Moderation,
-        Powers::User::ChangeModes, Powers::Client::ChangeModes
-      ]
-  }
+		ircop :o,
+			must: :give_ircop,
+			powers: [
+				:kill, :see_secrets,
+				:give_channel_owner, :give_channel_admin, Powers::Channel::Moderation,
+				Powers::User::ChangeModes, Powers::Client::ChangeModes
+			]
+	}
 
-  def self.extended (obj)
-    obj.instance_eval {
-      @channels = Channels.new(server)
-      @modes    = Modes.new
+	def self.extended (obj)
+		obj.instance_eval {
+			@channels = Channels.new(server)
+			@modes    = Modes.new
 
-      @mask      = Mask.new
-      @mask.host = self.host
+			@mask      = Mask.new
+			@mask.host = self.host
 
-      if ssl?
-        @modes + :ssl
-      end
+			if ssl?
+				@modes + :ssl
+			end
 
-      @connected_on = Time.now
-      @registered   = false
+			@connected_on = Time.now
+			@registered   = false
 
-      @encoding = 'UTF-8'
-    }
+			@encoding = 'UTF-8'
+		}
 
-    class << obj
-      extend Forwardable
+		class << obj
+			extend Forwardable
 
-      attr_reader    :channels, :mask, :connected_on, :modes
-      attr_accessor  :password, :real_name, :message, :away, :encoding, :last_action
-      def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
-      def_delegators :@modes, :can
+			attr_reader    :channels, :mask, :connected_on, :modes
+			attr_accessor  :password, :real_name, :message, :away, :encoding, :last_action
+			def_delegators :@mask, :nick, :nick=, :user, :user=, :host, :host=
+			def_delegators :@modes, :can
 
-      def is_on_channel? (name)
-        if name.is_a?(Channel)
-          !!name.user(self)
-        else
-          !!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
-        end
-      end
+			def is_on_channel? (name)
+				if name.is_a?(Channel)
+					!!name.user(self)
+				else
+					!!@channels[(name.to_s.is_valid_channel?) ? name : "##{name}"]
+				end
+			end
 
-      def away?
-        !!away
-      end
+			def away?
+				!!away
+			end
 
-      def identifier
-        nick
-      end
+			def identifier
+				nick
+			end
 
-      def incoming?
-        false
-      end
+			def incoming?
+				false
+			end
 
-      def client?
-        true
-      end
+			def client?
+				true
+			end
 
-      def to_s
-        mask.to_s
-      end
-    end
-  end
+			def to_s
+				mask.to_s
+			end
+		end
+	end
 end
 
 end; end; end

@@ -24,145 +24,145 @@ require 'failirc/server/modules/base/channel/modifier'
 module IRC; class Server; module Base
 
 class Channel
-  Modes = IRC::Modes.define {|m|
-    anonymous :a
-    no_colors :c
-    no_ctcps :C
-    invite_only :i
-    limit :l
-    redirect :L
-    password :k
-    no_knocks :K
-    moderated :m
-    no_external_messages :n
-    no_nick_change :N
-    m.private :p
-    no_kicks :Q
-    secret :s
-    strip_colors :S
-    topic_lock :t
-    auditorium :u
-    no_invites :V
-    ssl_only :z
-  }
+	Modes = IRC::Modes.define {|m|
+		anonymous :a
+		no_colors :c
+		no_ctcps :C
+		invite_only :i
+		limit :l
+		redirect :L
+		password :k
+		no_knocks :K
+		moderated :m
+		no_external_messages :n
+		no_nick_change :N
+		m.private :p
+		no_kicks :Q
+		secret :s
+		strip_colors :S
+		topic_lock :t
+		auditorium :u
+		no_invites :V
+		ssl_only :z
+	}
 
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader    :server, :name, :created_on, :modes, :topic, :bans, :exceptions, :invites, :invited
-  attr_writer    :level
-  def_delegators :@users, :send
+	attr_reader    :server, :name, :created_on, :modes, :topic, :bans, :exceptions, :invites, :invited
+	attr_writer    :level
+	def_delegators :@users, :send
 
-  def initialize (server, name)
-    raise ArgumentError.new('It is not a valid channel name') unless name.is_valid_channel?
+	def initialize (server, name)
+		raise ArgumentError.new('It is not a valid channel name') unless name.is_valid_channel?
 
-    @server = Reference.normalize(server)
-    @name   = Reference.normalize(name)
+		@server = Reference.normalize(server)
+		@name   = Reference.normalize(name)
 
-    @created_on = Time.now
-    @users      = Users.new(self)
-    @modes      = Modes.new
-    @topic      = Topic.new(self)
+		@created_on = Time.now
+		@users      = Users.new(self)
+		@modes      = Modes.new
+		@topic      = Topic.new(self)
 
-    @bans       = []
-    @exceptions = []
-    @invites    = []
-    @invited    = {}
-  end
+		@bans       = []
+		@exceptions = []
+		@invites    = []
+		@invited    = {}
+	end
 
-  def method_missing (id, *args, &block)
-    if @users.respond_to? id
-      @users.__send__ id, *args, &block
-    else
-      super
-    end
-  end
+	def method_missing (id, *args, &block)
+		if @users.respond_to? id
+			@users.__send__ id, *args, &block
+		else
+			super
+		end
+	end
 
-  memoize
-  def type
-    @name[0, 1]
-  end
+	memoize
+	def type
+		@name[0, 1]
+	end
 
-  def topic= (data)
-    if data.is_a?(Topic)
-      @topic.set_by = data.set_by
-      @topic.text   = data.text
-    elsif data.is_a?(Array)
-      @topic.set_by = data[0]
-      @topic.text  = data[1]
-    end
-  end
+	def topic= (data)
+		if data.is_a?(Topic)
+			@topic.set_by = data.set_by
+			@topic.text   = data.text
+		elsif data.is_a?(Array)
+			@topic.set_by = data[0]
+			@topic.text  = data[1]
+		end
+	end
 
-  def users
-    if @level
-      users = Users.new(self)
-      
-      @users.select {|_, user|
-        user.level.enough?(@level)
-      }.each {|_, user|
-        user = user.clone
-        user.instance_variable_set :@channel, self
+	def users
+		if @level
+			users = Users.new(self)
+			
+			@users.select {|_, user|
+				user.level.enough?(@level)
+			}.each {|_, user|
+				user = user.clone
+				user.instance_variable_set :@channel, self
 
-        users.add(user)
-      }
+				users.add(user)
+			}
 
-      users
-    else
-      @users
-    end
-  end
+			users
+		else
+			@users
+		end
+	end
 
-  def user (client)
-    @users[client]
-  end
+	def user (client)
+		@users[client]
+	end
 
-  def banned? (client)
-    bans.each {|ban|
-      return true if ban.match(client.mask)
-    }
+	def banned? (client)
+		bans.each {|ban|
+			return true if ban.match(client.mask)
+		}
 
-    return false
-  end
+		return false
+	end
 
-  def exception? (client)
-    exceptions.each {|exception|
-      return true if exception.match(client.mask)
-    }
+	def exception? (client)
+		exceptions.each {|exception|
+			return true if exception.match(client.mask)
+		}
 
-    return false
-  end
+		return false
+	end
 
-  def invited? (client, shallow=false)
-    return true if shallow && !channel.modes.invite_only?
+	def invited? (client, shallow=false)
+		return true if shallow && !channel.modes.invite_only?
 
-    return true if channel.invited[client.mask]
+		return true if channel.invited[client.mask]
 
-    invites.each {|invite|
-      return true if invite.match(client.mask)
-    }
+		invites.each {|invite|
+			return true if invite.match(client.mask)
+		}
 
-    return false
-  end
+		return false
+	end
 
-  def level?
-    @level
-  end
+	def level?
+		@level
+	end
 
-  def level (level)
-    return self unless User::Level::Modes.has_value?(level)
+	def level (level)
+		return self unless User::Level::Modes.has_value?(level)
 
-    result       = self.clone
-    result.level = level
+		result       = self.clone
+		result.level = level
 
-    result
-  end
+		result
+	end
 
-  def to_s
-    name
-  end
-  
-  def inspect
-    "#<Channel: #{to_s} #{users}>"
-  end
+	def to_s
+		name
+	end
+	
+	def inspect
+		"#<Channel: #{to_s} #{users}>"
+	end
 end
 
 end; end; end

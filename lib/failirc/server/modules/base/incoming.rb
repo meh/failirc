@@ -20,44 +20,44 @@
 module IRC; class Server; module Base
 
 module Incoming; def self.extended (obj)
-  obj.instance_eval {
-    @temporary = InsensitiveStruct.new
-  }
+	obj.instance_eval {
+		@temporary = InsensitiveStruct.new
+	}
 
-  obj.refine_singleton_method :send do |old, *args|
-    if args.first.is_a?(String)
-      old.call(args.first)
-    else
-      response, value = args
+	obj.refine_singleton_method :send do |old, *args|
+		if args.first.is_a?(String)
+			old.call(args.first)
+		else
+			response, value = args
 
-      begin
-        old.call ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
-      rescue Exception => e
-        IRC.debug response[:text]
-        raise e
-      end
-    end
-  end
+			begin
+				old.call ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
+			rescue Exception => e
+				IRC.debug response[:text]
+				raise e
+			end
+		end
+	end
 
-  class << obj
-    attr_reader :temporary
+	class << obj
+		attr_reader :temporary
 
-    def identifier
-      'faggot'
-    end
+		def identifier
+			'faggot'
+		end
 
-    def incoming?
-      true
-    end
+		def incoming?
+			true
+		end
 
-    def client?
-      false
-    end
+		def client?
+			false
+		end
 
-    def server?
-      false
-    end
-  end
+		def server?
+			false
+		end
+	end
 end; end
 
 end; end; end

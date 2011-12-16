@@ -18,7 +18,7 @@
 #++
 
 module IRC
-  def self.version
-    '0.0.2'
-  end
+	def self.version
+		'0.0.2'
+	end
 end

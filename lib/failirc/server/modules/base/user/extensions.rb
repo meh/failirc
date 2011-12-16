@@ -18,7 +18,7 @@
 #++
 
 class String
-  def is_level?
-    IRC::Server::Base::User::Level::Modes.has_value?(self) ? self : false
-  end
+	def is_level?
+		IRC::Server::Base::User::Level::Modes.has_value?(self) ? self : false
+	end
 end

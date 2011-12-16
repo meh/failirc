@@ -20,34 +20,34 @@
 module IRC; class Server; module Base
 
 module Powers
-  module Channel
-    ChangeModes = [
-      :change_topic_mode,
-      :change_no_external_messages_mode, :change_secret_mode,
-      :change_ssl_mode, :change_moderated_mode,
-      :change_invite_only_mode, :change_auditorium_mode,
-      :change_anonymous_mode, :change_limit_mode,
-      :change_redirect_mode, :change_no_knocks_mode,
-      :add_invitation, :channel_ban, :add_ban_exception,
-      :change_channel_password, :change_no_colors_mode,
-      :change_no_ctcps_mode, :change_no_nick_change_mode,
-      :change_no_kicks_mode, :change_strip_colors_mode,
-      :change_no_invites_mode, :change_private_mode,
-    ]
+	module Channel
+		ChangeModes = [
+			:change_topic_mode,
+			:change_no_external_messages_mode, :change_secret_mode,
+			:change_ssl_mode, :change_moderated_mode,
+			:change_invite_only_mode, :change_auditorium_mode,
+			:change_anonymous_mode, :change_limit_mode,
+			:change_redirect_mode, :change_no_knocks_mode,
+			:add_invitation, :channel_ban, :add_ban_exception,
+			:change_channel_password, :change_no_colors_mode,
+			:change_no_ctcps_mode, :change_no_nick_change_mode,
+			:change_no_kicks_mode, :change_strip_colors_mode,
+			:change_no_invites_mode, :change_private_mode,
+		]
 
-    Moderation = [:invite, :kick, :change_topic, ChangeModes]
-  end
+		Moderation = [:invite, :kick, :change_topic, ChangeModes]
+	end
 
-  module User
-    ChangeModes = [
-      :give_channel_operator, :give_channel_halfop,
-      :give_voice
-    ]
-  end
+	module User
+		ChangeModes = [
+			:give_channel_operator, :give_channel_halfop,
+			:give_voice
+		]
+	end
 
-  module Client
-    ChangeModes = []
-  end
+	module Client
+		ChangeModes = []
+	end
 end
 
 end; end; end

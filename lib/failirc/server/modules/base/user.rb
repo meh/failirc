@@ -24,72 +24,72 @@ require 'failirc/server/modules/base/user/can'
 module IRC; class Server; module Base
 
 class User
-  Modes = IRC::Modes.define {
-    service :!,
-      must:     :give_channel_service,
-      inherits: :owner
+	Modes = IRC::Modes.define {
+		service :!,
+			must:     :give_channel_service,
+			inherits: :owner
 
-    owner :x,
-      must:     :give_channel_owner,
-      inherits: :admin,
-      powers:   [:give_channel_admin]
+		owner :x,
+			must:     :give_channel_owner,
+			inherits: :admin,
+			powers:   [:give_channel_admin]
 
-    admin :y,
-      must:     :give_channel_admin,
-      inherits: :operator
+		admin :y,
+			must:     :give_channel_admin,
+			inherits: :operator
 
-    operator :o,
-      must:     :give_channel_operator,
-      inherits: :halfop,
-      powers:   [Powers::Channel::Moderation, Powers::User::ChangeModes]
+		operator :o,
+			must:     :give_channel_operator,
+			inherits: :halfop,
+			powers:   [Powers::Channel::Moderation, Powers::User::ChangeModes]
 
-    halfop :h,
-      must:     :give_channel_halfop,
-      inherits: :voice,
-      powers:   [:kick]
+		halfop :h,
+			must:     :give_channel_halfop,
+			inherits: :voice,
+			powers:   [:kick]
 
-    voice :v,
-      must:   :give_channel_voice,
-      powers: [:talk]
-  }
+		voice :v,
+			must:   :give_channel_voice,
+			powers: [:talk]
+	}
 
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader  :client, :channel, :modes, :level
-  undef_method :send
+	attr_reader  :client, :channel, :modes, :level
+	undef_method :send
 
-  def initialize (client, channel)
-    @client  = client
-    @channel = channel
-    @modes   = Modes.new
+	def initialize (client, channel)
+		@client  = client
+		@channel = channel
+		@modes   = Modes.new
 
-    @level = Level.new(self)
+		@level = Level.new(self)
 
-    if block_given?
-      yield self
-    end
-  end
+		if block_given?
+			yield self
+		end
+	end
 
-  def method_missing (id, *args, &block)
-    if @client.respond_to? id
-      @client.__send__ id, *args, &block
-    else
-      super
-    end
-  end
+	def method_missing (id, *args, &block)
+		if @client.respond_to? id
+			@client.__send__ id, *args, &block
+		else
+			super
+		end
+	end
 
-  memoize
-  def can
-    Can.new(self)
-  end
+	memoize
+	def can
+		Can.new(self)
+	end
 
-  def to_s
-    "#{level}#{nick}"
-  end
+	def to_s
+		"#{level}#{nick}"
+	end
 
-  def inspect
-    "#<User: #{client.inspect} #{channel.inspect} #{modes.inspect}>"
-  end
+	def inspect
+		"#<User: #{client.inspect} #{channel.inspect} #{modes.inspect}>"
+	end
 end
 
 end; end; end

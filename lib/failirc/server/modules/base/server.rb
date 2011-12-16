@@ -20,31 +20,31 @@
 module IRC; class Server; module Base
 
 module Server
-  class Can < BasicObject
-    def method_missing (*)
-      true
-    end
-  end
+	class Can < BasicObject
+		def method_missing (*)
+			true
+		end
+	end
 
-  def self.extended (obj)
-    class << obj
-      def can
-        Can.new
-      end
+	def self.extended (obj)
+		class << obj
+			def can
+				Can.new
+			end
 
-      def incoming?
-        false
-      end
+			def incoming?
+				false
+			end
 
-      def server?
-        true
-      end
+			def server?
+				true
+			end
 
-      def to_s
-        host
-      end
-    end
-  end
+			def to_s
+				host
+			end
+		end
+	end
 end
 
 end; end; end

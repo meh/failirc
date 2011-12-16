@@ -20,67 +20,67 @@
 module IRC; class Server; module Base; class User
 
 class Level
-  Modes = {
-    :! => '!',
-    :x => '~',
-    :y => '&',
-    :o => '@',
-    :h => '%',
-    :v => '+'
-  }
+	Modes = {
+		:! => '!',
+		:x => '~',
+		:y => '&',
+		:o => '@',
+		:h => '%',
+		:v => '+'
+	}
 
-  Priorities = [:!, :x,  :y, :o, :h, :v]
+	Priorities = [:!, :x,  :y, :o, :h, :v]
 
-  attr_reader :user
+	attr_reader :user
 
-  def initialize (user)
-    @user = user
-  end
+	def initialize (user)
+		@user = user
+	end
 
-  def enough? (level)
-    return true if !level || (level.is_a?(String) && level.empty?)
+	def enough? (level)
+		return true if !level || (level.is_a?(String) && level.empty?)
 
-    if level.is_a?(String)
-      level = Modes.key level
-    end
+		if level.is_a?(String)
+			level = Modes.key level
+		end
 
-    return false unless highest
+		return false unless highest
 
-    highest = Modes.keys.index(highest)
-    level   = Modes.keys.index(level)
+		highest = Modes.keys.index(highest)
+		level   = Modes.keys.index(level)
 
-    if !level
-      true
-    elsif !highest
-      false
-    else
-      highest <= level
-    end
-  end
+		if !level
+			true
+		elsif !highest
+			false
+		else
+			highest <= level
+		end
+	end
 
-  def highest
-    Priorities.each {|level|
-      return level if user.modes[level].enabled?
-    }
-  end
+	def highest
+		Priorities.each {|level|
+			return level if user.modes[level].enabled?
+		}
+	end
 
-  def + (key)
-    user.modes[key].enable!
-  end
+	def + (key)
+		user.modes[key].enable!
+	end
 
-  def - (key)
-    user.modes[key].disable!
-  end
+	def - (key)
+		user.modes[key].disable!
+	end
 
-  [:service?, :owner?, :admin?, :operator?, :halfop?, :voice?].each {|name|
-    define_method name do
-      user.modes.send name
-    end
-  }
+	[:service?, :owner?, :admin?, :operator?, :halfop?, :voice?].each {|name|
+		define_method name do
+			user.modes.send name
+		end
+	}
 
-  def to_s
-    Modes[highest].to_s
-  end
+	def to_s
+		Modes[highest].to_s
+	end
 end
 
 end; end; end; end

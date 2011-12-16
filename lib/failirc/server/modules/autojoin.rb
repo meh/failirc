@@ -20,7 +20,7 @@
 version '0.0.1'
 
 on :connected do |client|
-  [options].flatten.compact.each {|channel|
-    server.fire :join, client, channel
-  }
+	[options].flatten.compact.each {|channel|
+		server.fire :join, client, channel
+	}
 end

@@ -22,59 +22,59 @@ require 'failirc/server/modules/base/user'
 module IRC; class Server; module Base
 
 class Users < ThreadSafeHash
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader    :channel
-  def_delegators :@channel, :server
+	attr_reader    :channel
+	def_delegators :@channel, :server
 
-  def initialize (channel, *args)
-    @channel = channel
+	def initialize (channel, *args)
+		@channel = channel
 
-    super(*args)
-  end
+		super(*args)
+	end
 
-  def [] (user)
-    if user.is_a?(Client) || user.is_a?(User)
-      user = user.nick
-    end
+	def [] (user)
+		if user.is_a?(Client) || user.is_a?(User)
+			user = user.nick
+		end
 
-    super(user)
-  end
+		super(user)
+	end
 
-  def []= (user, value)
-    if user.is_a?(Client) || user.is_a?(User)
-      user = user.nick
-    end
+	def []= (user, value)
+		if user.is_a?(Client) || user.is_a?(User)
+			user = user.nick
+		end
 
-    super(user, value)
-  end
-  
-  def delete (key)
-    if key.is_a?(User) || key.is_a?(Client)
-      key = key.nick
-    end
+		super(user, value)
+	end
+	
+	def delete (key)
+		if key.is_a?(User) || key.is_a?(Client)
+			key = key.nick
+		end
 
-    key  = key.downcase
-    user = self[key]
+		key  = key.downcase
+		user = self[key]
 
-    super(key) if user
+		super(key) if user
 
-    return user
-  end
+		return user
+	end
 
-  def add (user)
-    if user.is_a?(User)
-      self[user.nick] = user
-    else
-      self[user.nick] = User.new(user, @channel)
-    end
-  end
+	def add (user)
+		if user.is_a?(User)
+			self[user.nick] = user
+		else
+			self[user.nick] = User.new(user, @channel)
+		end
+	end
 
-  def send (*args)
-    each_value {|user|
-      user.send(*args)
-    }
-  end
+	def send (*args)
+		each_value {|user|
+			user.send(*args)
+		}
+	end
 end
 
 end; end; end

@@ -20,50 +20,50 @@
 require 'failirc/server/modules/base/channel'
 
 module IRC; class Server; module Base
- 
+
 class Channels < ThreadSafeHash
-  attr_reader :server
+	attr_reader :server
 
-  def initialize (server, *args)
-    @server = server
+	def initialize (server, *args)
+		@server = server
 
-    super(*args)
-  end
+		super(*args)
+	end
 
-  def delete (channel)
-    if channel.is_a?(Channel)
-      super(channel.name)
-    else
-      super(channel)
-    end
-  end
+	def delete (channel)
+		if channel.is_a?(Channel)
+			super(channel.name)
+		else
+			super(channel)
+		end
+	end
 
-  def add (channel)
-    self[channel.name] = channel
-  end
+	def add (channel)
+		self[channel.name] = channel
+	end
 
-  # get single users in the channels
-  def clients
-    result = Clients.new(server)
+	# get single users in the channels
+	def clients
+		result = Clients.new(server)
 
-    each_value {|channel|
-      channel.users.each {|nick, user|
-        result[nick] = user.client
-      }
-    }
+		each_value {|channel|
+			channel.users.each {|nick, user|
+				result[nick] = user.client
+			}
+		}
 
-    return result
-  end
+		return result
+	end
 
-  def to_s (thing=nil)
-    map {|(_, channel)|
-      if thing.is_a?(Client) || thing.is_a?(User)
-        "#{channel.user(thing).modes[:level]}#{channel.name}"
-      else
-        "#{channel.name}"
-      end
-    }.join(' ')
-  end
+	def to_s (thing=nil)
+		map {|(_, channel)|
+			if thing.is_a?(Client) || thing.is_a?(User)
+				"#{channel.user(thing).modes[:level]}#{channel.name}"
+			else
+				"#{channel.name}"
+			end
+		}.join(' ')
+	end
 end
 
 end; end; end

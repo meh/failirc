@@ -23,34 +23,34 @@ require 'uri'
 version '0.0.1'
 
 def reupload (url, time=5, service=:imageshack)
-  result = url
+	result = url
 
-  begin
-    case service
-      when :imageshack
-        result = timeout time do
-          response = Net::HTTP.get_response(URI.parse("http://imageshack.us/transload.php?url=#{URI.escape(url)}"))
-          Net::HTTP.get(URI.parse(response['location'])).match(%r{<textarea.*?>(.*?img.*?\..*?)</textarea>})[1] rescue nil
-        end
-    end
-  rescue Timeout::Error
-  rescue Exception => e
-    IRC.debug e
+	begin
+		case service
+			when :imageshack
+				result = timeout time do
+					response = Net::HTTP.get_response(URI.parse("http://imageshack.us/transload.php?url=#{URI.escape(url)}"))
+					Net::HTTP.get(URI.parse(response['location'])).match(%r{<textarea.*?>(.*?img.*?\..*?)</textarea>})[1] rescue nil
+				end
+		end
+	rescue Timeout::Error
+	rescue Exception => e
+		IRC.debug e
 
-    result = url
-  end
+		result = url
+	end
 
-  return result || url
+	return result || url
 end
 
 on :message, priority: -102 do |chain=:input, from, to, message|
-  return unless chain == :input
+	return unless chain == :input
 
-  message.scan(%r{https?://\S+}).uniq.each {|uri|
-    options[:matches].each {|name, regex|
-      next unless uri.match(/#{regex}/)
+	message.scan(%r{https?://\S+}).uniq.each {|uri|
+		options[:matches].each {|name, regex|
+			next unless uri.match(/#{regex}/)
 
-      message.gsub!(/#{Regexp.escape(uri)}/, "#{reupload(uri, (options[:timeout] || 5).to_f, (options[:service] || 'imageshack').to_sym)} (#{name})")
-    }
-  }
+			message.gsub!(/#{Regexp.escape(uri)}/, "#{reupload(uri, (options[:timeout] || 5).to_f, (options[:service] || 'imageshack').to_sym)} (#{name})")
+		}
+	}
 end

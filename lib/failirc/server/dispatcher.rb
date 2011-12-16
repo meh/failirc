@@ -17,106 +17,96 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'socket'
-require 'timeout'
-require 'openssl'
-
-begin
-  OpenSSL::SSL::SSLSocket.instance_method :read_nonblock
-rescue NameError
-  require 'openssl/nonblock'
-end
-
 require 'failirc/server/dispatcher/server'
 require 'failirc/server/dispatcher/client'
 
 module IRC; class Server
 
 class Dispatcher
-  attr_reader :server, :servers
+	attr_reader :server, :servers
 
-  def initialize (server)
-    @server = server
+	def initialize (server)
+		@server = server
 
-    @servers = []
-    @pipes   = IO.pipe
-  end
+		@servers = []
+		@pipes   = IO.pipe
+	end
 
-  def start
-    @running = true
+	def start
+		@running = true
 
-    self.loop
-  end
+		self.loop
+	end
 
-  def stop
-    return unless running?
+	def stop
+		return unless running?
 
-    @running = false
+		@running = false
 
-    wakeup
-  end
+		wakeup
+	end
 
-  def running?
-    !!@running
-  end
+	def running?
+		!!@running
+	end
 
-  def reset?
-    !!@reset
-  end
+	def reset?
+		!!@reset
+	end
 
-  def loop
-    self.do while running?
-  end
+	def loop
+		self.do while running?
+	end
 
-  def listen (options)
-    @servers.push(Dispatcher::Server.new(self, options))
-    wakeup
+	def listen (options)
+		@servers.push(Dispatcher::Server.new(self, options))
+		wakeup
 
-    IRC.debug "Starting listening on #{@servers.last.host}:#{@servers.last.port}#{' (SSL)' if @servers.last.ssl?}"
-  end
+		IRC.debug "Starting listening on #{@servers.last.host}:#{@servers.last.port}#{' (SSL)' if @servers.last.ssl?}"
+	end
 
-  def do
-    begin
-      reading, _, erroring = IO.select([@pipes.first] + clients + servers, nil, clients)
-    rescue Errno::EBADF
-      return
-    end
+	def do
+		begin
+			reading, _, erroring = IO.select([@pipes.first] + clients + servers, nil, clients)
+		rescue Errno::EBADF
+			return
+		end
 
-    return unless running? or reset?
+		return unless running? or reset?
 
-    erroring.each {|client|
-      client.disconnect 'Input/output error'
-    }
+		erroring.each {|client|
+			client.disconnect 'Input/output error'
+		}
 
-    reading.each {|thing|
-      case thing
-        when Dispatcher::Server then thing.accept
-        when Dispatcher::Client then thing.receive
-        when IO                 then thing.read_nonblock(2048) rescue nil
-      end
-    }
+		reading.each {|thing|
+			case thing
+				when Dispatcher::Server then thing.accept
+				when Dispatcher::Client then thing.receive
+				when IO                 then thing.read_nonblock(2048) rescue nil
+			end
+		}
 
-    clients.each {|client|
-      client.handle
-    }
-  end
+		clients.each {|client|
+			client.handle
+		}
+	end
 
-  def clients
-    @reset = false
+	def clients
+		@reset = false
 
-    @clients ||= @servers.map {|s|
-      s.clients
-    }.flatten
-  end
+		@clients ||= @servers.map {|s|
+			s.clients
+		}.flatten
+	end
 
-  def wakeup (options={})
-    if options[:reset]
-      @clients = nil
-      @reset   = true
-    end
+	def wakeup (options={})
+		if options[:reset]
+			@clients = nil
+			@reset   = true
+		end
 
-    @pipes.last.write '?'
-  end
+		@pipes.last.write '?'
+	end
 end
 
 end; end

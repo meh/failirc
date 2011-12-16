@@ -20,7 +20,6 @@
 require 'failirc/version'
 require 'failirc/common/utils'
 require 'failirc/common/events'
-require 'failirc/common/workers'
 require 'failirc/common/modules'
 require 'failirc/common/modes'
 require 'failirc/common/mask'
@@ -30,57 +29,57 @@ require 'failirc/client/dispatcher'
 module IRC
 
 class Client
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader :options, :dispatcher, :created_on
+	attr_reader :options, :dispatcher, :created_on
 
-  def_delegators :@dispatcher, :connect, :running?
-  def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
-  def_delegators :@workers, :do
-  def_delegators :@modules, :load
+	def_delegators :@dispatcher, :connect, :running?
+	def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
+	def_delegators :@pool, :do
+	def_delegators :@modules, :load
 
-  def initialize (options={})
-    @options = HashWithIndifferentAccess.new(options)
+	def initialize (options={})
+		@options = HashWithIndifferentAccess.new(options)
 
-    @dispatcher = Dispatcher.new(self)
-    @events     = Events.new(self)
-    @workers    = Workers.new(self)
-    @modules    = Modules.new(self, '/failirc/client/modules')
+		@dispatcher = Dispatcher.new(self)
+		@events     = Events.new(self)
+		@pool       = ThreadPool.new
+		@modules    = Modules.new(self, '/failirc/client/modules')
 
-    if @options[:modules]
-      @options[:modules].each {|name, data|
-        begin
-          mod = @modules.load(name, data)
+		if @options[:modules]
+			@options[:modules].each {|name, data|
+				begin
+					mod = @modules.load(name, data)
 
-          if mod
-            mod.define_singleton_method :client do
-              self
-            end
+					if mod
+						mod.define_singleton_method :client do
+							self
+						end
 
-            hook mod
+						hook mod
 
-            IRC.debug "#{name} loaded"
-          else
-            IRC.debug "#{name} had some errors"
-          end
-        rescue LoadError
-          IRC.debug "#{name} not found"
-        end
-      }
-    end
-  end
-  
-  def start
-    fire :start, self
+						IRC.debug "#{name} loaded"
+					else
+						IRC.debug "#{name} had some errors"
+					end
+				rescue LoadError
+					IRC.debug "#{name} not found"
+				end
+			}
+		end
+	end
+	
+	def start
+		fire :start, self
 
-    @dispatcher.start
-  end
+		@dispatcher.start
+	end
 
-  def stop
-    fire :stop, self
+	def stop
+		fire :stop, self
 
-    @dispatcher.stop
-  end
+		@dispatcher.stop
+	end
 end
 
 end
