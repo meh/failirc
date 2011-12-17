@@ -63,14 +63,21 @@ class Server < IO
 		server.do {
 			begin
 				if ssl?
-					socket = timeout((self.server.options[:server][:timeout] || 15).to_i) do
+					socket = timeout((server.options[:server][:timeout] || 15).to_i) do
 						ssl = OpenSSL::SSL::SSLSocket.new(socket, @context)
 						ssl.accept
 						ssl
 					end
 				end
 
-				server.fire :connect, @clients.push(Dispatcher::Client.new(self, socket)).last
+				client = Dispatcher::Client.new(self, socket)
+
+				client.handling!
+				server.fire :connect, client
+				client.handled!
+
+				@clients.push(client)
+
 				dispatcher.wakeup reset: true
 			rescue OpenSSL::SSL::SSLError, Timeout::Error
 				socket.write_nonblock "This is an SSL connection, faggot.\r\n" rescue nil

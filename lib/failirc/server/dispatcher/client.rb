@@ -86,16 +86,9 @@ class Client < IO
 		return if @output.empty? or disconnected?(true)
 
 		begin
-			@socket.write_nonblock("#{@last}\r\n") if @last
-
 			until @output.empty?
-				@last = @output.pop
-				@last.force_encoding 'ASCII-8BIT'
-
-				@socket.write_nonblock("#{@last}\r\n")
+				@socket.write_nonblock("#{@output.pop}\r\n")
 			end
-
-			@last = nil
 		rescue IOError
 			disconnect 'Input/output error'
 		rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
@@ -112,10 +105,14 @@ class Client < IO
 		end
 	end
 
-	def handle
-		return if disconnected?(true) or @handling or @input.empty?
+	def handling?; @handling;         end
+	def handling!; @handling = true;  end
+	def handled!;  @handling = false; end
 
-		@handling = true
+	def handle
+		return if disconnected?(true) or handling? or @input.empty?
+
+		handling!
 
 		server.do {
 			begin
@@ -124,7 +121,7 @@ class Client < IO
 				IRC.debug e
 			end
 
-			@handling = false
+			handled!
 
 			dispatcher.wakeup unless @input.empty?
 		}
