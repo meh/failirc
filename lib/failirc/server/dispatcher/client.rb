@@ -75,7 +75,13 @@ class Client < EM::Connection
 		@server.delete(self)
 
 		unless @disconnected
-			server.fire :disconnect, self, 'Client exited'
+			server.fire :disconnect, self, \
+				case EM.report_connection_error_status(@signature)
+				when Errno::ECONNRESET::Errno   then 'Connection reset by peer'
+				when Errno::ETIMEDOUT::Errno    then 'Ping timeout'
+				when Errno::EHOSTUNREACH::Errno then 'No route to host'
+				else 'Client exited'
+				end
 		end
 	end
 
@@ -117,8 +123,17 @@ class Client < EM::Connection
 
 	alias to_s ip
 
-	def ssl!; @ssl = true; end
-	def ssl?; @ssl;        end
+	def ssl!
+		@ssl = true
+
+		if options[:ssl].is_a? Hash
+			start_tls(private_key_file: options[:ssl][:key], cert_chain_file: options[:ssl][:cert])
+		else
+			start_tls
+		end
+	end
+
+	def ssl?; @ssl; end
 end
 
 end; end

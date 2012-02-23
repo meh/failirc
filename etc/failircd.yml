@@ -33,10 +33,6 @@ modules:
       quit:    "Quit: #{message}"
       kill:    "Killed by #{sender.nick}: #{message.empty? ? 'No reason' : message}"
 
-  autotune:
-    minimum: 10
-    rate:    10
-
   firewall:
 
   cloaking:

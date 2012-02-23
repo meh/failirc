@@ -17,31 +17,23 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-version '0.1.0'
+version    '0.0.1'
+identifier 'cap'
 
-on :start do
-	@log = options[:file] ? File.open(options[:file]) : $stdout
-end
+Base::Commands::Unregistered << :CAP
 
-on :stop do
-	@log.close unless @log == $stdout
-end
+input {
+	aliases {
+		cap /^CAP( |$)/i
+	}
 
-on :log do |string|
-	@log.print "[#{Time.now}] #{string}\n"
-end
+	on :cap do |thing, string|
+		whole, command = string.match(/CAP\s+(.+)$/i)
 
-on :connect do |client|
-	server.fire :log, "#{client} connected"
-end
+		if !command
+			thing.send_message ERR_NEEDMOREPARAMS, :CAP
+		else
 
-on :disconnect do |client, message|
-	server.fire :log, "#{client} disconnected because: #{message}"
-end
-
-logger = -> event, thing, string {
-	server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing} #{string.inspect}"
+		end
+	end
 }
-
-input  { before priority: -100, &logger }
-output { after  priority:  100, &logger }

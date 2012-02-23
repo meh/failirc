@@ -46,7 +46,7 @@ class User
 		halfop :h,
 			must:     :give_channel_halfop,
 			inherits: :voice,
-			powers:   [:kick]
+			powers:   [:kick, :give_channel_voice]
 
 		voice :v,
 			must:   :give_channel_voice,

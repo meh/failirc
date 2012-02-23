@@ -63,6 +63,8 @@ class Server
 
 		if @options[:modules]
 			@options[:modules].each {|name, data|
+				data = false if data == true
+
 				begin
 					mod = @modules.load(name, data || {})
 

@@ -53,16 +53,11 @@ class Server
 
 		@signature = EM.start_server options[:bind] || '0.0.0.0', options[:port], Client do |client|
 			client.instance_eval {
-				ssl! if options[:ssl]
-
-				if options[:ssl].is_a? Hash
-					start_tls(private_key_file: options[:ssl][:key], cert_chain_file: options[:ssl][:cert])
-				else
-					start_tls
-				end
-
 				@server = zelf
 				@server.add client
+
+				ssl! if options[:ssl]
+
 				@server.fire :connect, client
 			}
 		end

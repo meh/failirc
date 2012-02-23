@@ -17,31 +17,25 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-version '0.1.0'
+version    '0.0.1'
+identifier 'tls'
 
-on :start do
-	@log = options[:file] ? File.open(options[:file]) : $stdout
-end
+Base::Commands::Unregistered << :STARTTLS
 
-on :stop do
-	@log.close unless @log == $stdout
-end
-
-on :log do |string|
-	@log.print "[#{Time.now}] #{string}\n"
-end
-
-on :connect do |client|
-	server.fire :log, "#{client} connected"
-end
-
-on :disconnect do |client, message|
-	server.fire :log, "#{client} disconnected because: #{message}"
-end
-
-logger = -> event, thing, string {
-	server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing} #{string.inspect}"
+RPL_STARTTLS = {
+	code: 670,
+	text: ':STARTTLS successful, go ahead with TLS handshake'
 }
 
-input  { before priority: -100, &logger }
-output { after  priority:  100, &logger }
+input {
+	aliases {
+		starttls /^STARTTLS( |$)/i
+	}
+
+	on :starttls do |thing, string|
+		next if thing.ssl?
+
+		thing.send_message RPL_STARTTLS
+		thing.ssl!
+	end
+}

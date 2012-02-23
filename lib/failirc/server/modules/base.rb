@@ -35,6 +35,12 @@ extend Base
 version    '0.1.0'
 identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
 
+module Base::Commands
+	Ignore       = [:PING, :PONG, :WHO, :MODE]
+	Unregistered = [:PASS, :NICK, :USER]
+	Unrepeatable = [:PASS, :USER]
+end
+
 on :start do |server|
 	@mutex      = RecursiveMutex.new
 	@joining    = {}
@@ -85,7 +91,7 @@ def check_encoding (string)
 	result   = false
 	encoding = string.encoding
 
-	['UTF-8', 'ISO-8859-1'].each {|encoding|
+	%w[UTF-8 ISO-8859-1].each {|encoding|
 		string.force_encoding(encoding)
 
 		if string.valid_encoding?
@@ -95,7 +101,7 @@ def check_encoding (string)
 
 	string.force_encoding(encoding)
 
-	return result
+	result
 end
 
 # check encoding
@@ -195,23 +201,23 @@ input {
 	end
 
 	# check for ping timeout and registration
-	before priority: -100 do |event, thing, string|
+	before priority: -99 do |event, thing, string|
 		@mutex.synchronize {
 			@to_ping.delete(~thing)
 			@pinged_out.delete(~thing)
 		}
 
-		if thing.client? && !event.alias?(:PING) && !event.alias?(:PONG) && !event.alias?(:WHO) && !event.alias?(:MODE)
+		if thing.client? && Commands::Ignore.none? { |a| event.alias?(a) }
 			thing.last_action = Action.new(thing, event, string)
 		end
 
 		# if the client tries to do something without having registered, kill it with fire
-		if thing.incoming? && !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER)
+		if thing.incoming? && Commands::Unregistered.none? { |a| event.alias?(a) }
 			thing.send_message ERR_NOTREGISTERED
 
 			skip
 		# if the client tries to reregister, kill it with fire
-		elsif (event.alias?(:PASS) || event.alias?(:USER)) && !thing.incoming?
+		elsif !thing.incoming? && Commands::Unrepeatable.any? { |a| event.alias?(a) }
 			thing.send_message ERR_ALREADYREGISTRED
 
 			skip
@@ -228,6 +234,15 @@ input {
 		thing.send_message case type
 			when :close then "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})"
 			else             "ERROR :#{message}"
+		end
+	end
+
+	on :cap do |thing, string|
+		whole, command = string.match(/CAP\s+(.*?)$/i).to_a
+
+		if !command
+			thing.send_message ERR_NEEDMOREPARAMS, :USER
+		else
 		end
 	end
 
@@ -300,7 +315,7 @@ input {
 				client:  Support::Modes::Client,
 				channel: Support::Modes::Channel
 
-			Support.to_hash.map {|(key, value)|
+			client.send_message RPL_ISUPPORT, Support.to_hash.map {|key, value|
 				value != true ? "#{key}=#{value}" : key
 			}.join(' ')
 

@@ -23,9 +23,9 @@ Server
 ------
 - Automatic encoding conversions, defaults to UTF-8. Choose the used encoding with the ENCODING command.
 - Highly modular and event driven. The RFC protocol is implemented in a module.
-- Optimized dispatching with Fibers, Threads and nonblocking I/O.
+- Optimized dispatching with EventMachine.
 - Supports SSL and creates automatically certificate and key if not given.
-- Easy to understand and edit XML configuration.
+- Easy to understand and edit YAML configuration.
 
 Client
 ------
