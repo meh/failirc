@@ -17,8 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-name    'wordfilter'
-version '0.0.1'
+version    '0.0.1'
+identifier 'wordfilter'
 
 on :message, priority: -1 do |chain=:input, from, to, message|
 

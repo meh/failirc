@@ -19,11 +19,11 @@
 
 require 'shortie'
 
-version '0.0.1'
+version    '0.0.1'
+identifier 'shorten'
 
 class Shortie::Service
 	singleton_memoize :find_by_key
-	memoize           :shorten
 end
 
 on :message, priority: -100 do |chain=:input, from, to, message|

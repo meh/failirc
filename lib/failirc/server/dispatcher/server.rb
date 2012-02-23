@@ -70,11 +70,11 @@ class Server
 	end
 
 	def ssl?; @options[:ssl];  end
-	def host; @options[:name] || @options[:bind]; end
+	def host; @options[:bind]; end
 	def port; @options[:port]; end
 
-	def to_s
-		"#{host}/#{port}"
+	def to_s (up = false)
+		up ? @server.to_s : "#{host}/#{port}"
 	end
 end
 

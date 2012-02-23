@@ -123,7 +123,7 @@ class Server
 		@options[:server][:name] || 'failirc'
 	end
 
-	def to_s
+	def to_s (*)
 		host
 	end
 end
