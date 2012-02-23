@@ -45,7 +45,7 @@ on :start do |server|
   @clients    = {}
   @servers    = {}
 
-  [:clients, :servers, :channels].each {|name|
+  %w[clients servers channels].each {|name|
     mod = self
 
     server.define_singleton_method name do
@@ -56,36 +56,28 @@ on :start do |server|
   server.extend Base::Incoming
   server.extend Base::Server
 
-  Thread.new {
-    next
+	server.set_interval((options[:misc]['ping timeout'].to_f rescue 60)) {
+		@mutex.synchronize {
+			# people who didn't answer with a PONG have to YIFF IN HELL.
+			@pinged_out.each {|thing|
+				thing.disconnect 'Ping timeout'
+			}
 
-    while server.running?
-      @mutex.synchronize {
-        # time to ping non active users
-        @to_ping.each {|thing|
-          @pinged_out << thing
+			@pinged_out.clear
 
-          unless thing.incoming?
-            thing.send "PING :#{server.host}"
-          end
-        }
+			# time to ping non active users
+			@to_ping.each {|thing|
+				@pinged_out << thing
 
-        # clear and refill the hash of clients to ping with all the connected clients
-        @to_ping.clear
-        @to_ping.insert(-1, *server.dispatcher.clients)
-      }
+				unless thing.incoming?
+					thing.send_message "PING :#{server.host}"
+				end
+			}
 
-      sleep((options[:misc]['ping timeout'].to_f rescue 60))
-
-      @mutex.synchronize {
-        # people who didn't answer with a PONG have to YIFF IN HELL.
-        @pinged_out.each {|thing|
-          thing.disconnect 'Ping timeout'
-        }
-
-        @pinged_out.clear
-      }
-    end
+			# clear and refill the hash of clients to ping with all the connected clients
+			@to_ping.clear
+			@to_ping.insert(-1, *server.dispatcher.clients)
+		}
   }
 end
 
@@ -135,8 +127,8 @@ input do before priority: -10001 do |event, thing, string|
     string.force_encoding('ASCII-8BIT')
 
     string.encode!('UTF-8',
-      :invalid => :replace,
-      :undef   => :replace
+      invalid: :replace,
+      undef:   :replace
     )
   end
 end end
@@ -215,12 +207,12 @@ input {
 
     # if the client tries to do something without having registered, kill it with fire
     if thing.incoming? && !event.alias?(:PASS) && !event.alias?(:NICK) && !event.alias?(:USER)
-      thing.send ERR_NOTREGISTERED
+      thing.send_message ERR_NOTREGISTERED
 
       skip
     # if the client tries to reregister, kill it with fire
     elsif (event.alias?(:PASS) || event.alias?(:USER)) && !thing.incoming?
-      thing.send ERR_ALREADYREGISTRED
+      thing.send_message ERR_ALREADYREGISTRED
 
       skip
     end
@@ -229,11 +221,11 @@ input {
   default do |event, thing, string|
     whole, command = string.match(/^([^ ]+)/).to_a
 
-    thing.send ERR_UNKNOWNCOMMAND, command
+    thing.send_message ERR_UNKNOWNCOMMAND, command
   end
 
   observe :error do |thing, message, type=nil|
-    thing.send case type
+    thing.send_message case type
       when :close then "Closing Link: #{thing.nick}[#{thing.ip}] (#{message})"
       else             "ERROR :#{message}"
     end
@@ -244,16 +236,16 @@ input {
 
     if !whole || message.empty?
       thing.away = false
-      thing.send RPL_UNAWAY
+      thing.send_message RPL_UNAWAY
     else
       thing.away = message
-      thing.send RPL_NOWAWAY
+      thing.send_message RPL_NOWAWAY
     end
   end
 
   # this method sends a MOTD string in an RFC compliant way
   def motd (thing, string=nil)
-    thing.send RPL_MOTDSTART
+    thing.send_message RPL_MOTDSTART
 
     options[:misc][:motd].interpolate(binding).split(/\n/).each {|line|
       offset = 0
@@ -275,11 +267,11 @@ input {
           next
         end
 
-        thing.send RPL_MOTD, part.strip
+        thing.send_message RPL_MOTD, part.strip
       end
     }
 
-    thing.send RPL_ENDOFMOTD
+    thing.send_message RPL_ENDOFMOTD
   end
 
   # This method does some checks trying to register the connection, various checks
@@ -301,10 +293,10 @@ input {
 
       server.fire :registered, client
 
-      client.send RPL_WELCOME, client
-      client.send RPL_HOSTEDBY, client
-      client.send RPL_SERVCREATEDON
-      client.send RPL_SERVINFO,
+      client.send_message RPL_WELCOME, client
+      client.send_message RPL_HOSTEDBY, client
+      client.send_message RPL_SERVCREATEDON
+      client.send_message RPL_SERVINFO,
         client:  Support::Modes::Client,
         channel: Support::Modes::Channel
 
@@ -313,7 +305,7 @@ input {
       }.join(' ')
 
       unless client.modes.empty?
-        client.send ":#{server} MODE #{client.nick} #{client.modes}"
+        client.send_message ":#{server} MODE #{client.nick} #{client.modes}"
       end
 
       motd(client)
@@ -328,7 +320,7 @@ input {
     whole, password = string.match(/PASS\s+(?::)?(.*)$/i).to_a
 
     if !password
-      thing.send ERR_NEEDMOREPARAMS, :PASS
+      thing.send_message ERR_NEEDMOREPARAMS, :PASS
       next
     end
 
@@ -352,7 +344,7 @@ input {
     whole, user, real_name = string.match(/USER\s+([^ ]+)\s+[^ ]+\s+[^ ]+\s+:(.*)$/i).to_a
 
     if !real_name
-      thing.send :numeric, ERR_NEEDMOREPARAMS, :USER
+      thing.send_message :numeric, ERR_NEEDMOREPARAMS, :USER
     else
       thing.temporary.user      = user
       thing.temporary.real_name = real_name
@@ -374,13 +366,13 @@ input {
     end
 
     if @nicks.member?(nick)
-      thing.send ERR_NICKNAMEINUSE, nick
+      thing.send_message ERR_NICKNAMEINUSE, nick
 
       return false
     end
 
     if !(eval(options[:misc]['allowed nick']) rescue false) || nick.downcase == 'anonymous'
-      thing.send ERR_ERRONEUSNICKNAME, nick
+      thing.send_message ERR_ERRONEUSNICKNAME, nick
 
       return false
     end
@@ -394,7 +386,7 @@ input {
     whole, from, nick = string.match(/^(?::(.+?)\s+)?NICK\s+(?::)?(.+)$/i).to_a
 
     # no nickname was passed, so tell the user is a faggot
-    thing.send ERR_NONICKNAMEGIVEN and return unless nick
+    thing.send_message ERR_NONICKNAMEGIVEN and return unless nick
 
     @mutex.synchronize {
       if thing.incoming?
@@ -420,7 +412,7 @@ input {
 
       thing.channels.each_value {|channel|
         if channel.modes.no_nick_change? && !channel.user(thing).is_level_enough?('+')
-          thing.send ERR_NONICKCHANGE, channel.name
+          thing.send_message ERR_NONICKCHANGE, channel.name
 
           throw :no_nick_change
         end
@@ -439,9 +431,9 @@ input {
       }
 
       if thing.channels.empty?
-        thing.send ":#{mask} NICK :#{nick}"
+        thing.send_message ":#{mask} NICK :#{nick}"
       else
-        thing.channels.clients.send ":#{mask} NICK :#{nick}"
+        thing.channels.clients.send_message ":#{mask} NICK :#{nick}"
       end
     } }
   end
@@ -451,18 +443,18 @@ input {
   on :ping do |thing, string|
     whole, what = string.match(/PING\s+(.*)$/i).to_a
 
-    thing.send ERR_NOORIGIN and next unless whole
+    thing.send_message ERR_NOORIGIN and next unless whole
 
-    thing.send ":#{server.host} PONG #{server.host} :#{what}"
+    thing.send_message ":#{server.host} PONG #{server.host} :#{what}"
   end
 
   on :pong do |thing, string|
     whole, what = string.match(/PONG\s+(?::)?(.*)$/i).to_a
 
-    thing.send ERR_NOORIGIN and next unless whole
+    thing.send_message ERR_NOORIGIN and next unless whole
 
     if what != server.host
-      thing.send ERR_NOSUCHSERVER, what
+      thing.send_message ERR_NOSUCHSERVER, what
     end
   end
 
@@ -471,7 +463,7 @@ input {
 
     whole, encoding, nick = string.match(/ENCODING\s+(.+?)(?:\s+(.+))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :ENCODING and next unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :ENCODING and next unless whole
 
     if !Encoding.name_list.include?(encoding)
       server.fire :error, thing, "#{encoding} is not a valid encoding."
@@ -484,10 +476,10 @@ input {
           client.encoding                  = encoding
           client.temporary.encoding_tested = false
         else
-          thing.send :numeric, ERR_NOSUCHNICK, nick
+          thing.send_message :numeric, ERR_NOSUCHNICK, nick
         end
       else
-        thing.send :numeric, ERR_NOPRIVILEGES
+        thing.send_message :numeric, ERR_NOPRIVILEGES
       end
     else
       thing.encoding                  = encoding
@@ -515,12 +507,12 @@ input {
     whole, receiver, message = string.match(/PRIVMSG\s+(.*?)(?:\s+:(.*))?$/i).to_a
 
     if !receiver
-      thing.send ERR_NORECIPIENT, :PRIVMSG
+      thing.send_message ERR_NORECIPIENT, :PRIVMSG
       return
     end
 
     if !message
-      thing.send ERR_NOTEXTTOSEND
+      thing.send_message ERR_NOTEXTTOSEND
       return
     end
 
@@ -532,19 +524,19 @@ input {
       channel = @channels[receiver]
 
       if !channel
-        thing.send ERR_NOSUCHNICK, receiver
+        thing.send_message ERR_NOSUCHNICK, receiver
         return
       end
 
       thing = channel.user(thing) || thing
 
       if channel.modes.moderated? && thing.can.talk?
-        thing.send ERR_YOUNEEDVOICE, channel.name
+        thing.send_message ERR_YOUNEEDVOICE, channel.name
         return
       end
 
       if channel.banned?(thing) && !channel.exception?(thing)
-        thing.send ERR_YOUAREBANNED, channel.name
+        thing.send_message ERR_YOUAREBANNED, channel.name
         return
       end
 
@@ -552,7 +544,7 @@ input {
         server.fire :send, thing, channel.level(level), message
       else
         if @channels[receiver].modes.no_external_messages?
-          thing.send ERR_NOEXTERNALMESSAGES, channel.name
+          thing.send_message ERR_NOEXTERNALMESSAGES, channel.name
         else
           server.fire :send, thing, channel.level(level), message
         end
@@ -561,7 +553,7 @@ input {
       client = @clients[receiver]
 
       if !client
-        thing.send ERR_NOSUCHNICK, receiver
+        thing.send_message ERR_NOSUCHNICK, receiver
       else
         server.fire :send, thing, client, message
       end
@@ -577,7 +569,7 @@ input {
       end
 
       if to.modes.no_colors? && message.include("\x03")
-        from.send ERR_NOCOLORS, to.name
+        from.send_message ERR_NOCOLORS, to.name
         return
       end
       
@@ -608,7 +600,7 @@ input {
       return
     end
 
-    to.send ":#{mask} PRIVMSG #{name} :#{message}"
+    to.send_message ":#{mask} PRIVMSG #{name} :#{message}"
   end
 
   on :notice do |thing, string|
@@ -666,7 +658,7 @@ input {
       return
     end
 
-    to.send :raw, ":#{from} NOTICE #{level}#{name} :#{message}"
+    to.send_message :raw, ":#{from} NOTICE #{level}#{name} :#{message}"
   end
 
   observe :ctcp do |chain=:input, kind=:message, from, to, type, message|
@@ -674,7 +666,7 @@ input {
 
     if to.is_a?(Channel)
       if to.modes.no_ctcps?
-        from.send ERR_NOCTCPS, to.name
+        from.send_message ERR_NOCTCPS, to.name
 
         skip
       end
@@ -718,7 +710,7 @@ input {
       when :notice  then :NOTICE
     end
 
-    to.send ":#{mask} #{kind} #{name} :\x01#{text}\x01"
+    to.send_message ":#{mask} #{kind} #{name} :\x01#{text}\x01"
   end
 
   on :join do |thing, string|
@@ -726,7 +718,7 @@ input {
 
     whole, channels, passwords = string.match(/JOIN\s+(.+?)(?:\s+(.+))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :JOIN and return unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :JOIN and return unless whole
 
     if channels == '0'
       thing.channels.each_value {|channel|
@@ -761,7 +753,7 @@ input {
       end
 
       if !channel.is_valid_channel?
-        thing.send ERR_BADCHANMASK, channel
+        thing.send_message ERR_BADCHANMASK, channel
         return
       end
 
@@ -775,7 +767,7 @@ input {
 
       if channel.modes.limit?
         if channel.users.length >= channel.modes.limit.value
-          thing.send ERR_CHANNELISFULL, channel.name
+          thing.send_message ERR_CHANNELISFULL, channel.name
 
           if channel.modes.redirect?
             server.fire :join, thing, channel.modes.redirect.value
@@ -786,22 +778,22 @@ input {
       end
 
       if channel.modes.ssl_only? && !thing.modes.ssl?
-        thing.send ERR_SSLREQUIRED, channel.name
+        thing.send_message ERR_SSLREQUIRED, channel.name
         return
       end
 
       if channel.modes.password? && password != channel.modes.password.value
-        thing.send ERR_BADCHANNELKEY, channel.name
+        thing.send_message ERR_BADCHANNELKEY, channel.name
         return
       end
   
       if channel.modes.invite_only? && !channel.invited?(thing, true)
-        thing.send ERR_INVITEONLYCHAN, channel.name
+        thing.send_message ERR_INVITEONLYCHAN, channel.name
         return
       end
   
       if channel.banned?(thing) && !channel.exception?(thing) && !channel.invited?(thing)
-        thing.send ERR_BANNEDFROMCHAN, channel.name
+        thing.send_message ERR_BANNEDFROMCHAN, channel.name
         return
       end
     }
@@ -827,7 +819,7 @@ input {
       mask = user.mask
     end
 
-    user.channel.send ":#{mask} JOIN :#{user.channel}"
+    user.channel.send_message ":#{mask} JOIN :#{user.channel}"
 
     if !user.channel.topic.nil?
       server.dispatch user.client, "TOPIC #{user.channel}"
@@ -839,7 +831,7 @@ input {
   on :part do |thing, string|
     whole, channels, message = string.match(/PART\s+(.+?)(?:\s+:(.*))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :PART and next unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :PART and next unless whole
 
     channels.split(/,/).each {|name|
       server.fire :part, thing, name, message
@@ -854,9 +846,9 @@ input {
     channel = @channels[name]
 
     if !channel
-      thing.send ERR_NOSUCHCHANNEL, name
+      thing.send_message ERR_NOSUCHCHANNEL, name
     elsif !thing.is_on_channel?(name)
-      thing.send ERR_NOTONCHANNEL, name
+      thing.send_message ERR_NOTONCHANNEL, name
     else
       server.fire :parted, channel.user(thing), message
     end
@@ -871,7 +863,7 @@ input {
       mask = user.mask
     end
 
-    user.channel.send ":#{mask} PART #{user.channel} :#{text}"
+    user.channel.send_message ":#{mask} PART #{user.channel} :#{text}"
 
     @mutex.synchronize {
       user.channel.delete(user)
@@ -886,24 +878,24 @@ input {
   on :kick do |thing, string|
     whole, channel, user, message = string.match(/KICK\s+(.+?)\s+(.+?)(?:\s+:(.*))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :KICK and return unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :KICK and return unless whole
 
     server.fire :kick, thing, channel, user, message
   end
 
   observe :kick do |from, channel, user, message|
     if !channel.is_valid_channel?
-      from.send ERR_BADCHANMASK, channel
+      from.send_message ERR_BADCHANMASK, channel
       return
     end
 
     if !@channels[channel]
-      from.send ERR_NOSUCHCHANNEL, channel
+      from.send_message ERR_NOSUCHCHANNEL, channel
       return
     end
 
     if !@clients[user]
-      from.send ERR_NOSUCHNICK, user
+      from.send_message ERR_NOSUCHNICK, user
       return
     end
 
@@ -911,7 +903,7 @@ input {
     user    = channel[user]
 
     if !user
-      from.send ERR_NOTONCHANNEL, channel.name
+      from.send_message ERR_NOTONCHANNEL, channel.name
       return
     end
 
@@ -921,17 +913,17 @@ input {
 
     if from.can.kick?
       if channel.modes.no_kicks?
-        from.send ERR_NOKICKS
+        from.send_message ERR_NOKICKS
       else
         server.fire :kicked, from, user, message
       end
     else
-      from.send ERR_CHANOPRIVSNEEDED, channel.name
+      from.send_message ERR_CHANOPRIVSNEEDED, channel.name
     end
   end
 
   observe :kicked do |from, user, message|
-    user.channel.send ":#{from.mask} KICK #{user.channel} #{user.nick} :#{message}"
+    user.channel.send_message ":#{from.mask} KICK #{user.channel} #{user.nick} :#{message}"
 
     @mutex.synchronize {
       user.channel.delete(user)
@@ -946,13 +938,13 @@ input {
   on :invite do |thing, string|
     whole, nick, channel = string.match(/INVITE\s+(.+?)\s+(.+?)$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :INVITE and next unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :INVITE and next unless whole
 
     nick.strip!
     channel.strip!
 
     if !@clients[nick]
-      thing.send ERR_NOSUCHNICK, nick
+      thing.send_message ERR_NOSUCHNICK, nick
       return
     end
 
@@ -960,17 +952,17 @@ input {
       from = @channels[channel].user(thing) || thing
 
       if !from.can.invite? && !from.is_on_channel?(channel)
-        thing.send ERR_NOTONCHANNEL, channel
+        thing.send_message ERR_NOTONCHANNEL, channel
         return
       end
 
       if !from.can.invite?
-        thing.send ERR_CHANOPRIVSNEEDED, channel
+        thing.send_message ERR_CHANOPRIVSNEEDED, channel
         return
       end
 
       if @channels[channel].users[nick]
-        thing.send ERR_USERONCHANNEL,
+        thing.send_message ERR_USERONCHANNEL,
           nick:    nick,
           channel: channel
 
@@ -978,7 +970,7 @@ input {
       end
 
       if @channels[channel].modes.no_invites?
-        thing.send ERR_NOINVITE, channel
+        thing.send_message ERR_NOINVITE, channel
         return
       end
     end
@@ -986,18 +978,18 @@ input {
     client = @clients[nick]
 
     if client.away?
-      thing.send RPL_AWAY, client
+      thing.send_message RPL_AWAY, client
     end
 
     server.fire :invite, thing, client, channel
   end
 
   observe :invite do |from, client, channel|
-    from.send RPL_INVITING,
+    from.send_message RPL_INVITING,
       nick:    client.nick,
       channel: channel
 
-    client.send ":#{from.mask} INVITE #{client.nick} :#{channel}"
+    client.send_message ":#{from.mask} INVITE #{client.nick} :#{channel}"
 
     server.fire :invited, from, client, channel
   end
@@ -1012,10 +1004,10 @@ input {
   on :knock do |thing, string|
     whole, channel, message = string.match(/KNOCK\s+(.+?)(?:\s+:(.*))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :KNOCK and return unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :KNOCK and return unless whole
 
     if !@channels[channel]
-      thing.send ERR_NOKNOCK,
+      thing.send_message ERR_NOKNOCK,
         channel: channel,
         reason:  'Channel does not exist!'
 
@@ -1025,7 +1017,7 @@ input {
     channel = @channels[channel]
 
     if !channel.modes.invite_only?
-      thing.send ERR_NOKNOCK,
+      thing.send_message ERR_NOKNOCK,
         channel: channel.name,
         reason:  'Channel is not invite only!'
 
@@ -1033,7 +1025,7 @@ input {
     end
 
     if channel.modes.no_knock?
-      thing.send ERR_NOKNOCK,
+      thing.send_message ERR_NOKNOCK,
         channel: channel.name,
         reason:  'No knocks are allowed! (+K)'
 
@@ -1051,7 +1043,7 @@ input {
   on :names do |thing, string|
     whole, channel = string.match(/NAMES\s+(.*)$/i).to_a
 
-    thing.send RPL_ENDOFNAMES, thing.nick and return unless whole
+    thing.send_message RPL_ENDOFNAMES, thing.nick and return unless whole
 
     if channel = thing.channels[channel.strip]
       thing = channel.user(thing)
@@ -1070,23 +1062,23 @@ input {
         }.compact.join(' ')
       end
 
-      thing.send RPL_NAMREPLY,
+      thing.send_message RPL_NAMREPLY,
         channel: channel.name,
         users:   users
     end
 
-    thing.send RPL_ENDOFNAMES, channel
+    thing.send_message RPL_ENDOFNAMES, channel
   end
 
   on :topic do |thing, string|
     whole, channel, topic = string.match(/TOPIC\s+(.*?)(?:\s+:(.*))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :TOPIC and return unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :TOPIC and return unless whole
 
     channel.strip!
 
     if !@channels[channel] || (@channels[channel].modes.secret? && !thing.is_on_channel?(channel) && !thing.can.see_secrets?)
-      thing.send ERR_NOSUCHCHANNEL, channel
+      thing.send_message ERR_NOSUCHCHANNEL, channel
       return
     end
 
@@ -1096,22 +1088,22 @@ input {
       server.fire :topic, thing, channel, topic
     else
       if !channel.topic.nil?
-        thing.send RPL_TOPIC, channel.topic
-        thing.send RPL_TOPICSETON, channel.topic
+        thing.send_message RPL_TOPIC, channel.topic
+        thing.send_message RPL_TOPICSETON, channel.topic
       else
-        thing.send RPL_NOTOPIC, channel
+        thing.send_message RPL_NOTOPIC, channel
       end
     end
   end
 
   observe :topic do |from, channel, topic|
     if !from.can.change_topic? && !from.is_on_channel?(channel) && !from.modes.ircop?
-      from.send :numeric, ERR_NOTONCHANNEL, channel
+      from.send_message :numeric, ERR_NOTONCHANNEL, channel
       return
     end
 
     if channel.modes.topic_lock? && !channel.user(from).can.change_topic?
-      from.send ERR_CHANOPRIVSNEEDED, channel
+      from.send_message ERR_CHANOPRIVSNEEDED, channel
     else
       if channel.modes.anonymous?
         channel.topic = Mask.new('anonymous', 'anonymous', 'anonymous.'), topic
@@ -1119,7 +1111,7 @@ input {
         channel.topic = from, topic
       end
       
-      channel.send ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic}"
+      channel.send_message ":#{channel.topic.set_by} TOPIC #{channel} :#{channel.topic}"
     end
   end
 
@@ -1127,7 +1119,7 @@ input {
   on :mode do |thing, string|
     whole, name, value = string.match(/MODE\s+([^ ]+)(?:\s+(?::)?(.*))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :MODE and return unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :MODE and return unless whole
 
     # long options, extended protocol
     if value && value.match(/^=\s+(.*)$/)
@@ -1135,7 +1127,7 @@ input {
         if channel = @channels[name]
           server.fire :mode, channel.user(thing) || thing, channel, value
         else
-          thing.send ERR_NOSUCHCHANNEL, name
+          thing.send_message ERR_NOSUCHCHANNEL, name
         end
       elsif match = name.match(/^([^@])@(.*)$/)
         user    = match[1]
@@ -1148,21 +1140,21 @@ input {
             if tmp = channel.user(tmp)
               server.fire :mode, thing, tmp, value
             else
-              thing.send ERR_USERNOTINCHANNEL,
+              thing.send_message ERR_USERNOTINCHANNEL,
                 nick:    user,
                 channel: channel
             end
           else
-            thing.send ERR_NOSUCHNICK, user
+            thing.send_message ERR_NOSUCHNICK, user
           end
         else
-          thing.send ERR_NOSUCHCHANNEL, channel
+          thing.send_message ERR_NOSUCHCHANNEL, channel
         end
       else
         if client = @clients[name]
           server.fire :mode, thing, client, value
         else
-          thing.send ERR_NOSUCHNICK, name
+          thing.send_message ERR_NOSUCHNICK, name
         end
       end
     # usual shit
@@ -1170,8 +1162,8 @@ input {
       if name.is_valid_channel?
         if channel = @channels[name]
           if !value || value.empty?
-            thing.send RPL_CHANNELMODEIS, channel
-            thing.send RPL_CHANCREATEDON, channel
+            thing.send_message RPL_CHANNELMODEIS, channel
+            thing.send_message RPL_CHANCREATEDON, channel
           else
             if thing.is_on_channel?(name)
               thing = thing.channels[name].user(thing)
@@ -1180,13 +1172,13 @@ input {
             server.fire :mode, thing, channel, value
           end
         else
-          thing.send ERR_NOSUCHCHANNEL, name
+          thing.send_message ERR_NOSUCHCHANNEL, name
         end
       else
         if client = @clients[name]
           server.fire :mode, thing, client, value
         else
-          thing.send ERR_NOSUCHNICK, name
+          thing.send_message ERR_NOSUCHNICK, name
         end
       end
     end
@@ -1252,7 +1244,7 @@ input {
           string << " #{output[:values].join(' ')}"
         end
 
-        thing.send ":#{from} MODE #{name} #{string}"
+        thing.send_message ":#{from} MODE #{name} #{string}"
       end
     end
   end
@@ -1277,17 +1269,17 @@ input {
         if from.can.change_anonymous_mode?
           return if channel.modes.anonymous? == (type == :+)
 
-          channel.modes.send type, :anonymous
+          channel.modes.send_message type, :anonymous
           output[:modes].push(:a)
         end
 
       when :b
         if values.empty?
           channel.bans.each {|ban|
-            from.send RPL_BANLIST, ban
+            from.send_message RPL_BANLIST, ban
           }
           
-          from.send  RPL_ENDOFBANLIST, channel.name
+          from.send_message  RPL_ENDOFBANLIST, channel.name
           return
         end
 
@@ -1311,38 +1303,38 @@ input {
             output[:values].push(mask.to_s)
           end
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :c
         if from.can.change_no_colors_mode?
           return if channel.modes.no_colors? == (type == :+)
 
-          channel.modes.send type, :no_colors
+          channel.modes.send_message type, :no_colors
 
           output[:modes].push(:c)
         else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :C
         if from.can.change_no_ctcps_mode?
           return if channel.modes.no_ctcps? == (type == :+)
 
-          channel.modes.send type, :no_ctcps
+          channel.modes.send_message type, :no_ctcps
 
           output[:modes].push(:C)
         else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :e
         if values.empty?
           channel.exceptions.each {|exception|
-            from.send RPL_EXCEPTIONLIST, exception
+            from.send_message RPL_EXCEPTIONLIST, exception
           }
           
-          from.send RPL_ENDOFEXCEPTIONLIST, channel.name
+          from.send_message RPL_ENDOFEXCEPTIONLIST, channel.name
           return
         end
 
@@ -1366,7 +1358,7 @@ input {
             output[:values].push(mask.to_s)
           end
         else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :h
@@ -1374,38 +1366,38 @@ input {
           value = values.shift
 
           if !value || !(user = channel.users[value])
-            from.send ERR_NOSUCHNICK, value
+            from.send_message ERR_NOSUCHNICK, value
             return
           end
 
           return if user.level.halfop? == (type == :+)
 
-          user.level.send type, :halfop
+          user.level.send_message type, :halfop
 
           output[:modes].push(:h)
           output[:values].push(value)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :i
         if from.can.change_invite_only_mode?
           return if channel.modes.invite_only? == (type == :+)
 
-          channel.modes.send type, :invite_only
+          channel.modes.send_message type, :invite_only
 
           output[:modes].push(:i)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :I
         if values.empty?
           channel.invites.each {|invitation|
-            from.send RPL_INVITELIST, invitation
+            from.send_message RPL_INVITELIST, invitation
           }
           
-          from.send RPL_ENDOFINVITELIST, channel.name
+          from.send_message RPL_ENDOFINVITELIST, channel.name
           return
         end
 
@@ -1429,7 +1421,7 @@ input {
             output[:values].push(mask.to_s)
           end
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :k
@@ -1451,19 +1443,19 @@ input {
             output[:values].push(password)
           end
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :K
         if from.can.change_no_knock_mode?
           return if channel.modes.no_knocks? == (type == :+)
 
-          channel.modes.send type, :no_knocks
+          channel.modes.send_message type, :no_knocks
 
           output[:modes].push(:K)
            
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :l
@@ -1485,7 +1477,7 @@ input {
             output[:modes].push(:l)
           end
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :L
@@ -1507,40 +1499,40 @@ input {
             output[:modes].push(:L)
           end
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :m
         if from.can.change_moderated_mode?
           return if channel.modes.moderated? == (type == :+)
 
-          channel.modes.send type, :moderated
+          channel.modes.send_message type, :moderated
 
           output[:modes].push(:m)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :n
         if from.can.change_no_external_messages_mode?
           return if channel.modes.no_external_messages? == (type == :+)
 
-          channel.modes.send type, :no_external_messages
+          channel.modes.send_message type, :no_external_messages
 
           output[:modes].push(:n)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :N
         if from.can.change_no_nick_change_mode?
           return if channel.modes.no_nick_change? == (type == :+)
 
-          channel.send type, :no_nick_change
+          channel.send_message type, :no_nick_change
 
           output[:modes].push(:N)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :o
@@ -1548,84 +1540,84 @@ input {
           value = values.shift
 
           if !value || !(user = channel.user(value))
-            from.send ERR_NOSUCHNICK, value
+            from.send_message ERR_NOSUCHNICK, value
             return
           end
 
           return if user.level.operator? == (type == :+)
 
-          user.level.send type, :operator
+          user.level.send_message type, :operator
 
           output[:modes].push(:o)
           output[:values].push(value)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :p
         if from.can.change_private_mode?
           return if channel.modes.secret? || channel.modes.private? == (type == :+)
 
-          channel.modes.send type, :private
+          channel.modes.send_message type, :private
 
           output[:modes].push(:p)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :Q
         if from.can.change_no_kicks_mode?
           return if channel.modes.no_kicks? == (type == :+)
 
-          channel.modes.send type, :no_kicks
+          channel.modes.send_message type, :no_kicks
 
           output[:modes].push(:Q)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :s
         if from.can.change_secret_mode?
           return if channel.modes.private? || channel.modes.secret? == (type == :+)
 
-          channel.modes.send type, :secret
+          channel.modes.send_message type, :secret
 
           output[:modes].push(:s)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :S
         if from.can.change_strip_colors_mode?
           return if channel.modes.strip_colors? == (type == :+)
 
-          channel.modes.send type, :strip_colors
+          channel.modes.send_message type, :strip_colors
 
           output[:modes].push(:S)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :t
         if from.can.change_topic_lock_mode?
           return if channel.modes.topic_lock? == (type == :+)
 
-          channel.modes.send type, :topic_lock
+          channel.modes.send_message type, :topic_lock
 
           output[:modes].push(:t)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :u
         if from.can.change_auditorium_mode?
           return if channel.modes.auditorium? == (type == :+)
 
-          channel.modes.send type, :auditorium
+          channel.modes.send_message type, :auditorium
 
           output[:modes].push(:u)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :v
@@ -1633,29 +1625,29 @@ input {
           value = values.shift
 
           if !value || !(user = channel.users[value])
-            from.send ERR_NOSUCHNICK, value
+            from.send_message ERR_NOSUCHNICK, value
             return
           end
 
           return if user.level.voice? == (type == :+)
 
-          user.level.send type, :voice
+          user.level.send_message type, :voice
 
           output[:modes].push(:v)
           output[:values].push(value)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :V
         if from.can.change_no_invites_mode?
           return if channel.modes.no_invites? == (type == :+)
 
-          channel.modes.send type, :no_invites
+          channel.modes.send_message type, :no_invites
 
           output[:modes].push(:V)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :x
@@ -1663,18 +1655,18 @@ input {
           value = values.shift
 
           if !value || !(user = channel.users[value])
-            from.send ERR_NOSUCHNICK, value
+            from.send_message ERR_NOSUCHNICK, value
             return
           end
 
           return if user.level.owner? == (type == :+)
 
-          user.level.send type, :owner
+          user.level.send_message type, :owner
 
           output[:modes].push(:x)
           output[:values].push(value)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :y
@@ -1682,18 +1674,18 @@ input {
           value = values.shift
 
           if !value || !(user = channel.users[value])
-            from.send ERR_NOSUCHNICK, value
+            from.send_message ERR_NOSUCHNICK, value
             return
           end
 
           return if user.level.admin? == (type == :+)
 
-          user.level.send type, :admin
+          user.level.send_message type, :admin
 
           output[:modes].push(:y)
           output[:values].push(value)
         else
-          from.send ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message ERR_CHANOPRIVSNEEDED, channel.name
         end
 
       when :z
@@ -1708,7 +1700,7 @@ input {
 
               channel.modes + :ssl
             rescue
-              from.send :numeric, ERR_ALLMUSTUSESSL
+              from.send_message :numeric, ERR_ALLMUSTUSESSL
               return
             end
           else
@@ -1717,7 +1709,7 @@ input {
 
           output[:modes].push(:z)
         else
-          from.send :numeric, ERR_CHANOPRIVSNEEDED, channel.name
+          from.send_message :numeric, ERR_CHANOPRIVSNEEDED, channel.name
         end
       end
     elsif thing.is_a?(Client)
@@ -1731,13 +1723,13 @@ input {
   on :who do |thing, string|
     whole, name, operator = string.match(/WHO\s+(.*?)(?:\s+(o))?$/i).to_a
 
-    thing.send RPL_ENDOFWHO and return unless whole
+    thing.send_message RPL_ENDOFWHO and return unless whole
 
     name ||= '*'
 
     if name.is_valid_channel? && (channel = @channels[name])
       if channel.modes.anonymous?
-        thing.send RPL_WHOREPLY,
+        thing.send_message RPL_WHOREPLY,
           channel: channel.name,
 
           user: {
@@ -1751,7 +1743,7 @@ input {
           hops:   0
       else
         channel.users.each_value {|user|
-          thing.send RPL_WHOREPLY,
+          thing.send_message RPL_WHOREPLY,
             channel: channel.name,
 
             user: {
@@ -1768,7 +1760,7 @@ input {
         }
       end
     elsif client = @clients[name]
-       thing.send RPL_WHOREPLY,
+       thing.send_message RPL_WHOREPLY,
         channel: '*',
 
         user: {
@@ -1782,13 +1774,13 @@ input {
         hops:   0
     end
 
-    thing.send RPL_ENDOFWHO, name
+    thing.send_message RPL_ENDOFWHO, name
   end
 
   on :whois do |thing, string|
     matches = string.match(/WHOIS\s+(.+?)(?:\s+(.+?))?$/i)
 
-    thing.send ERR_NEEDMOREPARAMS, :WHOIS and return unless matches
+    thing.send_message ERR_NEEDMOREPARAMS, :WHOIS and return unless matches
 
     names  = (matches[2] || matches[1]).strip.split(/,/)
     target = matches[2] ? matches[1].strip : nil
@@ -1800,19 +1792,19 @@ input {
 
   observe :whois do |thing, name, target=nil|
     unless client = @clients[name]
-      thing.send ERR_NOSUCHNICK, name
+      thing.send_message ERR_NOSUCHNICK, name
       return
     end
 
-    thing.send RPL_WHOISUSER, client
+    thing.send_message RPL_WHOISUSER, client
 
     if thing.modes.ircop?
-      thing.send :numeric, RPL_WHOISMODES, client
-      thing.send :numeric, RPL_WHOISCONNECTING, client
+      thing.send_message :numeric, RPL_WHOISMODES, client
+      thing.send_message :numeric, RPL_WHOISCONNECTING, client
     end
 
     if !client.channels.empty?
-      thing.send RPL_WHOISCHANNELS,
+      thing.send_message RPL_WHOISCHANNELS,
         nick: client.nick,
 
         channels: client.channels.map {|(name, channel)|
@@ -1822,34 +1814,34 @@ input {
         }.compact.join(' ')
     end
 
-    thing.send RPL_WHOISSERVER, client
+    thing.send_message RPL_WHOISSERVER, client
 
     if client.ssl?
-      thing.send RPL_USINGSSL, client
+      thing.send_message RPL_USINGSSL, client
     end
 
     if client.away?
-      thing.send RPL_AWAY, client
+      thing.send_message RPL_AWAY, client
     end
 
     if client.message
-      thing.send RPL_WHOISOPERATOR, client
+      thing.send_message RPL_WHOISOPERATOR, client
     end
 
-    thing.send RPL_WHOISIDLE, client
-    thing.send RPL_ENDOFWHOIS, client
+    thing.send_message RPL_WHOISIDLE, client
+    thing.send_message RPL_ENDOFWHOIS, client
   end
 
   on :whowas do |thing, string|
-    thing.send 'PHONE'
+    thing.send_message 'PHONE'
   end
 
   on :ison do |thing, string|
     whole, who = string.match(/ISON\s+(.+)$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :ISON and return unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :ISON and return unless whole
 
-    thing.send RPL_ISON, who.split(/\s+/).map {|nick|
+    thing.send_message RPL_ISON, who.split(/\s+/).map {|nick|
       nick if @clients[nick]
     }.compact.join(' ')
   end
@@ -1859,7 +1851,7 @@ input {
 
     channels = (channels || '').strip.split(/,/)
 
-    thing.send RPL_LISTSTART
+    thing.send_message RPL_LISTSTART
 
     if channels.empty?
       channels = @channels
@@ -1875,7 +1867,7 @@ input {
 
     channels.each_value {|channel|
       if !(channel.modes.secret? || channel.modes.private?) || thing.is_on_channel?(channel) || thing.can.see_secrets?
-        thing.send RPL_LIST,
+        thing.send_message RPL_LIST,
           name:  channel.name,
           users: channel.modes.anonymous? ? 1 : channel.users.length,
           modes: channel.modes.to_s.empty? ? '' : "[#{channel.modes.to_s}] ",
@@ -1883,11 +1875,11 @@ input {
       end
     }
 
-    thing.send RPL_LISTEND
+    thing.send_message RPL_LISTEND
   end
 
   on :version do |thing, string|
-    thing.send RPL_VERSION, options[:messages][:version].interpolate(binding)
+    thing.send_message RPL_VERSION, options[:messages][:version].interpolate(binding)
   end
 
   on :map do |thing, string|
@@ -1897,7 +1889,7 @@ input {
   on :oper do |thing, string|
     matches = string.match(/OPER\s+(.*?)(?:\s+(.+?))?$/i)
 
-    thing.send ERR_NEEDMOREPARAMS, :OPER and return unless matches
+    thing.send_message ERR_NEEDMOREPARAMS, :OPER and return unless matches
 
     password = matches[2] || matches[1]
     name     = (matches[2]) ? matches[1] : nil
@@ -1914,15 +1906,15 @@ input {
 
       thing.message = operator[:message] || 'is an IRC operator'
 
-      thing.send RPL_YOUREOPER
-      thing.send ":#{server} MODE #{thing.nick} #{thing.modes}"
+      thing.send_message RPL_YOUREOPER
+      thing.send_message ":#{server} MODE #{thing.nick} #{thing.modes}"
 
       server.fire :oper, true, thing, name, password
 
       return
     }
 
-    thing.send ERR_NOOPERHOST
+    thing.send_message ERR_NOOPERHOST
 
     server.fire :oper, false, thing, name, password
   end
@@ -1930,12 +1922,12 @@ input {
   on :kill do |thing, string|
     whole, target, message = string.match(/KILL\s+(.*?)(?:\s+:?(.*))?$/i).to_a
 
-    thing.send ERR_NEEDMOREPARAMS, :KILL and return unless whole
+    thing.send_message ERR_NEEDMOREPARAMS, :KILL and return unless whole
 
     client = @clients[target]
 
     if !client
-      thing.send ERR_NOSUCHNICK, nick
+      thing.send_message ERR_NOSUCHNICK, nick
       return
     end
 
@@ -1944,14 +1936,14 @@ input {
 
   observe :kill do |from, client, message=nil|
     if !from.can.kill?
-      from.send ERR_NOPRIVILEGES
+      from.send_message ERR_NOPRIVILEGES
       return
     end
 
     sender = from
     text   = options[:messages][:kill].interpolate(binding)
 
-    client.send ":#{client} QUIT :#{text}"
+    client.send_message ":#{client} QUIT :#{text}"
     client.disconnect text
   end
 
@@ -1968,7 +1960,7 @@ input {
     @mutex.synchronize {
       if thing.client?
         @nicks.delete(thing.nick)
-        
+
         @to_ping.delete(thing)
         @pinged_out.delete(thing)
 
@@ -1980,7 +1972,7 @@ input {
 
         thing.channels.clients.reject {|nick, client|
           client == ~thing
-        }.send ":#{thing.mask} QUIT :#{message}"
+        }.send_message ":#{thing.mask} QUIT :#{message}"
 
         thing.channels.each_value {|channel|
           channel.users.delete(thing.nick)

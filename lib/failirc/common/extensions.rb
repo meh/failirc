@@ -17,24 +17,15 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-require 'thread'
-require 'thread/extra'
 require 'forwardable'
-require 'versionub'
 require 'yaml'
 require 'call-me/memoize'
 require 'refining'
 require 'refr'
 require 'socket'
-require 'openssl'
+require 'fcntl'
 require 'timeout'
-require 'threadpool'
-
-begin
-	OpenSSL::SSL::SSLSocket.instance_method :read_nonblock
-rescue NameError
-	require 'openssl/nonblock'
-end
+require 'thread/extra'
 
 class Module
 	def scopes_for (name)

@@ -23,90 +23,89 @@ require 'failirc/server/dispatcher/client'
 module IRC; class Server
 
 class Dispatcher
-	attr_reader :server, :servers
+	attr_reader :server, :listens_on
 
 	def initialize (server)
 		@server = server
 
-		@servers = []
-		@pipes   = IO.pipe
+		@listens_on = []
 	end
+
+	def reset!
+		@clients = nil
+	end
+
+	def clients
+		@clients ||= @listens_on.reduce([]) {|result, server|
+			result.concat(server.clients)
+		}
+	end
+
+	def running?; @running; end
 
 	def start
 		@running = true
 
-		self.loop
+		@listens_on.each {|server|
+			server.start
+		}
 	end
 
 	def stop
-		return unless running?
-
-		@running = false
-
-		wakeup
+		@listens_on.each {|server|
+			server.stop
+		}
 	end
 
-	def running?
-		!!@running
-	end
+	def data_available
+		return if @working
 
-	def reset?
-		!!@reset
-	end
+		@working = true
 
-	def loop
-		self.do while running?
+		EM.next_tick {
+			if clients.any? { |c| c.handle }
+				EM.next_tick {
+					data_available
+				}
+			end
+
+			@working = false
+		}
 	end
 
 	def listen (options)
-		@servers.push(Dispatcher::Server.new(self, options))
-		wakeup
+		server = Server.new(@server, options)
 
-		IRC.debug "Starting listening on #{@servers.last.host}:#{@servers.last.port}#{' (SSL)' if @servers.last.ssl?}"
-	end
+		@listens_on.push server
 
-	def do
-		begin
-			reading, _, erroring = IO.select([@pipes.first] + clients + servers, nil, clients)
-		rescue Errno::EBADF
-			return
+		IRC.debug "Starting listening on #{server.host}:#{server.port}#{' (SSL)' if server.ssl?}"
+
+		if running?
+			EM.schedule {
+				server.start
+			}
 		end
+	end
 
-		return unless running? or reset?
-
-		erroring.each {|client|
-			client.disconnect 'Input/output error'
-		}
-
-		reading.each {|thing|
-			case thing
-				when Dispatcher::Server then thing.accept
-				when Dispatcher::Client then thing.receive
-				when IO                 then thing.read_nonblock(2048) rescue nil
-			end
-		}
-
-		clients.each {|client|
-			client.handle
+	def set_timeout (*args, &block)
+		EM.schedule {
+			EM.add_timer(*args, &block)
 		}
 	end
 
-	def clients
-		@reset = false
-
-		@clients ||= @servers.map {|s|
-			s.clients
-		}.flatten
+	def set_interval (*args, &block)
+		EM.schedule {
+			EM.add_periodic_timer(*args, &block)
+		}
 	end
 
-	def wakeup (options={})
-		if options[:reset]
-			@clients = nil
-			@reset   = true
-		end
-
-		@pipes.last.write '?'
+	def clear_timeout (what)
+		EM.schedule {
+			EM.cancel_timer(what)
+		}
 	end
+
+	alias clear_interval clear_timeout
 end
 
 end; end

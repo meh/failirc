@@ -31,7 +31,7 @@ class Module
           return what.const_get(name) if what.const_defined?(name)
         }
 
-        super
+        super(name)
       end
     }.tap {|klass|
       klass.class_eval {

@@ -18,44 +18,30 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-require 'rubygems'
+require 'optparse'
 require 'failirc/server'
 
-require 'getoptlong'
+options = {}
 
-args = GetoptLong.new(
-	['--version', '-v', GetoptLong::NO_ARGUMENT],
-	['--verbose', '-V', GetoptLong::NO_ARGUMENT],
-	['--config', '-f', GetoptLong::REQUIRED_ARGUMENT]
-)
-
-options = {
-	:verbose => false,
-	:config  => '/etc/failircd.conf',
-}
-
-args.each {|option, value|
-	case option
-		when '--version'
-			puts "Fail IRCd #{IRC.version}"
-			exit 0
-
-		when '--verbose'
-			options[:verbose] = true
-
-		when '--config'
-			options[:config] = value
+OptionParser.new do |o|
+	o.on '-v', '--version', 'output the version' do
+		puts "Fail IRCd #{IRC.version}"
+		exit
 	end
-}
 
-ircd = IRC::Server.new(options[:config])
+	o.on '-c', '--config PATH', 'path to config file' do |value|
+		options[:config] = value
+	end
+end.parse!
 
-[:INT, :KILL].each {|sig|
-	trap sig.to_s do
+%w[INT KILL].each {|sig|
+	trap sig do
 		puts 'FailIRC stopping, bye'
 
-		ircd.stop
+		EM.stop_event_loop
 	end
 }
 
-ircd.start
+EM.run {
+	IRC::Server.new(options[:config]).start
+}

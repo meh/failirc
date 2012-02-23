@@ -18,6 +18,7 @@
 #++
 
 require 'resolv'
+require 'eventmachine'
 
 require 'failirc/version'
 require 'failirc/common/utils'
@@ -35,9 +36,8 @@ class Server
 
 	attr_reader :options, :dispatcher, :pool, :created_on
 
-	def_delegators :@dispatcher, :listen, :running?
+	def_delegators :@dispatcher, :listen, :running?, :set_timeout, :set_interval, :clear_timeout, :clear_interval, :data_available
 	def_delegators :@events, :register, :dispatch, :observe, :fire, :hook
-	def_delegators :@pool, :do
 	def_delegators :@modules, :load
 
 	def initialize (options={})
@@ -45,7 +45,6 @@ class Server
 
 		@dispatcher = Dispatcher.new(self)
 		@events     = Events.new(self)
-		@pool       = ThreadPool.new
 		@modules    = Modules.new(self, '/failirc/server/modules')
 
 		if options.is_a?(Hash)
@@ -106,6 +105,16 @@ class Server
 		fire :stop, self
 
 		@dispatcher.stop
+	end
+
+	def reset!
+		@clients = nil
+	end
+
+	def clients
+		@clients ||= @dispatcher.listens_on.reduce([]) {|result, server|
+			result.concat(server.clients)
+		}
 	end
 
 	def host

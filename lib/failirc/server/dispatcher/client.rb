@@ -17,92 +17,51 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
-module IRC; class Server; class Dispatcher
+module IRC; class Server
 
-class Client < IO
-	extend Forwardable
+class Client < EM::Connection
+	attr_reader   :server, :ip, :port, :input, :output
+	attr_accessor :host
 
-	attr_reader    :connected_to, :socket, :ip, :host, :port
-	def_delegators :@connected_to, :server, :dispatcher, :options
-
-	def initialize (connected_to, socket)
-		@connected_to = connected_to
-		@socket       = socket
-
+	def post_init
 		@input  = Queue.new
 		@output = Queue.new
 
-		@ip   = @socket.peeraddr[3] rescue nil
-		@host = @socket.peeraddr[2] rescue nil
-		@port = @socket.addr[1]     rescue nil
+		@ip   = Socket.unpack_sockaddr_in(get_peername).last
+		@port = Socket.unpack_sockaddr_in(get_sockname).first
+		@host = @ip
 
-		super(@socket.to_i)
+		@data = ''
 	end
 
-	def ssl?
-		socket.is_a?(OpenSSL::SSL::SSLSocket)
-	end
+	def receive_data (data)
+		@data << data
 
-	def receive
-		return if disconnected?
+		return unless @data.include? "\n"
 
-		begin
-			input = ''
+		@data.lines.each {|line|
+			@data = line and break unless line.include? "\n"
 
-			begin; loop do
-				input << @socket.read_nonblock(4096)
-			end; rescue Errno::EAGAIN, IO::WaitReadable; end
+			@input.push(line.strip)
+		}
 
-			raise Errno::EPIPE if input.empty?
+		@data.clear if @data.include? "\n"
 
-			input.split(/[\r\n]+/).each {|string|
-				@input.push(string)
-			}
-		rescue IOError
-			disconnect 'Input/output error'
-		rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-			disconnect 'Client exited'
-		rescue Errno::ECONNRESET
-			disconnect 'Connection reset by peer'
-		rescue Errno::ETIMEDOUT
-			disconnect 'Ping timeout'
-		rescue Errno::EHOSTUNREACH
-			disconnect 'No route to host'
-		rescue Exception => e
-			IRC.debug e
+		unless @input.empty?
+			server.data_available
 		end
-	end; alias recv receive
-
-	def send (message)
-		return if disconnected?(true)
-
-		dispatcher.server.dispatch :output, self, message
-		@output.push(message)
-
-		flush
 	end
 
-	def flush
-		return if @output.empty? or disconnected?(true)
+	def send_message (message)
+		server.dispatch :output, self, message
 
-		begin
-			until @output.empty?
-				@socket.write_nonblock("#{@output.pop}\r\n")
-			end
-		rescue IOError
-			disconnect 'Input/output error'
-		rescue Errno::EBADF, Errno::EPIPE, OpenSSL::SSL::SSLError
-		 disconnect 'Client exited'
-		rescue Errno::ECONNRESET
-			disconnect 'Connection reset by peer'
-		rescue Errno::ETIMEDOUT
-			disconnect 'Ping timeout'
-		rescue Errno::EHOSTUNREACH
-			disconnect 'No route to host'
-		rescue Errno::EAGAIN, IO::WaitWritable
-		rescue Exception => e
-			IRC.debug e
-		end
+		@output.push message
+
+		flush! unless handling?
+	end
+
+	def unbind
+		@server.delete(self)
 	end
 
 	def handling?; @handling;         end
@@ -110,63 +69,44 @@ class Client < IO
 	def handled!;  @handling = false; end
 
 	def handle
-		return if disconnected?(true) or handling? or @input.empty?
+		return true if handling?
+
+		if @input.empty?
+			flush!
+
+			return false
+		end
 
 		handling!
 
-		server.do {
+		EM.defer -> {
 			begin
 				server.dispatch :input, self, @input.pop
 			rescue Exception => e
 				IRC.debug e
 			end
+		}, -> status {
+			flush!
 
 			handled!
-
-			dispatcher.wakeup unless @input.empty?
 		}
 	end
 
-	def disconnect (message, options={})
-		return if disconnected? and @told
-
-		@told = true
-
-		callback = proc {
-			server.fire :disconnect, self, message
-
-			IRC.debug "#{self} disconnecting because: #{message}"
-
-			connected_to.clients.delete(self)
-			dispatcher.wakeup reset: true
-
-			begin
-				flush
-			rescue; ensure
-				@socket.close rescue nil
-			end
-		}
-
-		if options[:now!]
-			callback.call
-		else
-			server.do &callback
+	def flush!
+		until @output.empty?
+			send_data "#{@output.pop}\r\n"
 		end
 	end
 
-	def disconnected? (real=false)
-		return true if @told and not real
+	alias to_s ip
+end
 
-		begin
-			@socket.closed?
-		rescue Exception
-			true
-		end
-	end
+class SSLClient < Client
+	def post_init
+		start_tls
 
-	def to_s
-		"#{host}"
+		super
 	end
 end
 
-end; end; end
+end; end

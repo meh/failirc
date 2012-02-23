@@ -19,82 +19,53 @@
 
 module IRC; class Server; class Dispatcher
 
-class Server < IO
-	extend Forwardable
+class Server
+	attr_reader :server, :options, :signature, :clients
 
-	attr_reader    :dispatcher, :options, :socket, :context, :clients
-	def_delegators :@dispatcher, :server
-
-	def initialize (dispatcher, options)
-		@dispatcher = dispatcher
-		@options    = HashWithIndifferentAccess.new({
+	def initialize (server, options)
+		@server  = server
+		@options = HashWithIndifferentAccess.new({
 			:bind => '0.0.0.0'
 		}.merge(options))
 
-		@socket  = TCPServer.new(options[:bind], options[:port])
 		@clients = []
-
-		if options[:ssl]
-			@context = SSLUtils.context((options[:ssl][:cert] rescue nil), (options[:ssl][:key] rescue nil))
-		end
-
-		super(@socket.to_i)
 	end
 
-	def ssl?; !!@context;      end
+	def method_missing (id, *args, &block)
+		@server.__send__ id, *args, &block
+	end
+
+	def add (client)
+		@clients.push client
+
+		dispatcher.reset!
+	end
+
+	def delete (client)
+		@clients.delete client
+
+		dispatcher.reset!
+	end
+
+	def start
+		zelf = self
+
+		@signature = EM.start_server options[:bind] || '0.0.0.0', options[:port], options[:ssl] ? SSLClient : Client do |client|
+			client.instance_eval {
+				@server = zelf
+				@server.add client
+				@server.fire :connect, client
+			}
+		end
+	end
+
+	def stop
+		EM.stop_server @signature
+	end
+
+	def ssl?; @options[:ssl];  end
 	def host; @options[:bind]; end
 	def port; @options[:port]; end
-
-	def accept
-		socket = @socket.accept_nonblock
-
-		begin
-			host = socket.peeraddr[2]
-			ip   = socket.peeraddr[3]
-			port = socket.addr[1]
-
-			IRC.debug "#{host}[#{ip}/#{port}] connecting."
-		rescue Exception
-			IRC.debug "Someone (#{host}[#{ip}/#{port}]) failed to connect."
-
-			return
-		end
-
-		server.do {
-			begin
-				if ssl?
-					socket = timeout((server.options[:server][:timeout] || 15).to_i) do
-						ssl = OpenSSL::SSL::SSLSocket.new(socket, @context)
-						ssl.accept
-						ssl
-					end
-				end
-
-				client = Dispatcher::Client.new(self, socket)
-
-				client.handling!
-				server.fire :connect, client
-				client.handled!
-
-				@clients.push(client)
-
-				dispatcher.wakeup reset: true
-			rescue OpenSSL::SSL::SSLError, Timeout::Error
-				socket.write_nonblock "This is an SSL connection, faggot.\r\n" rescue nil
-				socket.close rescue nil
-
-				IRC.debug "#{host}[#{ip}/#{port}] tried to connect to a SSL connection and failed the handshake."
-			rescue Errno::ECONNRESET
-				socket.close rescue nil
-
-				IRC.debug "#{host}[#{ip}/#{port}] connection reset."
-			rescue Exception => e
-				socket.close rescue nil
-
-				IRC.debug e
-			end
-		}
-	end
 
 	def to_s
 		"#{host}/#{port}"
