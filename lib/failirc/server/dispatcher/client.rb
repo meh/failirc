@@ -124,6 +124,8 @@ class Client < EM::Connection
 	alias to_s ip
 
 	def ssl!
+		next if ssl?
+
 		@ssl = true
 
 		if options[:ssl].is_a? Hash
