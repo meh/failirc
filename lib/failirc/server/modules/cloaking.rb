@@ -17,25 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-version    '0.0.1'
-identifier 'tls'
+require 'digest/md5'
 
-Base.command_executable_when_unregistered :STARTTLS
+version '0.0.1'
 
-RPL_STARTTLS = {
-	code: 670,
-	text: ':STARTTLS successful, go ahead with TLS handshake'
-}
-
-input {
-	aliases {
-		starttls /^STARTTLS( |$)/i
+on :connect do |client|
+	options[:keys].each {|key|
+		client.host = Digest::MD5.hexdigest(client.host)
 	}
-
-	on :starttls do |thing, string|
-		next if thing.ssl?
-
-		thing.send_message RPL_STARTTLS
-		thing.ssl!
-	end
-}
+end

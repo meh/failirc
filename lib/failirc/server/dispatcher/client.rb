@@ -22,7 +22,7 @@ module IRC; class Server
 class Client < EM::Connection
 	extend Forwardable
 
-	attr_reader    :server, :ip, :port, :input, :output
+	attr_reader    :server, :ip, :port, :hostname
 	attr_accessor  :host
 	def_delegators :@server, :dispatcher, :options
 
@@ -32,7 +32,9 @@ class Client < EM::Connection
 
 		@ip   = Socket.unpack_sockaddr_in(get_peername).last
 		@port = Socket.unpack_sockaddr_in(get_sockname).first
-		@host = @ip
+		@host = Socket.getnameinfo(get_peername).first
+
+		@hostname = @host
 
 		@data = ''
 	end
@@ -124,7 +126,7 @@ class Client < EM::Connection
 	alias to_s ip
 
 	def ssl!
-		next if ssl?
+		return if ssl?
 
 		@ssl = true
 

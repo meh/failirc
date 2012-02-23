@@ -17,6 +17,7 @@
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 #++
 
+require 'failirc/server/modules/base/commands'
 require 'failirc/server/modules/base/support'
 require 'failirc/server/modules/base/errors'
 require 'failirc/server/modules/base/responses'
@@ -34,12 +35,6 @@ extend Base
 
 version    '0.1.0'
 identifier 'RFC 1460, 2810, 2811, 2812, 2813;'
-
-module Base::Commands
-	Ignore       = [:PING, :PONG, :WHO, :MODE]
-	Unregistered = [:PASS, :NICK, :USER]
-	Unrepeatable = [:PASS, :USER]
-end
 
 on :start do |server|
 	@mutex      = RecursiveMutex.new
@@ -207,7 +202,7 @@ input {
 			@pinged_out.delete(~thing)
 		}
 
-		if thing.client? && Commands::Ignore.none? { |a| event.alias?(a) }
+		if thing.client? && Commands::NoAction.none? { |a| event.alias?(a) }
 			thing.last_action = Action.new(thing, event, string)
 		end
 
@@ -1808,14 +1803,18 @@ input {
 	observe :whois do |thing, name, target=nil|
 		unless client = @clients[name]
 			thing.send_message ERR_NOSUCHNICK, name
+
 			return
 		end
 
 		thing.send_message RPL_WHOISUSER, client
 
+		if thing.modes.ircop? || thing.nick == client.nick
+			thing.send_message RPL_WHOISCONNECTING, client
+		end
+
 		if thing.modes.ircop?
 			thing.send_message RPL_WHOISMODES, client
-			thing.send_message RPL_WHOISCONNECTING, client
 		end
 
 		if !client.channels.empty?

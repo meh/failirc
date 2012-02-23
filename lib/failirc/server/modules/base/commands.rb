@@ -1,6 +1,5 @@
-# failirc, a fail IRC library.
-#
-# Copyleft meh. [http://meh.doesntexist.org | meh@paranoici.org]
+#--
+# Copyleft meh. [http://meh.paranoid.pk | meh@paranoici.org]
 #
 # This file is part of failirc.
 #
@@ -16,26 +15,26 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
+#++
 
-version    '0.0.1'
-identifier 'tls'
+module IRC; class Server; module Base
 
-Base.command_executable_when_unregistered :STARTTLS
+module Commands
+	NoAction     = [:PING, :PONG, :WHO, :MODE]
+	Unregistered = [:PASS, :NICK, :USER]
+	Unrepeatable = [:PASS, :USER]
+end
 
-RPL_STARTTLS = {
-	code: 670,
-	text: ':STARTTLS successful, go ahead with TLS handshake'
-}
+def self.command_executable_when_unregistered (name)
+	Commands::Unregistered << name.to_sym
+end
 
-input {
-	aliases {
-		starttls /^STARTTLS( |$)/i
-	}
+def self.command_is_not_an_action (name)
+	Commands::NoAction << name.to_sym
+end
 
-	on :starttls do |thing, string|
-		next if thing.ssl?
+def self.command_is_unrepeatable (name)
+	Commands::Unrepeatable << name.to_sym
+end
 
-		thing.send_message RPL_STARTTLS
-		thing.ssl!
-	end
-}
+end; end; end

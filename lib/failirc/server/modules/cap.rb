@@ -20,7 +20,7 @@
 version    '0.0.1'
 identifier 'cap'
 
-Base::Commands::Unregistered << :CAP
+Base.command_executable_when_unregistered :CAP
 
 input {
 	aliases {
