@@ -24,139 +24,139 @@ require 'failirc/common/modes/can'
 module IRC
 
 class Modes
-  def self.[] (name, value)
-    Struct.new(:name, :value).new(name.to_sym, value)
-  end
+	def self.[] (name, value)
+		Struct.new(:name, :value).new(name.to_sym, value)
+	end
 
-  def self.define (&block)
-    Class.new(Modes).tap {|klass|
-      klass.define_singleton_method :definitions do
-        @definitions ||= Definitions.new(&block)
-      end
+	def self.define (&block)
+		Class.new(Modes).tap {|klass|
+			klass.define_singleton_method :definitions do
+				@definitions ||= Definitions.new(&block)
+			end
 
-      klass.instance_eval {
-        define_method :definitions do
-          klass.definitions
-        end
-      }
-    }
-  end
+			klass.instance_eval {
+				define_method :definitions do
+					klass.definitions
+				end
+			}
+		}
+	end
 
-  attr_reader :extended
+	attr_reader :extended
 
-  def initialize (data=nil)
-    @modes    = HashWithIndifferentAccess.new
-    @extended = InsensitiveStruct.new
+	def initialize (data=nil)
+		@modes    = HashWithIndifferentAccess.new
+		@extended = InsensitiveStruct.new
 
-    if data.is_a?(Modes)
-      @modes.merge!(data.to_hash)
-    end
-  end
+		if data.is_a?(Modes)
+			@modes.merge!(data.to_hash)
+		end
+	end
 
-  def method_missing (name, *args, &block)
-    name = name.to_s
+	def method_missing (name, *args, &block)
+		name = name.to_s
 
-    begin
-      if name.end_with?('?')
-        self[name.sub('?', '')].enabled?
-      else
-        self[name]
-      end
-    rescue
-      super(name.to_sym, *args, &block)
-    end
-  end
+		begin
+			if name.end_with?('?')
+				self[name.sub('?', '')].enabled?
+			else
+				self[name]
+			end
+		rescue
+			super(name.to_sym, *args, &block)
+		end
+	end
 
-  def each (&block)
-    @modes.values.uniq.each &block
-  end
+	def each (&block)
+		@modes.values.uniq.each &block
+	end
 
-  memoize
-  def [] (name)
-    if !supports?(name)
-      raise ArgumentError, "#{name} is not supported by #{inspect}"
-    end
+	memoize
+	def [] (name)
+		if !supports?(name)
+			raise ArgumentError, "#{name} is not supported by #{inspect}"
+		end
 
-    return @modes[name] if @modes[name]
+		return @modes[name] if @modes[name]
 
-    definition = definitions.find(name)
+		definition = definitions.find(name)
 
-    @modes[definition.name] = @modes[definition.code] = Mode.new(definition)
-  end
+		@modes[definition.name] = @modes[definition.code] = Mode.new(definition)
+	end
 
-  def + (data)
-    data = Modes[data, true] if data.is_a?(Symbol)
+	def + (data)
+		data = Modes[data, true] if data.is_a?(Symbol)
 
-    if !supports?(data.name)
-      raise ArgumentError, "#{data.name} is not supported by #{inspect}"
-    end
+		if !supports?(data.name)
+			raise ArgumentError, "#{data.name} is not supported by #{inspect}"
+		end
 
-    mode = self[data.name]
+		mode = self[data.name]
 
-    if @as.nil? or mode.must.all? {|name| @at.can.send name}
-      mode.value = data.value
-    end
-  end
+		if @as.nil? or mode.must.all? {|name| @at.can.send name}
+			mode.value = data.value
+		end
+	end
 
-  def - (data)
-    data = Modes[data, false] if data.is_a?(Symbol)
+	def - (data)
+		data = Modes[data, false] if data.is_a?(Symbol)
 
-    if !supports?(data.name)
-      raise ArgumentError.new "#{data.name} is not supported by #{inspect}"
-    end
+		if !supports?(data.name)
+			raise ArgumentError.new "#{data.name} is not supported by #{inspect}"
+		end
 
-    mode = self[data.name]
+		mode = self[data.name]
 
-    if @as.nil? or mode.must.all? {|name| @at.can.send name}
-      mode.value = data.value
-    end
-  end
+		if @as.nil? or mode.must.all? {|name| @at.can.send name}
+			mode.value = data.value
+		end
+	end
 
-  def supports? (name)
-    !!definitions.find(name)
-  end
+	def supports? (name)
+		!!definitions.find(name)
+	end
 
-  def can
-    Can.new(self)
-  end
+	def can
+		Can.new(self)
+	end
 
-  def as (what)
-    @as = what.is_a?(Modes) ? what : what.modes
+	def as (what)
+		@as = what.is_a?(Modes) ? what : what.modes
 
-    yield self
+		yield self
 
-    @as = nil
-  end
+		@as = nil
+	end
 
-  def empty?
-    each {|mode|
-      return false if mode.enabled?
-    }
+	def empty?
+		each {|mode|
+			return false if mode.enabled?
+		}
 
-    true
-  end
+		true
+	end
 
-  def to_hash
-    @modes
-  end
+	def to_hash
+		@modes
+	end
 
-  def to_s
-    modes  = []
-    values = []
+	def to_s
+		modes  = []
+		values = []
 
-    each {|mode|
-      next unless mode.enabled?
+		each {|mode|
+			next unless mode.enabled?
 
-      modes  << mode.code
-      values << mode.value unless mode.value === false or mode.value === true
-    }
+			modes  << mode.code
+			values << mode.value unless mode.value === false or mode.value === true
+		}
 
-    "+#{modes.join}#{" #{values.join(' ')}" if values}"
-  end
+		"+#{modes.join}#{" #{values.join(' ')}" if values}"
+	end
 
-  def inspect
-    definitions.to_s
-  end
+	def inspect
+		definitions.to_s
+	end
 end
 
 end

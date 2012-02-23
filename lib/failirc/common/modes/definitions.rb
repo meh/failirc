@@ -20,31 +20,31 @@
 module IRC; class Modes
 
 class Definitions < Array
-  class Definition < Struct.new(:name, :code, :options)
-    attr_reader :parent
+	class Definition < Struct.new(:name, :code, :options)
+		attr_reader :parent
 
-    def initialize (parent, *args)
-      super(*args)
+		def initialize (parent, *args)
+			super(*args)
 
-      @parent = parent
-    end
-  end
+			@parent = parent
+		end
+	end
 
-  def initialize (&block)
-    self.instance_exec(self, &block)
-  end
+	def initialize (&block)
+		instance_eval &block
+	end
 
-  def method_missing (name, code, options={})
-    push Definition.new(self, name.to_sym, code.to_sym, options)
-  end
+	def method_missing (name, code, options={})
+		push Definition.new(self, name.to_sym, code.to_sym, options)
+	end
 
-  def find (name)
-    name = name.to_sym
+	def find (name)
+		name = name.to_sym
 
-    super() {|definition|
-      name == definition.name or name == definition.code
-    }
-  end
+		super() {|definition|
+			name == definition.name or name == definition.code
+		}
+	end
 end
 
 end; end

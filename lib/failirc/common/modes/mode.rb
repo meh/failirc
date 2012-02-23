@@ -20,42 +20,42 @@
 module IRC; class Modes
 
 class Mode
-  extend Forwardable
+	extend Forwardable
 
-  attr_reader    :definition
-  attr_accessor  :value
-  def_delegators :@definition, :name, :code
+	attr_reader    :definition
+	attr_accessor  :value
+	def_delegators :@definition, :name, :code
 
-  def initialize (definition)
-    @definition = definition
-  end
+	def initialize (definition)
+		@definition = definition
+	end
 
-  memoize
-  def must
-    [definition.options[:must]].flatten.compact.uniq
-  end
+	memoize
+	def must
+		[definition.options[:must]].flatten.compact.uniq
+	end
 
-  memoize
-  def inherits
-    [definition.options[:inherits]].flatten.compact.uniq
-  end
+	memoize
+	def inherits
+		[definition.options[:inherits]].flatten.compact.uniq
+	end
 
-  memoize
-  def powers
-    result = []
+	memoize
+	def powers
+		result = []
 
-    ([definition] + inherits.map {|name| definition.parent.find(name)}).each {|definition|
-      result.push(definition.options[:powers])
-    }
+		([definition] + inherits.map {|name| definition.parent.find(name)}).each {|definition|
+			result.push(definition.options[:powers])
+		}
 
-    result.flatten.compact.uniq
-  end
+		result.flatten.compact.uniq
+	end
 
-  def enabled?;  !!@value;  end
-  def disabled?; !enabled?; end
+	def enabled?;  !!@value;  end
+	def disabled?; !enabled?; end
 
-  def enable!;  @value = true; end
-  def disable!; @value = false; end
+	def enable!;  @value = true; end
+	def disable!; @value = false; end
 end
 
 end; end

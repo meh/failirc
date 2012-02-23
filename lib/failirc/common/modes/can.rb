@@ -20,21 +20,21 @@
 module IRC; class Modes
 
 class Can
-  attr_reader :modes
+	attr_reader :modes
 
-  def initialize (modes)
-    @modes = modes
-  end
+	def initialize (modes)
+		@modes = modes
+	end
 
-  def method_missing (name, *args)
-    name = name.to_s.sub(/\?$/, '').to_sym
+	def method_missing (name, *args)
+		name = name.to_s.sub(/\?$/, '').to_sym
 
-    modes.to_hash.values.uniq.select {|mode|
-      mode.enabled?
-    }.any? {|mode|
-      mode.powers.include?(name)
-    }
-  end
+		modes.to_hash.values.uniq.select {|mode|
+			mode.enabled?
+		}.any? {|mode|
+			mode.powers.include?(name)
+		}
+	end
 end
 
 end; end

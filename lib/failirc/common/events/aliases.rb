@@ -20,11 +20,9 @@
 module IRC; class Events
 
 class Aliases < Hash
-  def initialize
-    super {|hash, key|
-      hash[key] = Hash.new
-    }
-  end
+	def initialize
+		super { |h, k| h[k] = Hash.new }
+	end
 end
 
 end; end

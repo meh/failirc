@@ -20,26 +20,24 @@
 module IRC; class Events
 
 class Callback
-  include Comparable
+	include Comparable
 
-  attr_reader :method, :options
+	attr_reader :method, :options
 
-  def initialize (options={}, &block)
-    @block   = block
-    @options = options
+	def initialize (options={}, &block)
+		@block   = block
+		@options = options
 
-    raise ArgumentError, 'options has to be a Hash' unless @options.is_a?(Hash)
-  end
+		raise ArgumentError, 'options has to be a Hash' unless @options.is_a?(Hash)
+	end
 
-  def <=> (value)
-    (options[:priority] || 0) <=> (value.options[:priority] || 0)
-  end
+	def <=> (value)
+		(options[:priority] || 0) <=> (value.options[:priority] || 0)
+	end
 
-  def call (*args, &block)
-    begin
-      @block.call(*args, &block)
-    rescue LocalJumpError; end
-  end
+	def call (*args, &block)
+		@block.call(*args, &block)
+	rescue LocalJumpError; end
 end
 
 end; end

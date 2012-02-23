@@ -20,58 +20,58 @@
 module IRC
 
 class Mask
-  def self.escape (str)
-    Regexp.escape(str).gsub(/\\\*/, '[^!@]*?').gsub(/\\\?/, '[^!@]') rescue '[^!@]*?'
-  end
+	def self.escape (str)
+		Regexp.escape(str).gsub(/\\\*/, '[^!@]*?').gsub(/\\\?/, '[^!@]') rescue '[^!@]*?'
+	end
 
-  attr_accessor :nick, :user, :host
+	attr_accessor :nick, :user, :host
 
-  def initialize (nick=nil, user=nil, host=nil)
-    @nick = nick
-    @user = user
-    @host = host
-  end
+	def initialize (nick=nil, user=nil, host=nil)
+		@nick = nick
+		@user = user
+		@host = host
+	end
 
-  def match (mask)
-    mask = Mask.parse(mask) if !mask.is_a?(Mask)
+	def match (mask)
+		mask = Mask.parse(mask) if !mask.is_a?(Mask)
 
-    !!(mask.is_a?(Mask) ? mask : Mask.parse(mask || '*!*@*')).to_s.match(self.to_reg)
-  end
+		!!(mask.is_a?(Mask) ? mask : Mask.parse(mask || '*!*@*')).to_s.match(self.to_reg)
+	end
 
-  def == (mask)
-    mask = Mask.parse(mask) if !mask.is_a?(Mask)
+	def == (mask)
+		mask = Mask.parse(mask) if !mask.is_a?(Mask)
 
-    @nick == mask.nick && @user == mask.user && @host == mask.host
-  end
+		@nick == mask.nick && @user == mask.user && @host == mask.host
+	end
 
-  def to_s
-    "#{@nick || '*'}!#{@user || '*'}@#{@host || '*'}"
-  end
+	def to_s
+		"#{@nick || '*'}!#{@user || '*'}@#{@host || '*'}"
+	end
 
-  def to_reg
-    Regexp.new("^(?:(#{Mask.escape(@nick)})(?:!|$))?(?:(#{Mask.escape(@user)})(?:@|$))(?:(#{Mask.escape(@host)}))?$", 'i')
-  end
+	def to_reg
+		Regexp.new("^(?:(#{Mask.escape(@nick)})(?:!|$))?(?:(#{Mask.escape(@user)})(?:@|$))(?:(#{Mask.escape(@host)}))?$", 'i')
+	end
 
-  def self.parse (mask)
-    Mask.new *mask.scan(/^
-      # nickname
-      (?:
-        ([^@!]*?) # nickname can contains all chars excluding '@' and '!'
-        (?:!|$) # it must be followed by a '!' or end of string
-      )?
+	def self.parse (mask)
+		Mask.new *mask.scan(/^
+			# nickname
+			(?:
+				([^@!]*?) # nickname can contains all chars excluding '@' and '!'
+				(?:!|$) # it must be followed by a '!' or end of string
+			)?
 
-      # username
-      (?:
-        ([^@!]*?) # username can contain all chars excluding '@' and '!'
-        (?:@|$) # it must be followed by a '@' or end of string
-      )?
+			# username
+			(?:
+				([^@!]*?) # username can contain all chars excluding '@' and '!'
+				(?:@|$) # it must be followed by a '@' or end of string
+			)?
 
-      # hostname
-      (.*?) # hostname can contain all chars
-    $/x).flatten.map {|part|
-      part.empty? ? nil : part
-    } rescue []
-  end
+			# hostname
+			(.*?) # hostname can contain all chars
+		$/x).flatten.map {|part|
+			part.empty? ? nil : part
+		} rescue []
+	end
 end
 
 end

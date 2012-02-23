@@ -22,36 +22,36 @@ require 'failirc/common/modules/module'
 module IRC
 
 class Modules < Array
-  attr_reader :owner, :module
+	attr_reader :owner, :module
 
-  def initialize (owner, path)
-    @owner = owner
-    @path  = path
+	def initialize (owner, path)
+		@owner = owner
+		@path  = path
 
-    @module = Module.for(@owner)
-  end
+		@module = Module.for(@owner)
+	end
 
-  def load (name, options={})
-    mod = @module.new(name, options)
+	def load (name, options={})
+		mod = @module.new(name, options)
 
-    $:.each {|path|
-      path = "#{path}/#{@path}/#{name}.rb"
+		$:.each {|path|
+			path = "#{path}/#{@path}/#{name}.rb"
 
-      if File.readable?(path)
-        begin
-          mod.instance_eval(File.read(path), File.realpath(path), 1)
+			if File.readable?(path)
+				begin
+					mod.instance_eval(File.read(path), File.realpath(path), 1)
 
-          return push(mod).last
-        rescue Exception => e
-          IRC.debug e
+					return push(mod).last
+				rescue Exception => e
+					IRC.debug e
 
-          return false
-        end
-      end
-    }
+					return false
+				end
+			end
+		}
 
-    raise LoadError, "#{name} not found"
-  end
+		raise LoadError, "#{name} not found"
+	end
 end
 
 end

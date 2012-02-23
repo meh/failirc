@@ -41,7 +41,7 @@ module DSL
 	def output (&block)
 		tmp, @into = @into, :output
 
-		self.instance_eval(&block)
+		instance_eval &block
 
 		@into = tmp
 	end
@@ -50,7 +50,7 @@ module DSL
 		return @aliases unless @into
 
 		on = InsensitiveStruct.new
-		on.instance_eval(&block)
+		on.instance_eval &block
 
 		on.to_hash.each {|name, value|
 			@aliases[@into][name] = value

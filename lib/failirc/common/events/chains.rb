@@ -20,13 +20,13 @@
 module IRC; class Events
 
 class Chains < Hash
-  def initialize
-    super {|hash, key|
-      hash[key] = Hash.new {|hash, key|
-        hash[key] = []
-      }
-    }
-  end
+	def initialize
+		super {|hash, key|
+			hash[key] = Hash.new {|hash, key|
+				hash[key] = []
+			}
+		}
+	end
 end
 
 end; end
