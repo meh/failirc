@@ -32,11 +32,11 @@ on :log do |string|
 end
 
 on :connect do |client|
-	server.fire :log, "#{client} connected to #{client.server}"
+	server.fire :log, "#{client} connected"
 end
 
 on :disconnect do |client, message|
-	server.fire :log, "#{client} disconnected from #{client.server} because: #{message}"
+	server.fire :log, "#{client} disconnected because: #{message}"
 end
 
 logger = -> event, thing, string {

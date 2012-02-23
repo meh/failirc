@@ -48,10 +48,19 @@ class Server
 	end
 
 	def start
-		zelf = self
+		zelf    = self
+		options = @options
 
-		@signature = EM.start_server options[:bind] || '0.0.0.0', options[:port], options[:ssl] ? SSLClient : Client do |client|
+		@signature = EM.start_server options[:bind] || '0.0.0.0', options[:port], Client do |client|
 			client.instance_eval {
+				ssl! if options[:ssl]
+
+				if options[:ssl].is_a? Hash
+					start_tls(private_key_file: options[:ssl][:key], cert_chain_file: options[:ssl][:cert])
+				else
+					start_tls
+				end
+
 				@server = zelf
 				@server.add client
 				@server.fire :connect, client
@@ -70,12 +79,8 @@ class Server
 	end
 
 	def ssl?; @options[:ssl];  end
-	def host; @options[:bind]; end
+	def bind; @options[:bind]; end
 	def port; @options[:port]; end
-
-	def to_s (up = false)
-		up ? @server.to_s : "#{host}/#{port}"
-	end
 end
 
 end; end; end

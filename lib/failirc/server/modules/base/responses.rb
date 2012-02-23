@@ -354,7 +354,7 @@ RPL_WELCOME = {
 
 RPL_HOSTEDBY = {
 	code: 2,
-	text: ':Your host is #{server.host}[#{server.ip}/#{value.port}], running version failirc-#{IRC.version}'
+	text: ':Your host is #{server.bind}[#{server.ip}/#{value.port}], running version failirc-#{IRC.version}'
 }
 
 RPL_SERVCREATEDON = {

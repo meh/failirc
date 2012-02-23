@@ -31,7 +31,7 @@ module Incoming; def self.extended (obj)
 			response, value = args
 
 			begin
-				old.call ":#{server.to_s(true)} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
+				old.call ":#{server.host} #{'%03d' % response[:code]} #{identifier} #{response[:text].interpolate(binding)}"
 			rescue Exception => e
 				IRC.debug response[:text]
 				raise e

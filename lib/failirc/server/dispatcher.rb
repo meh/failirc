@@ -29,6 +29,7 @@ class Dispatcher
 		@server = server
 
 		@listens_on = []
+		@timers     = []
 	end
 
 	def reset!
@@ -54,6 +55,10 @@ class Dispatcher
 	def stop
 		@listens_on.each {|server|
 			server.stop
+		}
+
+		@timers.each {|timer|
+			EM.cancel_timer(timer)
 		}
 	end
 
@@ -89,13 +94,17 @@ class Dispatcher
 
 	def set_timeout (*args, &block)
 		EM.schedule {
-			EM.add_timer(*args, &block)
+			EM.add_timer(*args, &block).tap {|timer|
+				@timers.push(timer)
+			}
 		}
 	end
 
 	def set_interval (*args, &block)
 		EM.schedule {
-			EM.add_periodic_timer(*args, &block)
+			EM.add_periodic_timer(*args, &block).tap {|timer|
+				@timers.push(timer)
+			}
 		}
 	end
 

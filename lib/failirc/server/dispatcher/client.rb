@@ -117,21 +117,8 @@ class Client < EM::Connection
 
 	alias to_s ip
 
-	def ssl?
-		false
-	end
-end
-
-class SSLClient < Client
-	def post_init
-		start_tls
-
-		super
-	end
-
-	def ssl?
-		true
-	end
+	def ssl!; @ssl = true; end
+	def ssl?; @ssl;        end
 end
 
 end; end
