@@ -70,9 +70,9 @@ class Users < ThreadSafeHash
 		end
 	end
 
-	def send (*args)
+	def send_message (*args)
 		each_value {|user|
-			user.send(*args)
+			user.send_message(*args)
 		}
 	end
 end

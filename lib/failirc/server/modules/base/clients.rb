@@ -26,9 +26,9 @@ class Clients < Hash
 		super(*args)
 	end
 
-	def send (*args)
+	def send_message (*args)
 		each_value {|client|
-			client.send(*args)
+			client.send_message(*args)
 		}
 	end
 end

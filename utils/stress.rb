@@ -1,6 +1,7 @@
 #! /usr/bin/env ruby
 require 'socket'
 require 'thread'
+require 'openssl'
 require 'optparse'
 require 'failirc/version'
 require 'failirc/common/utils'

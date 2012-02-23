@@ -20,86 +20,86 @@
 module IRC; class Events
 
 module DSL
-  attr_reader :aliases, :chains, :custom
+	attr_reader :aliases, :chains, :custom
 
-  def self.initialize (what)
-    what.instance_eval do
-      @aliases = Aliases.new
-      @chains  = Chains.new
-      @custom  = Custom.new
-    end
-  end
+	def self.initialize (what)
+		what.instance_eval do
+			@aliases = Aliases.new
+			@chains  = Chains.new
+			@custom  = Custom.new
+		end
+	end
 
-  def input (&block)
-    tmp, @into = @into, :input
+	def input (&block)
+		tmp, @into = @into, :input
 
-    self.instance_eval(&block)
+		self.instance_eval(&block)
 
-    @into = tmp
-  end
+		@into = tmp
+	end
 
-  def output (&block)
-    tmp, @into = @into, :output
+	def output (&block)
+		tmp, @into = @into, :output
 
-    self.instance_eval(&block)
+		self.instance_eval(&block)
 
-    @into = tmp
-  end
+		@into = tmp
+	end
 
-  def aliases (&block)
-    return @aliases unless @into
+	def aliases (&block)
+		return @aliases unless @into
 
-    on = InsensitiveStruct.new
-    on.instance_eval(&block)
+		on = InsensitiveStruct.new
+		on.instance_eval(&block)
 
-    on.to_hash.each {|name, value|
-      @aliases[@into][name] = value
-    }
-  end
+		on.to_hash.each {|name, value|
+			@aliases[@into][name] = value
+		}
+	end
 
-  def default (options = {}, &block)
-    return unless @into
+	def default (options = {}, &block)
+		return unless @into
 
-    @chains[@into][:default] << Callback.new(options, &block)
-  end
+		@chains[@into][:default] << Callback.new(options, &block)
+	end
 
-  def before (options = {}, &block)
-    return unless @into
+	def before (options = {}, &block)
+		return unless @into
 
-    @chains[@into][:before] << Callback.new(options, &block)
-  end
+		@chains[@into][:before] << Callback.new(options, &block)
+	end
 
-  def after (options = {}, &block)
-    return unless @into
+	def after (options = {}, &block)
+		return unless @into
 
-    @chains[@into][:after] << Callback.new(options, &block)
-  end
+		@chains[@into][:after] << Callback.new(options, &block)
+	end
 
-  def on (what, options = {}, &block)
-    if @into
-      @chains[@into][@aliases[@into][what] || what] << Callback.new(options, &block)
-    else
-      observe(what, options, &block)
-    end
-  end
+	def on (what, options = {}, &block)
+		if @into
+			@chains[@into][@aliases[@into][what] || what] << Callback.new(options, &block)
+		else
+			observe(what, options, &block)
+		end
+	end
 
-  def observe (what, options = {}, &block)
-    @custom[what] << Callback.new(options, &block)
-  end
+	def observe (what, options = {}, &block)
+		@custom[what] << Callback.new(options, &block)
+	end
 
-  def fire (what, *args, &block)
-    if @owner
-      @owner.fire(what, *args, &block)
-    else
-      catch(:halt) {
-        Event.new(self, :custom, @custom[what]).call(*args, &block)
-      }
-    end
-  end
+	def fire (what, *args, &block)
+		if @owner
+			@owner.fire(what, *args, &block)
+		else
+			catch(:halt) {
+				Event.new(self, :custom, @custom[what]).call(*args, &block)
+			}
+		end
+	end
 
-  def skip
-    throw :halt
-  end
+	def skip
+		throw :halt
+	end
 end
 
 end; end

@@ -20,38 +20,38 @@
 module IRC; class Events
 
 class Event
-  attr_reader :owner, :chain, :name, :callbacks, :aliases, :thing, :string
+	attr_reader :owner, :chain, :name, :callbacks, :aliases, :thing, :string
 
-  def initialize (owner, chain, callbacks=[], aliases=[])
-    @owner   = owner
-    @chain   = chain
-    @aliases = aliases
+	def initialize (owner, chain, callbacks = [], aliases = [])
+		@owner   = owner
+		@chain   = chain
+		@aliases = aliases
 
-    @callbacks = callbacks.sort
-  end
+		@callbacks = callbacks.sort
+	end
 
-  def on (thing, string)
-    @thing  = thing
-    @string = string
+	def on (thing, string)
+		@thing  = thing
+		@string = string
 
-    self
-  end
+		self
+	end
 
-  def alias? (name)
-    @aliases.member?(name.to_s.downcase.to_sym)
-  end
+	def alias? (name)
+		@aliases.member?(name.to_s.downcase.to_sym)
+	end
 
-  def call (*args, &block)
-    @callbacks.each {|callback|
-      begin
-        if @thing && @string && args.empty?
-          callback.call(Reference[@thing], Reference[@string])
-        else
-          callback.call(*args.map {|arg| Reference[arg]}, &block)
-        end
-      rescue LocalJumpError; end
-    }
-  end
+	def call (*args, &block)
+		@callbacks.each {|callback|
+			begin
+				if @thing && @string && args.empty?
+					callback.call(Reference[@thing], Reference[@string])
+				else
+					callback.call(*args.map { |arg| Reference[arg] }, &block)
+				end
+			rescue LocalJumpError; end
+		}
+	end
 end
 
 end; end

@@ -28,98 +28,98 @@ require 'failirc/common/events/custom'
 module IRC
 
 class Events
-  attr_reader :server, :aliases, :chains
+	attr_reader :server, :aliases, :chains
 
-  def initialize (server)
-    @server = server
+	def initialize (server)
+		@server = server
 
-    DSL.initialize(self)
+		DSL.initialize(self)
 
-    @hooks = []
-  end
+		@hooks = []
+	end
 
-  def hook (mod)
-    @hooks << mod
-  end
+	def hook (mod)
+		@hooks << mod
+	end
 
-  def alias (chain, name, value = nil)
-    if value
-      @aliases[chain][name.to_sym.downcase] = value
-    else
-      @aliases[chain][name.to_sym.downcase] || @hooks.find {|hook|
-        hook.aliases[chain][name]
-      }
-    end
-  end
+	def alias (chain, name, value = nil)
+		if value
+			@aliases[chain][name.to_sym.downcase] = value
+		else
+			@aliases[chain][name.to_sym.downcase] || @hooks.find {|hook|
+				hook.aliases[chain][name]
+			}
+		end
+	end
 
-  # WARNING: brace for legacy shitty code, I don't even understand it anymore.
-  def event (chain, what)
-    if what.is_a?(Symbol)
-      Event.new(self, chain, (@chains[chain][what] + @hooks.map {|hook| hook.chains[chain][what]}).flatten.compact, [what])
-    else
-      callbacks = Hash.new {|hash, key| hash[key] = [] }
+	# WARNING: brace for legacy shitty code, I don't even understand it anymore.
+	def event (chain, what)
+		if what.is_a?(Symbol)
+			Event.new(self, chain, (@chains[chain][what] + @hooks.map {|hook| hook.chains[chain][what]}).flatten.compact, [what])
+		else
+			callbacks = Hash.new { |h, k| h[k] = [] }
 
-      (@hooks + [self]).each {|hook|
-        hook.chains[chain].each {|key, value|
-          callbacks[key].insert(-1, *value)
-        }
-      }
+			(@hooks + [self]).each {|hook|
+				hook.chains[chain].each {|key, value|
+					callbacks[key].insert(-1, *value)
+				}
+			}
 
-      regexps, callbacks = callbacks.to_a.select {|(name, callbacks)|
-        !name.is_a?(Symbol)
-      }.select {|(regexp, callbacks)|
-        what.to_s.match(regexp) rescue false
-      }.transpose
+			regexps, callbacks = callbacks.to_a.select {|(name, callbacks)|
+				!name.is_a?(Symbol)
+			}.select {|(regexp, callbacks)|
+				what.to_s.match(regexp) rescue false
+			}.transpose
 
-      aliases = (regexps || []).flatten.compact.map {|regexp|
-        @aliases[chain].select {|(name, value)|
-          regexp == value
-        }.map {|(name, value)|
-          name
-        } + @hooks.map {|hook|
-          hook.aliases[chain].to_a.select {|(name, value)|
-            regexp == value
-          }.map {|(name, value)|
-            name
-          }
-        }
-      }.flatten.compact.uniq
+			aliases = (regexps || []).flatten.compact.map {|regexp|
+				@aliases[chain].select {|(name, value)|
+					regexp == value
+				}.map {|(name, value)|
+					name
+				} + @hooks.map {|hook|
+					hook.aliases[chain].to_a.select {|(name, value)|
+						regexp == value
+					}.map {|(name, value)|
+						name
+					}
+				}
+			}.flatten.compact.uniq
 
-      Event.new(self, chain, (callbacks || []).flatten.compact, aliases)
-    end
-  end
+			Event.new(self, chain, [callbacks].flatten.compact, aliases)
+		end
+	end
 
-  def dispatch (chain=:input, thing, string)
-    return unless thing
+	def dispatch (chain, thing, string)
+		return unless thing
 
-    current = event(chain, string).on(thing, string)
+		current = event(chain, string).on(thing, string)
 
-    catch(:halt) {
-      event(chain, :before).call(current, thing, string)
+		catch(:halt) {
+			event(chain, :before).call(current, thing, string)
 
-      unless current.callbacks.empty?
-        current.call
-      else
-        event(chain, :default).call(current, thing, string)
-      end
+			unless current.callbacks.empty?
+				current.call
+			else
+				event(chain, :default).call(current, thing, string)
+			end
 
-      event(chain, :after).call(current, thing, string)
-    }
-  end
+			event(chain, :after).call(current, thing, string)
+		}
+	end
 
-  def register (chain, what, options={}, &block)
-    @chains[chain][what] << Callback.new(options, &block)
-  end
+	def register (chain, what, options={}, &block)
+		@chains[chain][what] << Callback.new(options, &block)
+	end
 
-  def observe (what, options={}, &block)
-    @custom[what] << Callback.new(options, &block)
-  end
+	def observe (what, options={}, &block)
+		@custom[what] << Callback.new(options, &block)
+	end
 
-  def fire (what, *args, &block)
-    catch(:halt) {
-      Event.new(self, :custom, (@custom[what] + @hooks.map {|hook| hook.custom[what] }).flatten.compact).call(*args, &block)
-    }
-  end
+	def fire (what, *args, &block)
+		catch(:halt) {
+			Event.new(self, :custom, (@custom[what] + @hooks.map {|hook| hook.custom[what] }).flatten.compact).call(*args, &block)
+		}
+	end
 end
 
 end

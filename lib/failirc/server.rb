@@ -107,16 +107,6 @@ class Server
 		@dispatcher.stop
 	end
 
-	def reset!
-		@clients = nil
-	end
-
-	def clients
-		@clients ||= @dispatcher.listens_on.reduce([]) {|result, server|
-			result.concat(server.clients)
-		}
-	end
-
 	def host
 		@options[:server][:host] || 'localhost'
 	end

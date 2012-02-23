@@ -20,8 +20,11 @@
 module IRC; class Server
 
 class Client < EM::Connection
-	attr_reader   :server, :ip, :port, :input, :output
-	attr_accessor :host
+	extend Forwardable
+
+	attr_reader    :server, :ip, :port, :input, :output
+	attr_accessor  :host
+	def_delegators :@server, :dispatcher, :options
 
 	def post_init
 		@input  = Queue.new
@@ -60,8 +63,20 @@ class Client < EM::Connection
 		flush! unless handling?
 	end
 
+	def disconnect (message)
+		server.fire :disconnect, self, message
+
+		@disconnected = true
+
+		close_connection_after_writing
+	end
+
 	def unbind
 		@server.delete(self)
+
+		unless @disconnected
+			server.fire :disconnect, self, 'Client exited'
+		end
 	end
 
 	def handling?; @handling;         end
@@ -90,6 +105,8 @@ class Client < EM::Connection
 
 			handled!
 		}
+
+		true
 	end
 
 	def flush!
@@ -99,6 +116,10 @@ class Client < EM::Connection
 	end
 
 	alias to_s ip
+
+	def ssl?
+		false
+	end
 end
 
 class SSLClient < Client
@@ -106,6 +127,10 @@ class SSLClient < Client
 		start_tls
 
 		super
+	end
+
+	def ssl?
+		true
 	end
 end
 

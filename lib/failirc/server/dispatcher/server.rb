@@ -61,10 +61,16 @@ class Server
 
 	def stop
 		EM.stop_server @signature
+		
+		clients = @clients.clear
+
+		dispatcher.reset!
+		
+		clients.each(&:close_connection_after_writing)
 	end
 
 	def ssl?; @options[:ssl];  end
-	def host; @options[:bind]; end
+	def host; @options[:name] || @options[:bind]; end
 	def port; @options[:port]; end
 
 	def to_s

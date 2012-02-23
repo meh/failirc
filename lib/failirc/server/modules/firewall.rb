@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with failirc. If not, see <http://www.gnu.org/licenses/>.
 
-version '0.0.1'
+version '0.1.0'
 
 on :start do
 	@log = options[:file] ? File.open(options[:file]) : $stdout
@@ -31,9 +31,17 @@ on :log do |string|
 	@log.print "[#{Time.now}] #{string}\n"
 end
 
-def dispatch (event, thing, string)
-	server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing} #{string.inspect}"
+on :connect do |client|
+	server.fire :log, "#{client} connected to #{client.server}"
 end
 
-input  { before priority: -10000, &method(:dispatch) }
-output { after  priority:  10000, &method(:dispatch) }
+on :disconnect do |client, message|
+	server.fire :log, "#{client} disconnected from #{client.server} because: #{message}"
+end
+
+logger = -> event, thing, string {
+	server.fire :log, "#{(event.chain == :input) ? '*IN* ' : '*OUT*'} #{thing} #{string.inspect}"
+}
+
+input  { before priority: -1000, &logger }
+output { after  priority:  1000, &logger }

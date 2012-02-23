@@ -22,56 +22,56 @@ require 'failirc/common/events'
 module IRC; class Modules < Array
 
 class Module
-  def self.for (what)
-    scopes = what.scopes
+	def self.for (what)
+		scopes = what.scopes
 
-    Class.new(Module).tap {|klass|
-      klass.define_singleton_method :const_missing do |name|
-        scopes.each {|what|
-          return what.const_get(name) if what.const_defined?(name)
-        }
+		Class.new(Module).tap {|klass|
+			klass.define_singleton_method :const_missing do |name|
+				scopes.each {|what|
+					return what.const_get(name) if what.const_defined?(name)
+				}
 
-        super(name)
-      end
-    }.tap {|klass|
-      klass.class_eval {
-        define_method :inspect do
-          "#<Module: for(#{what.class.name})>"
-        end
-      }
-    }
-  end
+				super(name)
+			end
+		}.tap {|klass|
+			klass.class_eval {
+				define_method :inspect do
+					"#<Module: for(#{what.class.name})>"
+				end
+			}
+		}
+	end
 
-  include Events::DSL
+	include Events::DSL
 
-  attr_reader :name, :options
+	attr_reader :name, :options
 
-  def initialize (name, options={})
-    @name    = name
-    @options = options
+	def initialize (name, options={})
+		@name    = name
+		@options = options
 
-    Events::DSL.initialize(self)
-  end
+		Events::DSL.initialize(self)
+	end
 
-  def rehash (options=nil, &block)
-    if block
-      @rehash = block
-    else
-      @rehash.call(options) if @rehash
-    end
-  end
+	def rehash (options=nil, &block)
+		if block
+			@rehash = block
+		else
+			@rehash.call(options) if @rehash
+		end
+	end
 
-  [:version, :identifier].each {|var|
-    data = {}
+	[:version, :identifier].each {|var|
+		data = {}
 
-    define_method var do |*args|
-      if args.length == 0
-        data[var]
-      else
-        data[var] = (args.length > 1) ? args : args.first
-      end
-    end
-  }
+		define_method var do |*args|
+			if args.length == 0
+				data[var]
+			else
+				data[var] = (args.length > 1) ? args : args.first
+			end
+		end
+	}
 end
 
 end; end
