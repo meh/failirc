@@ -8,17 +8,6 @@ do pretty much anything, in fact the standard protocols are implemented as modul
 There's still no documentation about the API and the events, but I will add it sooner or later. For the moment
 just read the sources, they're pretty easy to understand (dispatcher excluded).
 
-Installation
-------
-Installation after cloning or downloading the source tree.
-
-    $ gem build *.gemspec
-    # gem install *.gem
-
-Installation from rubygems.org (not yet uploaded)
-
-    # gem install failirc
-
 Server
 ------
 - Automatic encoding conversions, defaults to UTF-8. Choose the used encoding with the ENCODING command.
@@ -26,6 +15,11 @@ Server
 - Optimized dispatching with EventMachine.
 - Supports SSL and creates automatically certificate and key if not given.
 - Easy to understand and edit YAML configuration.
+
+This server is not suitable for big networks, it obviously can't compare to the speed IRC daemons written in C,
+but ease of scripting of failirc is also uncomparable to any of them.
+
+If your network is small and you want to easily custom the server, this is for you.
 
 Client
 ------

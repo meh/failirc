@@ -68,13 +68,17 @@ class Dispatcher
 		@working = true
 
 		EM.next_tick {
-			if clients.any? { |c| c.handle }
-				EM.next_tick {
-					data_available
-				}
-			end
+			more = false
+
+			clients.each {|client|
+				if client.handle
+					more = true
+				end
+			}
 
 			@working = false
+
+			data_available if more
 		}
 	end
 

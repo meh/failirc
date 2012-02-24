@@ -19,7 +19,7 @@
 
 module IRC; class Server
 
-class Client < EM::Connection
+class Client < EventMachine::Protocols::LineAndTextProtocol
 	extend Forwardable
 
 	attr_reader    :server, :ip, :port, :hostname
@@ -39,22 +39,10 @@ class Client < EM::Connection
 		@data = ''
 	end
 
-	def receive_data (data)
-		@data << data
-
-		return unless @data.include? "\n"
-
-		@data.lines.each {|line|
-			@data = line and break unless line.include? "\n"
-
-			@input.push(line.strip)
-		}
-
-		@data.clear if @data.include? "\n"
-
-		unless @input.empty?
-			server.data_available
-		end
+	def receive_line (line)
+		@input.push(line.strip)
+		
+		server.data_available
 	end
 
 	def send_message (message)
