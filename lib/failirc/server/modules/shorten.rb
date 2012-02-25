@@ -1,6 +1,6 @@
 # failirc, a fail IRC library.
 #
-# Copyleft meh. [http://meh.doesntexist.org | meh@paranoici.org]
+# Copyleft meh. [http://meh.paranoid.pk | meh@paranoici.org]
 #
 # This file is part of failirc.
 #

@@ -39,7 +39,7 @@ modules:
     ban: [192.168.1.0/24]
 
     antiflood:
-      max connections per ip: 5
+      max connections per ip: 3
       allow multiple connections from: [23.43.55.0/24, 54.234.123.1]
       no speed limit for: [meh]
 
