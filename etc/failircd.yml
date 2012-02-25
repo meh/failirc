@@ -33,7 +33,18 @@ modules:
       quit:    "Quit: #{message}"
       kill:    "Killed by #{sender.nick}: #{message.empty? ? 'No reason' : message}"
 
-  firewall:
+  logger: true
+
+  control:
+    ban: [192.168.1.0/24]
+
+    antiflood:
+      max connections per ip: 5
+      allow multiple connections from: [23.43.55.0/24, 54.234.123.1]
+      no speed limit for: [meh]
+
+  tls: true
+  cap: true
 
   cloaking:
     keys:
