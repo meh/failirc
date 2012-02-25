@@ -63,7 +63,5 @@ input {
 		sleep 0.5 if (Time.now - thing.last_action.on) < 0.2 rescue nil
 	end
 
-	observe :joined, priority: -98 do |thing, channel|
-		sleep 0.5
-	end
+	# TODO: implement a sane join throttler
 }
